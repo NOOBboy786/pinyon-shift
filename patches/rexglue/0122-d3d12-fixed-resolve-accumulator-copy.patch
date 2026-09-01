@@ -5,8 +5,8 @@ Subject: [PATCH] fix(graphics): use fixed resolve for 4x accumulator
 
 ---
  .../graphics/d3d12/render_target_cache.h      |  5 ++
- src/graphics/d3d12/render_target_cache.cpp   | 87 +++++++++++++++++++
- 2 files changed, 92 insertions(+)
+ src/graphics/d3d12/render_target_cache.cpp   | 92 ++++++++++++++++++++
+ 2 files changed, 97 insertions(+)
 
 diff --git a/include/rex/graphics/d3d12/render_target_cache.h b/include/rex/graphics/d3d12/render_target_cache.h
 index e6d86ae..9081bbf 100644
@@ -38,7 +38,7 @@ index 9649485..f3829cf 100644
    isolated_replay_frame_accumulator_frame_sequence_ = 0;
    isolated_replay_frame_accumulator_committed_frame_sequence_ = 0;
    isolated_replay_frame_accumulator_width_ = 0;
-@@ -2822,6 +2825,90 @@ D3D12RenderTargetCache::ApplyIsolatedReplayFrameAccumulator(
+@@ -2822,6 +2825,95 @@ D3D12RenderTargetCache::ApplyIsolatedReplayFrameAccumulator(
          source_previous_state);
      isolated_replay_frame_accumulator_target_state_ =
          D3D12_RESOURCE_STATE_COPY_DEST;
@@ -58,13 +58,17 @@ index 9649485..f3829cf 100644
 +      resolved_desc.Alignment = 0;
 +      resolved_desc.SampleDesc.Count = 1;
 +      resolved_desc.SampleDesc.Quality = 0;
-+      resolved_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
++      // Match the already-qualified retained-preview resolve allocation.
++      // Some D3D12 drivers require the single-sample resolve destination to
++      // carry render-target metadata even though it is only copied from here.
++      resolved_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
++      D3D12_CLEAR_VALUE clear_value{};
++      clear_value.Format = resolved_desc.Format;
 +      Microsoft::WRL::ComPtr<ID3D12Resource> resolved_source;
 +      HRESULT create_result = device->CreateCommittedResource(
 +          &ui::d3d12::util::kHeapPropertiesDefault,
-+          command_processor_.GetD3D12Provider()
-+              .GetHeapFlagCreateNotZeroed(),
-+          &resolved_desc, D3D12_RESOURCE_STATE_RESOLVE_DEST, nullptr,
++          D3D12_HEAP_FLAG_NONE, &resolved_desc,
++          D3D12_RESOURCE_STATE_RESOLVE_DEST, &clear_value,
 +          IID_PPV_ARGS(&resolved_source));
 +      if (FAILED(create_result)) {
 +        clear_active();
@@ -122,6 +126,7 @@ index 9649485..f3829cf 100644
 +    command_processor_.PushTransitionBarrier(
 +        source_resource, D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
 +        source_previous_state);
++    command_processor_.SubmitBarriers();
 +    isolated_replay_frame_accumulator_resolved_source_state_ =
 +        D3D12_RESOURCE_STATE_COPY_SOURCE;
 +    isolated_replay_frame_accumulator_target_state_ =

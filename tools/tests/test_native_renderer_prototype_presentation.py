@@ -42,6 +42,52 @@ class NativeRendererPrototypePresentationTests(unittest.TestCase):
             output.index("SetNativeGuestOutputRenderer"),
         )
 
+    def test_scaled_presentation_is_explicit_and_native_prototype_only(self):
+        hooks = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
+            encoding="utf-8"
+        )
+        output = (ROOT / "src/native_renderer/guest_output_renderer.cpp").read_text(
+            encoding="utf-8"
+        )
+        capture = (
+            ROOT / "tools/capture-native-renderer-census.ps1"
+        ).read_text(encoding="utf-8")
+        for source in (hooks, output):
+            self.assertIn(
+                "pinyon_shift_native_renderer_scaled_presentation_qualification",
+                source,
+            )
+            self.assertIn('mode == "native_prototype"', source)
+            self.assertIn('{"fallback", "xenos"}', source)
+        self.assertIn("NativeScaledAccumulatorScaleSupported()", hooks)
+        self.assertIn('draw_resolution_scale_x == "2"', output)
+        self.assertIn('draw_resolution_scale_y == "2"', output)
+        self.assertIn("armed_native_prototype_2x", hooks)
+        self.assertIn("committed_private_accumulator_only", hooks)
+        self.assertIn("native_current_frame_only", hooks)
+        self.assertIn("first_successful_commit_only", hooks)
+        self.assertIn("g_procedural_frame_accumulator_one_shot", hooks)
+        self.assertIn("first_commit_retained", hooks)
+        self.assertIn("disarmed_after_first_commit", hooks)
+        self.assertIn("retained_last_committed_frame", hooks)
+        self.assertIn("guest_memory_publication", hooks)
+        self.assertIn("explicit_2x_qualification", output)
+        self.assertNotIn('mode == "hybrid_prototype" &&', output)
+        self.assertIn("[switch]$ScaledPresentationQualification", capture)
+        qualification = capture.split(
+            "if ($ScaledPresentationQualification) {", 1
+        )[1]
+        self.assertIn("$ProceduralFrameAccumulator = $true", qualification)
+        self.assertIn("$ContinuousWorldWorkset = $true", qualification)
+        self.assertIn(
+            "$env:REX_PINYON_SHIFT_NATIVE_RENDERER = 'native_prototype'",
+            capture,
+        )
+        self.assertIn(
+            "$env:REX_PINYON_SHIFT_NATIVE_RENDERER = $savedNativeRenderer",
+            capture,
+        )
+
     def test_rexglue_patch_preserves_legacy_preview_and_adds_passthrough(self):
         patch = (
             ROOT

@@ -60,6 +60,12 @@ REXCVAR_DEFINE_BOOL(
     "Qualify the private procedural accumulator at exactly 2x while Xenos "
     "remains authoritative")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(
+    pinyon_shift_native_renderer_scaled_presentation_qualification, false,
+    "Pinyon Shift",
+    "Present an exact committed 2x procedural accumulator in native_prototype "
+    "mode with Xenos fallback")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DECLARE(std::string, pinyon_shift_native_renderer);
 
 namespace {
@@ -82,7 +88,14 @@ bool NativePrototypeSelected() {
   const bool requested =
       mode == "native_prototype" || mode == "hybrid_prototype" ||
       mode == "comparison_native" || mode == "comparison_xenos";
-  return requested && NativePrototypeScaleSupported();
+  const bool scaled_presentation_qualification =
+      mode == "native_prototype" &&
+      REXCVAR_GET(
+          pinyon_shift_native_renderer_scaled_presentation_qualification) &&
+      NativeScaledAccumulatorScaleSupported();
+  return requested &&
+         (NativePrototypeScaleSupported() ||
+          scaled_presentation_qualification);
 }
 
 bool NativePrototypeRequested() {
@@ -11333,6 +11346,9 @@ uint64_t g_procedural_frame_accumulator_qualified_resolve_arms = 0;
 std::array<uint64_t, 2>
     g_procedural_frame_accumulator_qualified_resolve_source_modes{};
 bool g_procedural_frame_accumulator_backend_armed = false;
+bool g_procedural_frame_accumulator_one_shot = false;
+bool g_procedural_frame_accumulator_one_shot_committed = false;
+uint64_t g_procedural_frame_accumulator_one_shot_frame = 0;
 std::array<uint64_t, 7> g_procedural_frame_accumulator_backend_statuses{};
 uint64_t g_procedural_frame_accumulator_backend_detail_count = 0;
 uint64_t g_procedural_frame_accumulator_backend_detail_overflow = 0;
@@ -11635,6 +11651,8 @@ void ResetCommandBufferLineage() {
   g_procedural_frame_accumulator_detail_overflow = 0;
   g_procedural_frame_accumulator_qualified_resolve_arms = 0;
   g_procedural_frame_accumulator_qualified_resolve_source_modes.fill(0);
+  g_procedural_frame_accumulator_one_shot_committed = false;
+  g_procedural_frame_accumulator_one_shot_frame = 0;
   g_procedural_frame_accumulator_backend_statuses.fill(0);
   g_procedural_frame_accumulator_backend_detail_count = 0;
   g_procedural_frame_accumulator_backend_detail_overflow = 0;
@@ -17561,6 +17579,26 @@ void CompleteProceduralFrameAccumulatorBackend(
   if (status >= 1 &&
       status <= g_procedural_frame_accumulator_backend_statuses.size()) {
     ++g_procedural_frame_accumulator_backend_statuses[status - 1];
+  }
+  if (g_procedural_frame_accumulator_one_shot && result.committed &&
+      result.status ==
+          rex::system::GraphicsNativeFrameAccumulatorStatus::kRecorded) {
+    // A committed resource remains owned by the backend and can continue to be
+    // presented. Stop scheduling further 4x-MSAA resolves for this explicit
+    // qualification: repeated full-frame resolves have produced NVIDIA TDRs,
+    // while the first complete frame is sufficient to qualify presentation
+    // ingress and expose the remaining layout defects.
+    g_procedural_frame_accumulator_one_shot_committed = true;
+    g_procedural_frame_accumulator_one_shot_frame = result.frame_sequence;
+    g_procedural_frame_accumulator_backend_armed = false;
+    pinyon_shift::diagnostics::RecordEvent(
+        "native_renderer.scaled_presentation_qualification.latched",
+        {{"frame", std::to_string(result.frame_sequence)},
+         {"status", "first_commit_retained"},
+         {"accumulator", "disarmed_after_first_commit"},
+         {"output", "retained_last_committed_frame"},
+         {"fallback", "xenos"},
+         {"draw_suppression", "false"}});
   }
   if (g_procedural_frame_accumulator_backend_detail_count ==
       kProceduralRuntimeDetailLimit) {
@@ -31196,6 +31234,12 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem *graphics_system,
       scaled_accumulator_qualification_requested && census_requested &&
       NativeScaledAccumulatorScaleSupported() &&
       REXCVAR_GET(pinyon_shift_native_renderer) == "xenos";
+  const bool scaled_presentation_qualification_requested = REXCVAR_GET(
+      pinyon_shift_native_renderer_scaled_presentation_qualification);
+  const bool scaled_presentation_qualification_supported =
+      scaled_presentation_qualification_requested && prototype_selected &&
+      NativeScaledAccumulatorScaleSupported() &&
+      REXCVAR_GET(pinyon_shift_native_renderer) == "native_prototype";
   if (prototype_requested) {
     pinyon_shift::diagnostics::RecordEvent(
         "native_renderer.prototype.compatibility",
@@ -31206,7 +31250,10 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem *graphics_system,
           rex::cvar::GetFlagByName("draw_resolution_scale_x")},
          {"draw_resolution_scale_y",
           rex::cvar::GetFlagByName("draw_resolution_scale_y")},
-         {"qualified_scale", "1x1"},
+         {"qualified_scale",
+          scaled_presentation_qualification_supported
+              ? "2x2_presentation_qualification"
+              : "1x1"},
          {"prototype_observers", prototype_selected ? "armed" : "disabled"},
          {"fallback", "xenos"},
          {"xenos_draw", "preserved"},
@@ -31216,7 +31263,7 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem *graphics_system,
       ProceduralFrameAccumulatorSelected(prototype_selected);
   const bool procedural_frame_accumulator_requested =
       procedural_frame_accumulator_selected &&
-      (NativePrototypeScaleSupported() ||
+      (prototype_selected ||
        scaled_accumulator_qualification_supported);
   if (scaled_accumulator_qualification_requested) {
     pinyon_shift::diagnostics::RecordEvent(
@@ -31238,6 +31285,28 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem *graphics_system,
          {"publication", "disabled"},
          {"output_authority", "xenos"},
          {"fallback", "xenos"},
+         {"draw_suppression", "false"}});
+  }
+  if (scaled_presentation_qualification_requested) {
+    pinyon_shift::diagnostics::RecordEvent(
+        "native_renderer.scaled_presentation_qualification.config",
+        {{"status", scaled_presentation_qualification_supported &&
+                            procedural_frame_accumulator_selected
+                        ? "armed_native_prototype_2x"
+                        : "blocked_invalid_configuration"},
+         {"accumulator",
+          procedural_frame_accumulator_selected ? "requested" : "disabled"},
+         {"renderer", REXCVAR_GET(pinyon_shift_native_renderer)},
+         {"draw_resolution_scale_x",
+          rex::cvar::GetFlagByName("draw_resolution_scale_x")},
+         {"draw_resolution_scale_y",
+          rex::cvar::GetFlagByName("draw_resolution_scale_y")},
+         {"qualified_scale", "2x2"},
+         {"publication", "committed_private_accumulator_only"},
+         {"capture_budget", "first_successful_commit_only"},
+         {"output_authority", "native_current_frame_only"},
+         {"fallback", "xenos"},
+         {"guest_memory_publication", "false"},
          {"draw_suppression", "false"}});
   }
   const bool minimal_producer_graph_requested =
@@ -31267,6 +31336,10 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem *graphics_system,
                                            std::memory_order_release);
   g_procedural_frame_accumulator_backend_armed =
       procedural_frame_accumulator_requested;
+  g_procedural_frame_accumulator_one_shot =
+      scaled_presentation_qualification_supported;
+  g_procedural_frame_accumulator_one_shot_committed = false;
+  g_procedural_frame_accumulator_one_shot_frame = 0;
   if (!observation_requested && !g_sky_horizon_suppression.requested) {
     EmitSkyHorizonSuppressionControl();
     return;
@@ -32147,6 +32220,7 @@ void UninstallGraphicsCensus(rex::system::IGraphicsSystem *graphics_system) {
   EmitDispatchDiscoverySummary();
   if (!g_graphics_census_installed) {
     g_procedural_frame_accumulator_backend_armed = false;
+    g_procedural_frame_accumulator_one_shot = false;
     g_graphics_full_census_armed = false;
     return;
   }
@@ -32535,6 +32609,7 @@ void UninstallGraphicsCensus(rex::system::IGraphicsSystem *graphics_system) {
   g_graphics_census_installed = false;
   g_graphics_full_census_armed = false;
   g_procedural_frame_accumulator_backend_armed = false;
+  g_procedural_frame_accumulator_one_shot = false;
   g_graphics_census_memory = nullptr;
   if (g_draw_census.window_first_frame && g_draw_census.window_draw_count) {
     EmitDrawCensusWindow(g_draw_census.window_last_frame);

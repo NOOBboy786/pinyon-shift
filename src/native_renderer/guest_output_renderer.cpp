@@ -20,6 +20,8 @@ REXCVAR_DEFINE_STRING(pinyon_shift_native_renderer, "xenos", "Pinyon Shift",
                       "native_prototype, hybrid_prototype, "
                       "comparison_native, comparison_xenos")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DECLARE(
+    bool, pinyon_shift_native_renderer_scaled_presentation_qualification);
 REXCVAR_DEFINE_STRING(
     pinyon_shift_native_shader_pack, "", "Pinyon Shift",
     "Local NR-02 D3D12 shader pack path; empty disables pack loading")
@@ -262,15 +264,22 @@ void InstallGuestOutputRenderer(rex::system::IGraphicsSystem *graphics_system) {
       rex::cvar::GetFlagByName("draw_resolution_scale_x");
   const std::string draw_resolution_scale_y =
       rex::cvar::GetFlagByName("draw_resolution_scale_y");
-  if (prototype_mode &&
-      (draw_resolution_scale_x != "1" || draw_resolution_scale_y != "1")) {
+  const bool baseline_prototype_scale =
+      draw_resolution_scale_x == "1" && draw_resolution_scale_y == "1";
+  const bool scaled_presentation_qualification =
+      mode == "native_prototype" &&
+      REXCVAR_GET(
+          pinyon_shift_native_renderer_scaled_presentation_qualification) &&
+      draw_resolution_scale_x == "2" && draw_resolution_scale_y == "2";
+  if (prototype_mode && !baseline_prototype_scale &&
+      !scaled_presentation_qualification) {
     diagnostics::RecordEvent(
         "native_renderer.output.failure",
         {{"reason", "unsupported_draw_resolution_scale"},
          {"requested_mode", mode},
          {"draw_resolution_scale_x", draw_resolution_scale_x},
          {"draw_resolution_scale_y", draw_resolution_scale_y},
-         {"qualified_scale", "1x1"},
+         {"qualified_scale", "1x1_or_explicit_native_prototype_2x"},
          {"fallback", "xenos"},
          {"xenos_draw", "preserved"},
          {"suppression", "disabled"}});
@@ -313,6 +322,10 @@ void InstallGuestOutputRenderer(rex::system::IGraphicsSystem *graphics_system) {
   graphics_system->SetNativeGuestOutputRenderer(&RenderDiagnosticOutput);
   diagnostics::RecordEvent("native_renderer.output.installed",
                            {{"mode", DiagnosticModeName(selected_mode)},
+                            {"draw_scale_admission",
+                             scaled_presentation_qualification
+                                 ? "explicit_2x_qualification"
+                                 : "qualified_1x"},
                             {"authority",
                              selected_mode == DiagnosticMode::kComparisonXenos
                                  ? "xenos"

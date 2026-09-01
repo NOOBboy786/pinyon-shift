@@ -1009,6 +1009,39 @@ exit. Any other scale, renderer, missing census, or missing accumulator request
 fails closed. This is a diagnostic admission path only; it does not widen the
 visible prototype compatibility gate.
 
+Multi-chunk backend correction: exact source ownership now remains valid for
+every accumulator chunk in the same guest frame. DRED then identified the
+four-sample compute average as the faulting dispatch in two NVIDIA device-hung
+runs. The exact `k0123` path now uses D3D12 fixed-function MSAA resolve into a
+private reusable source followed by the already-qualified region copy. PR
+`#306` passed CI and merged with Xenos authority, guest memory, and draw
+suppression unchanged.
+
+Scaled-presentation implementation checkpoint: a second default-off gate may
+now install `native_prototype` output at exactly `2x2`. It accepts only a fully
+committed current-frame private accumulator through the existing swap preview;
+missing, stale, incomplete, or failed work returns the complete Xenos frame.
+Hybrid and comparison modes remain limited to `1x1`, guest memory is not
+published, and no Xenos draw is suppressed. A deterministic exact-ingress
+AppData capture and manual visual acceptance remain required before `2x2` can
+join ordinary prototype compatibility.
+
+First scaled-presentation qualification (`20260901T164727Z-p35900`) reached the
+saved open world and visibly presented the committed `2560x1440` private
+accumulator. It also exposed two blocking defects: the three physical chunks
+repeat the same incomplete vehicle view instead of forming the world frame, and
+continuous 4x-MSAA fixed resolves still trigger `nvlddmkm` Event 153 followed by
+the known `0xC0000409` process exit. The mode therefore remains default-off and
+unqualified. A follow-up one-commit budget (`20260901T165333Z-p45204`) proved
+that sustained workload is not the cause: one three-chunk commit latched
+successfully, no later backend requests were admitted, and D3D12 still reported
+`DEVICE_HUNG` asynchronously. More importantly, the visible result proves this
+route is assembling repeated copies of one isolated producer rather than a
+complete world target. Scaled accumulator presentation is therefore a dead end
+for the early prototype and is removed from the critical path. It remains
+default-off evidence only; work returns to composing the complete native scene
+workset before any further presentation admission.
+
 ### C2. Static world buildings and props
 
 - Expand opaque-world material and geometry coverage.

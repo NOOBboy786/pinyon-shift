@@ -40,6 +40,7 @@ param(
     [switch]$ShadowCasterProvenance,
     [switch]$ProceduralFrameAccumulator,
     [switch]$ScaledAccumulatorQualification,
+    [switch]$ScaledPresentationQualification,
     [ValidateSet(
         'baseline',
         'trackfardistance',
@@ -84,6 +85,20 @@ if ($ScaledAccumulatorQualification) {
     $ContinuousWorldWorkset = $true
     $ContinuousTrackWorld = $true
     $ContinuousStaticWorld = $true
+}
+
+if ($ScaledPresentationQualification) {
+    if ($Scene -eq 'unmarked') {
+        $Scene = 'open_world_day'
+    }
+    $ProceduralFrameAccumulator = $true
+    $ContinuousWorldWorkset = $true
+    $ContinuousTrackWorld = $true
+    $ContinuousStaticWorld = $true
+}
+
+if ($ScaledAccumulatorQualification -and $ScaledPresentationQualification) {
+    throw 'Scaled accumulator and presentation qualifications are mutually exclusive.'
 }
 
 if (-not $StateRoot) {
@@ -272,6 +287,8 @@ $savedProceduralFrameAccumulator =
     $env:REX_PINYON_SHIFT_NATIVE_RENDERER_PROCEDURAL_FRAME_ACCUMULATOR
 $savedScaledAccumulatorQualification =
     $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_ACCUMULATOR_QUALIFICATION
+$savedScaledPresentationQualification =
+    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_PRESENTATION_QUALIFICATION
 $savedNativeRenderer = $env:REX_PINYON_SHIFT_NATIVE_RENDERER
 $savedScene = $env:PINYON_SHIFT_NATIVE_RENDERER_SCENE
 $savedIndexScan = $env:PINYON_SHIFT_NATIVE_RENDERER_INDEX_SCAN_SIGNATURE
@@ -331,8 +348,12 @@ try {
         if ($ProceduralFrameAccumulator) { 'true' } else { $null }
     $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_ACCUMULATOR_QUALIFICATION =
         if ($ScaledAccumulatorQualification) { 'true' } else { $null }
+    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_PRESENTATION_QUALIFICATION =
+        if ($ScaledPresentationQualification) { 'true' } else { $null }
     if ($ScaledAccumulatorQualification) {
         $env:REX_PINYON_SHIFT_NATIVE_RENDERER = 'xenos'
+    } elseif ($ScaledPresentationQualification) {
+        $env:REX_PINYON_SHIFT_NATIVE_RENDERER = 'native_prototype'
     }
     $env:PINYON_SHIFT_NATIVE_RENDERER_SCENE = $Scene
     $env:PINYON_SHIFT_NATIVE_RENDERER_INDEX_SCAN_SIGNATURE = $IndexScanSignature
@@ -400,6 +421,8 @@ finally {
         $savedProceduralFrameAccumulator
     $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_ACCUMULATOR_QUALIFICATION =
         $savedScaledAccumulatorQualification
+    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_PRESENTATION_QUALIFICATION =
+        $savedScaledPresentationQualification
     $env:REX_PINYON_SHIFT_NATIVE_RENDERER = $savedNativeRenderer
     $env:PINYON_SHIFT_NATIVE_RENDERER_SCENE = $savedScene
     $env:PINYON_SHIFT_NATIVE_RENDERER_INDEX_SCAN_SIGNATURE = $savedIndexScan
