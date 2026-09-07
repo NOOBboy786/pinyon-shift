@@ -8,7 +8,7 @@ Xenia Canary. The goal is **not complete**.
 
 ### Remote checkpoint and highly experimental preview (2026-09-07)
 
-- Publication update: preview.1 CI stopped on a legacy CP1252 em dash in this document before any release was published. Converted that one invalid UTF-8 byte to its UTF-8 representation, preserving all other text. Successful publication target is now 0.1.2-preview.2; see [release notes](../releases/0.1.2-preview.2.md).
+- Publication update: preview.1 CI stopped on a legacy CP1252 em dash in this document before any release was published. Converted that one invalid UTF-8 byte to its UTF-8 representation, preserving all other text. Publication target is 0.1.2-preview.3; see [release notes](../releases/0.1.2-preview.3.md). Preview.2 was stopped to include the release notes directory excluded by the existing docs ignore rule.
 
 - Release checkpoint: 0.1.2-preview.1, preview channel, targeting remote dev. ShiftGlue source pinned to 6db74f6de0230727358d93f8a221f40fbba6a792. Release notes: [0.1.2-preview.1](../releases/0.1.2-preview.1.md).
 - Includes all retained native renderer source, shader headers, automation, prototype cleanup and playtest feedback. Local captures, generated game code, game data, saves, binary shader packs and temporary diagnostic DLLs remain local. Full C347/21B70 terrain pair remains disabled; Xenos retirement remains incomplete.
