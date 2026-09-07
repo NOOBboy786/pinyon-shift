@@ -47,8 +47,15 @@ jobs:
           $arguments = @(
             'release', 'create', $env:RELEASE_TAG,
             '.artifacts/PinyonShift-Launcher.zip',
-            '--generate-notes', '--verify-tag'
+            '--verify-tag'
           )
+          $notesPath = "docs/releases/$($release.version).md"
+          if (Test-Path -LiteralPath $notesPath) {
+            $title = (Get-Content -LiteralPath $notesPath -TotalCount 1) -replace '^#\s*', ''
+            $arguments += @('--notes-file', $notesPath, '--title', $title)
+          } else {
+            $arguments += '--generate-notes'
+          }
           if ($release.channel -eq 'preview') {
             $arguments += '--prerelease'
           } elseif ($release.channel -ne 'stable') {

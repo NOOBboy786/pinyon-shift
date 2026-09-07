@@ -18,6 +18,8 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("$release.channel -eq 'preview'", workflow)
         self.assertIn("$release.channel -ne 'stable'", workflow)
         self.assertIn("$arguments += '--prerelease'", workflow)
+        self.assertIn('docs/releases/$($release.version).md', workflow)
+        self.assertIn("@('--notes-file', $notesPath, '--title', $title)", workflow)
         self.assertNotIn(
             "--generate-notes --prerelease --verify-tag",
             workflow,
