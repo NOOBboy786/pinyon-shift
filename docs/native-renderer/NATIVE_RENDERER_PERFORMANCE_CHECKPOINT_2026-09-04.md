@@ -8,6 +8,8 @@ Xenia Canary. The goal is **not complete**.
 
 ### Remote checkpoint and highly experimental preview (2026-09-07)
 
+- Publication update: preview.1 CI stopped on a legacy CP1252 em dash in this document before any release was published. Converted that one invalid UTF-8 byte to its UTF-8 representation, preserving all other text. Successful publication target is now 0.1.2-preview.2; see [release notes](../releases/0.1.2-preview.2.md).
+
 - Release checkpoint: 0.1.2-preview.1, preview channel, targeting remote dev. ShiftGlue source pinned to 6db74f6de0230727358d93f8a221f40fbba6a792. Release notes: [0.1.2-preview.1](../releases/0.1.2-preview.1.md).
 - Includes all retained native renderer source, shader headers, automation, prototype cleanup and playtest feedback. Local captures, generated game code, game data, saves, binary shader packs and temporary diagnostic DLLs remain local. Full C347/21B70 terrain pair remains disabled; Xenos retirement remains incomplete.
 - Preview releases require dev ancestry; stable releases retain main ancestry. This preview is explicitly highly experimental and documents animation-timing concerns and severe area-specific performance drops. No new minimum-hardware claim.
@@ -3160,7 +3162,7 @@ before omitting it. Terrain depth, GPU-written/converted index paths, other
 shader families, textures/render targets, native command production, and
 eventual removal of Xenos parsing/translation remain outstanding.
 
-### Depth indices moved to the existing device-local cache — 2026-09-07
+### Depth indices moved to the existing device-local cache â€” 2026-09-07
 
 Retained DLL SHA256
 `96B99BA1E03544C1116FF109F5F69ACE62B4A76D733B94BDF9E3E49599FB00EE`

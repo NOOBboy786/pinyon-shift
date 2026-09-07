@@ -9,10 +9,10 @@ and pinned ShiftGlue submodule needed to create the preview on your own computer
 contain the game, game assets, generated translations, or a prebuilt game
 executable.
 
-> **Highly experimental renderer preview - 0.1.2-preview.1.** This build includes
+> **Highly experimental renderer preview - 0.1.2-preview.2.** This build includes
 > the latest native renderer checkpoint. Rendering regressions, accelerated NPC
 > animations, and severe slowdowns in some areas remain possible. Xenos retirement
-> is incomplete. See the [preview release notes](docs/releases/0.1.2-preview.1.md).
+> is incomplete. See the [preview release notes](docs/releases/0.1.2-preview.2.md).
 
 ## Renderer status and performance
 
