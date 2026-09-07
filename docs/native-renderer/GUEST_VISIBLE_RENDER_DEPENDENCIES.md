@@ -14,8 +14,12 @@ bounded qualification scene. It does not prove that an unsampled target is
 presentation-only, that another scene never reads it, or that it has no query,
 memexport, livery, thumbnail, mirror, exposure, shadow, or rewind role.
 
-Those missing facts keep Gate B closed. Xenos executes every draw and resolve,
-and all observer APIs are read-only and default-off.
+Those missing facts keep Gate B closed for suppressing render-target work.
+Qualified native pass and shader replacements now preserve selected outputs,
+but guest command execution and resource ownership remain. Their current scope
+and parity evidence are recorded in the
+[performance checkpoint](NATIVE_RENDERER_PERFORMANCE_CHECKPOINT_2026-09-04.md).
+The census observer APIs remain read-only and default-off.
 
 ## Observation boundary
 

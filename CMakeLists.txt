@@ -19,88 +19,79 @@ include(cmake/PinyonShiftRexGlue.cmake)
 if(WIN32)
     add_executable(pinyon_shift WIN32
         src/main.cpp
+        src/fh1_render_test.cpp
         src/pinyon_shift_app.cpp
         src/pinyon_shift_diagnostics.cpp
         src/pinyon_shift_runtime_hooks.cpp
         src/native_renderer/graphics_hooks.cpp
-        src/native_renderer/buffer_cache.cpp
+        src/native_renderer/fh1_gpu_corpus.cpp
+        src/native_renderer/fh1_pass_tracker.cpp
         src/native_renderer/guest_output_renderer.cpp
-        src/native_renderer/render_target_bridge.cpp
-        src/native_renderer/resolve_assembly_tracker.cpp
-        src/native_renderer/resolve_frame_accumulator.cpp
-        src/native_renderer/resource_worker.cpp
-        src/native_renderer/resource_identity.cpp
         src/native_renderer/shader_capture.cpp
-        src/native_renderer/shader_pack.cpp
-        src/native_renderer/texture_cache.cpp
-        src/native_renderer/texture_resource_bridge.cpp
     )
 else()
     add_executable(pinyon_shift
         src/main.cpp
+        src/fh1_render_test.cpp
         src/pinyon_shift_app.cpp
         src/pinyon_shift_diagnostics.cpp
         src/pinyon_shift_runtime_hooks.cpp
         src/native_renderer/graphics_hooks.cpp
-        src/native_renderer/buffer_cache.cpp
+        src/native_renderer/fh1_gpu_corpus.cpp
+        src/native_renderer/fh1_pass_tracker.cpp
         src/native_renderer/guest_output_renderer.cpp
-        src/native_renderer/render_target_bridge.cpp
-        src/native_renderer/resolve_assembly_tracker.cpp
-        src/native_renderer/resolve_frame_accumulator.cpp
-        src/native_renderer/resource_worker.cpp
-        src/native_renderer/resource_identity.cpp
         src/native_renderer/shader_capture.cpp
-        src/native_renderer/shader_pack.cpp
-        src/native_renderer/texture_cache.cpp
-        src/native_renderer/texture_resource_bridge.cpp
     )
 endif()
 
-add_executable(pinyon_shift_resource_identity_tests EXCLUDE_FROM_ALL
-    tests/native_renderer/resource_identity_test.cpp
-    src/native_renderer/resource_identity.cpp
+add_executable(pinyon_shift_fh1_execution_key_tests EXCLUDE_FROM_ALL
+    tests/native_renderer/fh1_execution_key_test.cpp
 )
-target_include_directories(pinyon_shift_resource_identity_tests PRIVATE src)
+target_include_directories(pinyon_shift_fh1_execution_key_tests PRIVATE
+    thirdparty/shiftglue-sdk/include)
 
-add_executable(pinyon_shift_buffer_cache_tests EXCLUDE_FROM_ALL
-    tests/native_renderer/buffer_cache_test.cpp
-    src/native_renderer/buffer_cache.cpp
-    src/native_renderer/resource_identity.cpp
+add_executable(pinyon_shift_fh1_pass_tracker_tests EXCLUDE_FROM_ALL
+    tests/native_renderer/fh1_pass_tracker_test.cpp
+    src/native_renderer/fh1_pass_tracker.cpp
 )
-target_include_directories(pinyon_shift_buffer_cache_tests PRIVATE src)
+target_include_directories(pinyon_shift_fh1_pass_tracker_tests PRIVATE
+    src thirdparty/shiftglue-sdk/include)
 
-add_executable(pinyon_shift_texture_cache_tests EXCLUDE_FROM_ALL
-    tests/native_renderer/texture_cache_test.cpp
-    src/native_renderer/resource_identity.cpp
-    src/native_renderer/texture_cache.cpp
+add_executable(pinyon_shift_fh1_shader_pack_tests EXCLUDE_FROM_ALL
+    tests/native_renderer/fh1_shader_pack_test.cpp
+    thirdparty/shiftglue-sdk/src/graphics/d3d12/fh1_shader_pack.cpp
 )
-target_include_directories(pinyon_shift_texture_cache_tests PRIVATE src)
+target_include_directories(pinyon_shift_fh1_shader_pack_tests PRIVATE
+    thirdparty/shiftglue-sdk/include)
+target_link_libraries(pinyon_shift_fh1_shader_pack_tests PRIVATE rex::runtime)
+if(WIN32)
+    target_link_libraries(pinyon_shift_fh1_shader_pack_tests PRIVATE bcrypt)
+    # Standalone D3D12 conformance test: no renderer/runtime library dependency.
+    add_executable(pinyon_shift_fh1_owned_geometry_tests EXCLUDE_FROM_ALL
+        tests/native_renderer/fh1_owned_geometry_test.cpp)
+    target_link_libraries(pinyon_shift_fh1_owned_geometry_tests PRIVATE d3d12 dxgi)
+endif()
 
-add_executable(pinyon_shift_render_target_bridge_tests EXCLUDE_FROM_ALL
-    tests/native_renderer/render_target_bridge_test.cpp
-    src/native_renderer/render_target_bridge.cpp
-    src/native_renderer/resource_identity.cpp
+add_executable(pinyon_shift_fh1_archive_extract EXCLUDE_FROM_ALL
+    tools/fh1_archive_extract.cpp
 )
-target_include_directories(pinyon_shift_render_target_bridge_tests PRIVATE src)
 
-add_executable(pinyon_shift_resource_worker_tests EXCLUDE_FROM_ALL
-    tests/native_renderer/resource_worker_test.cpp
-    src/native_renderer/resource_worker.cpp
-)
-target_include_directories(pinyon_shift_resource_worker_tests PRIVATE src)
-
-add_executable(pinyon_shift_resolve_assembly_tracker_tests EXCLUDE_FROM_ALL
-    tests/native_renderer/resolve_assembly_tracker_test.cpp
-    src/native_renderer/resolve_assembly_tracker.cpp
-)
-target_include_directories(pinyon_shift_resolve_assembly_tracker_tests PRIVATE src)
-
-add_executable(pinyon_shift_resolve_frame_accumulator_tests EXCLUDE_FROM_ALL
-    tests/native_renderer/resolve_frame_accumulator_test.cpp
-    src/native_renderer/resolve_frame_accumulator.cpp
-    src/native_renderer/resolve_assembly_tracker.cpp
-)
-target_include_directories(pinyon_shift_resolve_frame_accumulator_tests PRIVATE src)
+add_executable(pinyon_shift_fh1_texture_import EXCLUDE_FROM_ALL
+    tools/fh1_texture_import.cpp
+    thirdparty/shiftglue-sdk/src/graphics/pipeline/texture/util.cpp
+    thirdparty/shiftglue-sdk/src/graphics/pipeline/texture/info_formats.cpp)
+target_include_directories(pinyon_shift_fh1_texture_import PRIVATE
+    thirdparty/shiftglue-sdk/include)
+if(WIN32)
+    target_sources(pinyon_shift_fh1_texture_import PRIVATE
+        thirdparty/shiftglue-sdk/src/core/math_msvc.cpp)
+else()
+    target_sources(pinyon_shift_fh1_texture_import PRIVATE
+        thirdparty/shiftglue-sdk/src/core/math_gcc.cpp)
+endif()
+target_include_directories(pinyon_shift_fh1_archive_extract PRIVATE
+    thirdparty/shiftglue-sdk/include)
+target_link_libraries(pinyon_shift_fh1_archive_extract PRIVATE rex::runtime)
 
 pinyon_shift_attach_rexglue(pinyon_shift)
 

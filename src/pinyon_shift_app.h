@@ -14,6 +14,9 @@ class PinyonShiftApp final : public rex::ReXApp {
 
  protected:
   void OnConfigurePaths(rex::PathConfig& paths) override;
+  std::optional<rex::PathConfig> OnFinalizePaths(
+      const rex::PathConfig& defaults,
+      std::function<void(rex::PathConfig)> resume) override;
   void OnPostInitLogging() override;
   void OnPreSetup(rex::RuntimeConfig& config) override;
   void OnPostLoadXexImage() override;

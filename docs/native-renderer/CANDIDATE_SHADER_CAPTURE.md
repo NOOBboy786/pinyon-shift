@@ -1,87 +1,118 @@
-# Candidate shader capture
+# FH1 native shader capture
 
-NR-02 now has a bounded, process-scoped path from an authentic ReXGlue D3D12
-translation to the deterministic local shader-pack format. This is capture
-tooling only. It does not replay a draw, suppress guest work, or change the
-authoritative Xenos output.
+The capture seam records valid ReXGlue D3D12 translations into the V2 runtime
+pack manifest. It is local-only diagnostic tooling: capture itself does not
+change pipeline state, draw submission, resolve behavior, or presentation.
 
-## Capture seam
+## Captured data
 
-ReXGlue patch `0050-d3d12-shader-translation-observer.patch` adds a default-null
-observer after `TranslateAnalyzedShader` has produced a valid host container.
-The borrowed callback view contains only:
+Each callback supplies:
 
 - vertex or pixel stage;
-- the 64-bit guest shader hash;
-- the exact 64-bit ReXGlue modification key; and
-- the validated host bytecode container.
+- 64-bit guest shader hash and exact 64-bit modification key;
+- translator version, GPU vendor, D3D12 flags, and render scale;
+- native D3D container bytecode;
+- translated texture bindings, sampler bindings, and used-texture mask.
 
-Invalid translations never reach the observer. With no observer registered,
-the path performs one null callback check per newly translated shader. The
-observer cannot change translation results, pipeline state, draw submission,
-resolve behavior, or presentation.
+Invalid translations never reach the callback. Cached pack hits are omitted,
+which makes a capture taken while a pack is loaded an exact runtime-miss set.
 
-## Local-only capture contract
+Capture is enabled only by an absolute
+`PINYON_SHIFT_NATIVE_SHADER_CAPTURE_DIR` containing a `.local` component. The
+writer permits at most 65,535 identities, 16 MiB per container, and 512 MiB
+total. It writes through temporary files, verifies stable configuration and
+binding masks, and emits `pinyon-shift.native-shader-pack.v2`.
 
-Capture is enabled only when the process receives an explicit
-`PINYON_SHIFT_NATIVE_SHADER_CAPTURE_DIR`. The title-side writer rejects paths
-that are not absolute or do not contain a `.local` component. Each capture is
-limited to 256 unique identities, 16 MiB per container, and 128 MiB total.
-Inputs must begin with the D3D container magic `DXBC`; all writes use temporary
-files followed by replacement.
+## Efficient stored-corpus workflow
 
-The writer produces `shader-manifest.json` and an `dxil/` directory. The
-manifest uses `pinyon-shift.native-shader-pack.v1`, records SHA-256 for every
-container, and is directly consumable by `tools/native-shader-pack.py`. Guest
-hashes, specialization masks, file paths, and bytecode never enter diagnostic
-logs or support bundles. `.dxil`, `.dxbc`, and `.pnsp` remain forbidden public
-repository extensions.
-
-Run an AppData-backed capture with:
+FH1's existing `.xsh` file contains guest shader programs and `.xpso` contains
+their observed pipeline specialization keys. They can drive all known
+translations during startup without replaying a long race:
 
 ```powershell
-.\tools\capture-native-renderer-shaders.ps1
+python .\tools\run-fh1-render-test.py `
+  .\config\render-tests\fh1-smoke.fh1test `
+  --state-root <preview-state> `
+  --seed-shader-storage `
+  --shader-capture-dir .\.local\native-renderer\aot-capture `
+  --output .\.local\native-renderer\aot-capture-run `
+  --record-baseline
 ```
 
-The helper verifies the installed `ForzaProfile` save, refuses to launch over
-an existing Pinyon Shift process, creates a timestamped directory below
-`.local/native-renderer/captures`, and delegates gameplay to
-`tools/launch-preview.ps1` with the exact installed preview state root. It does
-not copy, move, reset, or overwrite the save.
+Only `4D5309C9.xsh` and `4D5309C9.rtv.d3d12.xpso` are copied into the isolated
+state. The pipeline allowlist is intentionally not copied, so every stored FH1
+specialization is translated. Saves and the original cache are untouched.
 
-After closing the game, build and verify the captured pack locally:
+Build the resulting pack with `tools/native-shader-pack.py`. Then validate a
+representative path with both independent gates:
 
 ```powershell
-$capture = '.\.local\native-renderer\captures\<timestamp>'
-python .\tools\native-shader-pack.py build `
-  "$capture\shader-manifest.json" --output "$capture\captured.pnsp"
-python .\tools\native-shader-pack.py verify "$capture\captured.pnsp"
+python .\tools\run-fh1-render-test.py `
+  .\config\render-tests\fh1-hfr-modes-unlocked.fh1test `
+  --state-root <preview-state> `
+  --seed-pipeline-prewarm `
+  --shader-pack .\.local\native-renderer\aot-capture\fh1.pnsp `
+  --shader-capture-dir .\.local\native-renderer\misses `
+  --require-zero-shader-misses `
+  --output .\.local\native-renderer\strict-run `
+  --record-baseline
 ```
 
-## Qualification
+`--seed-pipeline-prewarm` copies only the verified FH1 V3 pipeline allowlist;
+this enables exact native substitutions such as velocity dilation while keeping
+the validation state isolated.
 
-The clean 50-patch build produced executable SHA-256
-`C32EFE369AD59DCED9BD151BE90B3ECDC272D4C96A90F49D4865593F46191A44`.
-All 69 repository tests passed, tracked Markdown links were valid, and the
-public-source boundary reported zero violations. The ReXGlue unit suite passed
-2,282 assertions across 247 test cases with four documented skips; the PPC
-suite passed 6,549 assertions across 1,480 test cases.
-AppData-backed session `20260828T030228Z-p10520` exited normally after capturing
-34 authentic front-end translations: 14 vertex and 20 pixel containers,
-407,148 bytecode bytes total. No callback was duplicated or rejected. The
-generated 34-entry pack verified independently at 409,736 bytes with SHA-256
-`259982B4F4D966A08041B699468A2CC66744E54606D9D98809B8829A746BEC1B`.
+Locally derived bytecode, manifests, and packs must remain under `.local` and
+must not enter support bundles or the public repository.
 
-Xenos remained the sole output authority. The session recorded no capture
-failure, device removal, TDR, resource-state warning, validation warning, or
-presentation deadline miss. Presentation cadence was 60.005 Hz and simulation
-cadence was 29.437 Hz. A separate default session
-`20260828T030355Z-p41808` emitted zero shader-capture events, retained Xenos
-authority, and exited normally with no error event. Neither run modified or
-copied the AppData save.
+## Retail-disc corpus
 
-This closes the local extraction/translation prerequisite for NR-02. Selecting
-one stable candidate shader pair still depends on a scene-specific draw census;
-geometry, constants, resources, and PSO state remain NR-02B through NR-02D.
-The bounded repeated-capture workflow is defined in
-[`CANDIDATE_DRAW_SELECTION.md`](CANDIDATE_DRAW_SELECTION.md).
+The stored corpus is a qualification bridge, not the final producer: it can
+only contain shaders encountered by an earlier run. FH1 instead exposes its
+finite shader programs in `media/shaders/**/*.fxobj`. Extract them directly:
+
+```powershell
+python .\tools\extract-fh1-shader-corpus.py <game-root> `
+  --output .\.local\native-renderer\fh1-disc-shader-corpus\manifest.json `
+  --binary-dir .\.local\native-renderer\fh1-disc-shader-corpus\ucode `
+  --archive-extractor .\out\build\win-amd64-release\pinyon_shift_fh1_archive_extract.exe
+```
+
+The helper reuses ReXGlue's LZX decoder for FH1's method-21 `bin.zip` archives;
+all 197 archived shader members were checked byte-for-byte against an
+independent QuickBMS extraction. Missing the helper is an error rather than
+silently producing an incomplete corpus.
+
+For the supported retail disc this finds 4,293 containers and 3,349 unique raw
+programs: 1,615 vertex and 1,734 pixel. The 34 vertex declarations embedded in
+the same assets deterministically patch the retail fetch templates into 8,377
+additional vertex programs, for 11,726 source programs total. The patcher
+reproduces 275 of the 277 accumulated runtime vertex shaders that have an
+identifiable retail parent; the two exceptions are FH1 DriverHands skinning
+variants. Generated/system shaders and those two variants remain in the finite
+title seed.
+
+Stock XenosRecomp was tested against the first FH1 car-material asset. Its
+scanner recognizes the containers, but its Sonic Unleashed-specific shader ABI
+fails compilation on FH1 cube and sampler declarations. The usable reference
+is therefore its deterministic asset-scanning model. Offline FH1 production
+continues to use ShiftGlue's already-qualified translator. Automated session
+`20260904T055222Z-p28564` produced 9,600 vertex and 12,098 pixel
+specializations with zero failures. Merging those misses with the finite title
+seed produced a 21,984-entry 2x pack; strict session
+`20260904T055452Z-p33360` completed with zero runtime translations and no
+shader-storage seed.
+
+The same producer is qualified at every supported integer scale. Strict
+no-seed sessions `20260904T060200Z-p47700` (1x),
+`20260904T055452Z-p33360` (2x), and `20260904T060433Z-p11356` (3x) each
+captured zero translation misses. Ordinary local launches now verify and stage
+the matching scale pack automatically and enable the strict runtime gate.
+
+The producer no longer needs an existing pack to discover FH1 specialization
+masks. They are a fixed title-specific set, including five car-shader pairings
+whose live interpolator count is lower than the asset declaration. Clean 1x
+session `20260904T061601Z-p48584` translated the complete 9,600 vertex and
+12,098 pixel asset set with zero failures and no input pack or `.xsh` storage.
+The remaining finite seed consists only of runtime-generated/system programs
+not present in retail `.fxobj` assets.

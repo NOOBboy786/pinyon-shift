@@ -126,8 +126,9 @@ logical/physical report lifecycle.
 `0041-fh1-resolve-readback-counters` instruments the existing D3D12 resolve
 readback path without changing its policy. It counts requests, guest-copy
 bytes, fast copies, delayed-slot cache misses, synchronous waits, and measured
-wait time. Schema 8 and the launcher use those counters to qualify conservative
-Shipping 1×, delayed Experimental 2×, and opt-in Accurate showroom presets.
+wait time. Schema 19 and the launcher use those counters to qualify conservative
+Shipping 1×, native-resolve Experimental 2×, delayed Experimental 3×, and
+opt-in Accurate showroom presets.
 Removing `0041` removes telemetry only; selecting Shipping 1× remains the
 immediate runtime rollback to `readback_resolve = "none"`.
 

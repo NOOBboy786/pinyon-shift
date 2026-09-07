@@ -231,13 +231,14 @@ try {
         'xma_relaxed_padding_admission',
         'pinyon_shift_capture_performance',
         'pinyon_shift_stabilize_vehicle_presentation', 'pinyon_shift_skip_opening_movies',
+        'pinyon_shift_fh1_render_fps_limit',
+        'pinyon_shift_fh1_source_presentation',
         'resolution', 'vsync', 'host_present_fps_limit',
-        'host_present_sleep_spin', 'anisotropic_override', 'swap_post_effect',
+        'host_present_sleep_spin',
+        'anisotropic_override', 'swap_post_effect',
         'disable_motion_blur', 'disable_depth_of_field',
         'draw_resolution_scale_x', 'draw_resolution_scale_y', 'occlusion_query',
         'zpd_end_policy', 'zpd_end_fallback', 'clear_memory_page_state',
-        'readback_resolve', 'readback_resolve_half_pixel_offset',
-        'readback_memexport', 'readback_memexport_fast',
         'pinyon_shift_native_renderer',
         'pinyon_shift_native_renderer_sky_horizon_suppression'
     )
@@ -327,12 +328,6 @@ try {
             xenos_authority = $true
             suppression_allowed = $false
         }
-    }
-    $nativeShaderPack = [ordered]@{
-        status = 'not_configured'
-        backend = 'd3d12'
-        entries = [uint64]0
-        failure_reason = $null
     }
     if ($null -ne $eventLog) {
         foreach ($line in Get-Content -LiteralPath $eventLog.FullName -ErrorAction SilentlyContinue) {
@@ -434,15 +429,6 @@ try {
                     $lineage.suppression_allowed =
                         [string]$event.suppression_allowed -eq 'true'
                 }
-                'native_renderer.shader_pack.ready' {
-                    $nativeShaderPack.status = 'ready'
-                    $nativeShaderPack.backend = [string]$event.backend
-                    $nativeShaderPack.entries = [uint64]$event.entries
-                }
-                'native_renderer.shader_pack.failure' {
-                    $nativeShaderPack.status = 'failed'
-                    $nativeShaderPack.failure_reason = [string]$event.reason
-                }
             }
         }
     }
@@ -459,7 +445,7 @@ try {
         Get-Content -LiteralPath (Join-Path $repoRoot '.local/setup-state.json') -Raw | ConvertFrom-Json
     } else { $null }
     $binaryHashes = [ordered]@{}
-    foreach ($name in @('pinyon_shift.exe', 'rexruntime.dll', 'rexgpu-xenos.dll',
+    foreach ($name in @('pinyon_shift.exe', 'rexruntime.dll', 'rexgpu-fh1.dll',
         'pinyon_shift_SpeechFacade_default.dll', 'pinyon_shift_XMediaFacade_default.dll')) {
         $path = Join-Path $runtimeDirectory $name
         if (Test-Path -LiteralPath $path -PathType Leaf) {
@@ -513,7 +499,6 @@ try {
         }
         graphics = [ordered]@{
             native_renderer = $nativeRenderer
-            native_shader_pack = $nativeShaderPack
             zpd = $zpdCounters
             resolve_readback = $resolveCounters
             presentation = $presentationCounters

@@ -119,30 +119,6 @@ class VehiclePlayerIngressTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "vehicle ID getter"):
                 MODULE.build(functions, bodies, b"")
 
-    def test_runtime_observer_is_passive_and_fail_closed(self):
-        hooks = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        runtime = (ROOT / "src/pinyon_shift_runtime_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        config = (ROOT / "config/rexglue/analysis/main-xex.toml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("ObserveVehicleMapEntity", hooks)
-        self.assertIn("vehicle_map_pose_correlation", hooks)
-        self.assertIn('player_vehicle_identity_proved", "false"', hooks)
-        self.assertIn("PinyonShiftObserveVehicleMapEntity", runtime)
-        self.assertIn("PinyonShiftObserveVehicleMapEntityIdAssignment", runtime)
-        self.assertIn("PinyonShiftObserveVehiclePlayerPool", runtime)
-        self.assertIn("UINT32_MAX - kPlayerEntityOffset", runtime)
-        self.assertIn("UINT32_MAX - kPoolContextOffset", runtime)
-        self.assertIn("address = 0x82BBA010", config)
-        self.assertIn('registers = ["r3"]', config)
-        self.assertIn("address = 0x82CCF228", config)
-        self.assertIn('registers = ["r3", "r4"]', config)
-        self.assertIn("address = 0x826291A8", config)
-        self.assertIn('registers = ["r3", "r31"]', config)
 
     def test_runtime_qualifier_promotes_one_direct_player_pose_relation(self):
         safety = {

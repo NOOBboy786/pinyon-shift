@@ -1,125 +1,208 @@
-# Native shader pack format
+# FH1 native shader pack format
 
-NR-02A uses a deterministic local package for host-consumable D3D12 shader
-bytecode. The public repository contains this format, its builder, and shader
-identity metadata only. Extracted guest shaders, translated source, DXIL, and
-completed packs are locally derived artifacts and must remain under `.local`.
+Version 2 is the Forza Horizon 1 D3D12 runtime renderer input. It stores the
+native shader container plus the texture and sampler binding metadata that
+ReXGlue normally derives while translating Xenos microcode. A matching entry
+therefore bypasses `DxbcShaderTranslator` completely.
 
-## Stable identity
+This is deliberately title-specific. The runtime looks only for title
+`4D5309C9` and selects an exact pack by translator version, GPU vendor, D3D12
+translation flags, and integer render scale:
 
-A shader entry is identified by this ordered tuple:
+```text
+4D5309C9.fh1-native-v2.<vendor>.<flags>.<scale-x>x<scale-y>.pnsp
+```
 
-1. stage: `vertex` or `pixel`;
-2. the 64-bit guest shader hash reported by ReXGlue; and
-3. a 64-bit specialization mask defined by the future candidate replay path.
+## Manifest
 
-The specialization mask is explicit even when it is zero. Runtime lookup must
-never silently fall back from one specialization to another. A missing exact
-identity is a coverage failure and leaves the isolated native draw unavailable;
-it does not affect the authoritative Xenos frame.
-
-## Local manifest
-
-The builder consumes UTF-8 JSON with this shape:
+`tools/native-shader-pack.py` consumes one or more UTF-8 V2 manifests. Multiple
+manifests are merged only when their translation configurations are identical;
+duplicate identities must contain identical data.
 
 ```json
 {
-  "schema": "pinyon-shift.native-shader-pack.v1",
+  "schema": "pinyon-shift.native-shader-pack.v2",
   "backend": "d3d12",
-  "entries": [
-    {
-      "stage": "vertex",
-      "guest_hash": "0123456789ABCDEF",
-      "specialization_mask": "0000000000000000",
-      "bytecode": "dxil/0123456789ABCDEF.dxil",
-      "sha256": "64 hexadecimal digits"
-    }
-  ]
+  "translation": {
+    "translator_version": "20260827",
+    "vendor_id": 4318,
+    "bindless_resources": true,
+    "edram_rov": false,
+    "gamma_render_target_as_unorm8": false,
+    "msaa_2x": true,
+    "draw_resolution_scale_x": 2,
+    "draw_resolution_scale_y": 2
+  },
+  "entries": [{
+    "stage": "pixel",
+    "guest_hash": "0123456789ABCDEF",
+    "specialization_mask": "000000000016003F",
+    "bytecode": "dxil/pixel.dxil",
+    "sha256": "64 hexadecimal digits",
+    "texture_bindings": [{
+      "bindless_descriptor_index": 0,
+      "fetch_constant": 3,
+      "dimension": 1,
+      "is_signed": 0
+    }],
+    "sampler_bindings": [{
+      "bindless_descriptor_index": 0,
+      "fetch_constant": 3,
+      "mag_filter": 1,
+      "min_filter": 1,
+      "mip_filter": 1,
+      "aniso_filter": 0
+    }],
+    "used_texture_mask": 8
+  }]
 }
 ```
 
-Bytecode paths must resolve inside the manifest directory. Every file must be a
-non-empty DXIL container beginning with `DXBC`, must be no larger than 16 MiB,
-and must match its declared SHA-256. Duplicate identities are rejected.
+The stable identity is `(stage, guest_hash, specialization_mask)`. The runtime
+never substitutes another specialization. Bytecode paths must remain below the
+manifest directory, begin with D3D container magic `DXBC`, match their SHA-256,
+and be at most 16 MiB. Packs are bounded to 65,535 entries and 512 MiB.
 
-Build and independently verify a pack with:
+Build and verify locally:
 
 ```powershell
 python .\tools\native-shader-pack.py build `
-  .\.local\native-renderer\shader-manifest.json `
-  --output .\.local\native-renderer\pinyon-shift-d3d12.pnsp
+  .\.local\native-renderer\capture-a\shader-manifest.json `
+  .\.local\native-renderer\capture-b\shader-manifest.json `
+  --output .\.local\native-renderer\fh1.pnsp
 python .\tools\native-shader-pack.py verify `
-  .\.local\native-renderer\pinyon-shift-d3d12.pnsp
+  .\.local\native-renderer\fh1.pnsp
 ```
 
 ## Binary layout
 
-All integers are unsigned little-endian. The file begins with an 80-byte
-header, followed by fixed 68-byte entries, followed by 16-byte-aligned DXIL
-payloads.
+All integers are unsigned little-endian. A 112-byte header is followed by
+88-byte sorted entries and 16-byte-aligned payloads. The header contains magic
+`PNYNSHPK`, version `2`, sizes and offsets, entry count, payload size, a SHA-256
+of the complete index and payload, translator version, vendor, translation
+flags, render scales, and three zero reserved words.
 
-| Header field | Type | Meaning |
-| --- | --- | --- |
-| Magic | 8 bytes | ASCII `PNYNSHPK` |
-| Version | `u32` | `1` |
-| Header size | `u32` | `80` |
-| Entry size | `u32` | `68` |
-| Entry count | `u32` | bounded to 65,535 |
-| Index offset | `u64` | always 80 in version 1 |
-| Data offset | `u64` | first byte after the fixed index |
-| Data size | `u64` | complete aligned payload region |
-| Content SHA-256 | 32 bytes | hash of the index and payload region |
+Each entry stores stage, bytecode format, guest hash, specialization mask,
+payload offset and bytecode size, texture/sampler counts, used-texture mask, a
+zero reserved word, and bytecode SHA-256. Its payload is bytecode followed by
+16-byte texture bindings and 24-byte sampler bindings.
 
-Each entry stores an 8-bit stage, an 8-bit bytecode format (`1` for DXIL), a
-zero 16-bit reserved field, guest hash, specialization mask, payload-relative
-offset, payload size, and the 32-byte SHA-256 of its DXIL payload.
+The producer and runtime independently validate configuration, sizes, ranges,
+alignment, hashes, binding bounds, texture masks, sorted uniqueness, and
+consistent layouts across specializations before exposing bytecode.
 
-Entries are sorted by the complete stable identity. The builder writes through
-an atomic temporary file. Verification checks the file-wide content hash,
-every entry hash and range, DXIL magic, identity order, uniqueness, and all
-bounded sizes before any shader is exposed to a renderer.
+## Runtime and retirement gates
 
-## Public-source and fallback rules
+`PipelineCache::TranslateAnalyzedShader` first performs the exact pack lookup.
+On a hit it installs bytecode and bindings and continues through normal root
+signature and pipeline creation without Xenos shader translation. During
+explicit offline corpus production, a miss may use the compatibility translator
+and is observable by the capture callback.
 
-- Do not commit manifests containing extracted shader paths or hashes unless
-  those values are independently distributable metadata approved for the
-  public boundary.
-- Never commit translated guest shader source, DXIL, or `.pnsp` output.
-- A corrupt pack, unknown version, unsupported stage, missing identity, or
-  failed hash is explicit failure. The isolated NR-02 renderer yields and
-  Xenos remains authoritative.
-- This package does not enable guest draw or resolve suppression.
+Normal FH1 execution always enforces the retirement gate; there is no runtime
+setting or launcher argument that can disable it. A miss is marked
+terminal-invalid and reported as a GPU error before the translator can run.
+The normal `rexgpu-fh1.dll` is compiled without the DXBC shader compiler.
+Translation exists only in the explicit, unstaged `rexgpu-fh1-producer.dll`
+target used with the locally extracted disc corpus. `launch-preview.ps1`
+temporarily stages that producer only for a `-DiscShaderCorpusDir` run and
+removes it afterward. The FH1 runtime is fixed to native host render targets,
+so the alternate ROV shader ABI and its synthetic depth shader are absent too.
+`tools/run-fh1-render-test.py
+--require-zero-shader-misses` independently requires a zero-entry capture
+summary, so tests prove both that the runtime did not fall back and that the
+expected scene completed.
 
-## NR-02A qualification
+## Public-source boundary
 
-Clean commit `5938136` built with all 49 ReXGlue patches and produced
-executable SHA-256
-`27163174F2180837FF7BCBDDA7028EA68275F70B2E38B7ED0B9B410E9107BC33`.
-All 68 repository tests passed, tracked Markdown links were valid, and the
-public-source boundary reported zero violations.
+Extracted guest shaders, translated bytecode, manifests containing guest shader
+identities, and completed packs are locally derived artifacts; they must remain under `.local`.
+Repository policy continues to forbid `.dxil`, `.dxbc`, and
+`.pnsp`. The public repository contains the format, producer, loader, and tests.
+The pack does not enable guest draw or resolve suppression.
 
-The builder produced the same 212-byte one-entry qualification pack regardless
-of manifest order. Its SHA-256 was
-`BFB4A386B4F3840048088E186E55CC6AD534F6D3AB109DA2600B7572FD3390EE`,
-and an independent verify operation accepted every range and digest. Unit tests
-also rejected duplicate identities, mismatched hashes, path traversal,
-non-DXIL input, and content corruption.
+## Current qualification
 
-AppData-backed session `20260828T023642Z-p41636` loaded that pack and recorded
-one D3D12 entry while separately retaining Xenos output authority. Visual
-inspection confirmed the normal Xenos-rendered startup sequence. The session
-claimed no native frame, recorded no shader-pack failure, device removal, TDR,
-validation warning, resource-state warning, or presentation deadline miss, and
-exited normally. Presentation cadence was 59.994 Hz and simulation cadence was
-29.209 Hz.
+The initial `.xsh` / `.xpso` proof produced 721-entry packs at every supported
+integer scale. The asset-derived producer supersedes those observed-cache packs.
+The complete current NVIDIA packs are:
 
-Recovery session `20260828T023747Z-p9136` selected a missing pack. It emitted
-exactly one sanitized `validation_failed` event with `fallback=xenos`, then
-recorded Xenos as output authority, claimed no native frame, and exited
-normally without another error signal. Neither qualification run changed or
-copied the AppData save.
+| Scale | Entries | Bytes | SHA-256 |
+| --- | ---: | ---: | --- |
+| 1x | 22,012 | 468,825,976 | `1636179BF8633D7406C7C3C735DD600C0C05666D8A8A8CAC188433730A38C026` |
+| 2x | 22,012 | 473,489,272 | `D6E62162510BE0EDFC0CA4D1624B498F51024F7BC5AC2597A23C37929E030A3E` |
+| 3x | 22,012 | 473,489,272 | `53288ADF3C958C994D857CC2DEEF8877A0EA1DF4E3B89207B7E6AF18778C83B0` |
 
-Authentic local capture is documented in
-[`CANDIDATE_SHADER_CAPTURE.md`](CANDIDATE_SHADER_CAPTURE.md). The capture writer
-emits this manifest schema directly from validated ReXGlue translations while
-keeping all shader identity and bytecode data under `.local`.
+That pack passed unattended 2560x1440 race, free-roam, SELECT-map, pause/resume,
+photo-mode, and combined HFR mode tests with zero runtime shader translations.
+The strict HFR session `20260904T043852Z-p44060` produced 73.426 source
+frames/s, zero duplicate presents, and title time at 1.004x wall time. A
+negative run without the pack was rejected by the runtime gate, proving that
+strict mode cannot silently invoke the compatibility translator.
+
+Strict 1x HFR session `20260904T044521Z-p45072` also completed the combined
+mode route with zero misses and duplicate presents. Capture-light strict 3x
+session `20260904T045529Z-p556` rendered a true 3840x2160 world frame with zero
+misses, 75.066 source frames/s, 74.860 presents/s, zero duplicate presents,
+and title time at 0.995x wall time. This completes the scale matrix for the
+current NVIDIA translator configuration; other GPU vendors remain unproven.
+
+`tools/extract-fh1-shader-corpus.py` now reads loose assets and FH1's LZX track
+archives, finding 3,349 unique raw programs in 4,293 containers. It combines
+the embedded 34 vertex declarations with the retail vertex templates to emit
+8,377 deterministic patched variants, producing 11,726 programs total.
+
+At 2x, automated corpus session `20260904T055222Z-p28564` translated 9,600
+vertex and 12,098 pixel specializations with zero failures. The merged pack has
+21,984 entries, is 472,656,904 bytes, and has SHA-256
+`572CDA43FEAF4B98B77B850034E28C54D67D95DEE8B942E9D2050CF605897C7F`.
+Strict session `20260904T055452Z-p33360` used that pack without an `.xsh` seed,
+captured zero misses, rendered 86.478 unique source frames/s, emitted no
+duplicate presents, and kept title time at 1.007x wall time.
+
+The corresponding strict no-seed 1x session `20260904T060200Z-p47700`
+captured zero misses at 1280x720, produced 87.904 source frames/s, and kept
+title time at 1.006x wall time. Strict 3x session
+`20260904T060433Z-p11356` captured zero misses at 3840x2160, produced 75.343
+source frames/s with zero duplicate presents, and kept title time at 0.996x
+wall time. `tools/launch-preview.ps1` now verifies and stages the matching
+local scale pack for ordinary runs and enables the strict no-translation gate.
+
+Ordinary launches also stage the FH1-only startup catalog from
+`.local/native-renderer/fh1-native-prewarm/cache` when present. It contains the
+read-only `fh1-native-shaders-v2.bin`, `fh1-native-pipelines-v1.bin`, and
+`fh1-gpu-prewarm-v3.txt` allowlist; all three files are required and verified
+by SHA-256 while staging. `build-fh1-gpu-prewarm.py --legacy-cache` converts the
+last qualified ReXGlue capture into those native startup inputs. The v2 shader
+catalog stores each FH1 shader's raw identity plus the constant maps, vertex
+binding strides, output masks, register requirements and memory-export facts
+that drawing still needs. Each bounded record has its own XXH3 checksum and the
+runtime requires a sorted, unique, exact-EOF catalog. Parsed instructions,
+disassembly, labels and translator-only control-flow analysis are not stored.
+Normal runs therefore neither execute `AnalyzeUcode` nor open or mutate
+`.xsh`/`.xpso` stores. These remain local game-derived artifacts. The
+current qualified catalog contains 461 pipeline hashes, 73,781 draw identities
+and 690 copy identities.
+
+Schema 21 makes the FH1 native route unconditional and removes its former V4
+enable/disable setting. Strict session `20260904T070431Z-p24828` verified the
+combined HFR/UI route after migration with zero shader translations, zero
+synchronous pipeline creations and zero prewarm fallback draws.
+
+The separate precompiled-shader CVar is also retired. Normal FH1 execution now
+rejects pack misses structurally; only the local, observer-backed disc-corpus
+producer may execute the translator. Positive session
+`20260904T070857Z-p34300` passed the complete combined route with zero runtime
+translations and zero synchronous pipeline creation. A no-pack negative smoke
+session `20260904T071055Z-p35632` failed on explicit precompiled misses while
+recording zero translated shaders, proving direct launches cannot fall back.
+
+The completed v2 analysis catalog contains 11,628 unique guest shaders
+(8,409,800 bytes, SHA-256
+`09F6FDC0FBD9961BA000A2B30B3839FA9D4BA0292D09F7FA436EC4B761D0613E`).
+It unions the complete disc corpus, the finite generated/system title seed,
+and runtime-generated car-selection programs found by the deterministic race
+route. Shipping sessions at all three scales then completed the full event and
+race with zero shader misses. The binary gate additionally requires
+`AnalyzeUcode` to be absent from the runtime and present only in the offline
+producer.

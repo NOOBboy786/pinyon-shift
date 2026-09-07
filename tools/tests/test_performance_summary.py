@@ -76,22 +76,51 @@ class PerformanceSummaryTests(unittest.TestCase):
                 writer.writerow(base | {
                     "frame_time_us": 20_000, "guest_vblank_count": 1,
                     "guest_vblank_delta_ns": 16_666_666,
-                    "simulation_tick_count": 1, "present_count": 1,
+                    "simulation_tick_count": 1, "source_frame_count": 1,
+                    "present_count": 1,
                     "present_delta_ns": 33_333_333,
                 })
                 writer.writerow(base | {
                     "frame_time_us": 20_000, "guest_vblank_count": 1,
                     "guest_vblank_delta_ns": 16_666_666,
-                    "simulation_tick_count": 1, "present_count": 1,
+                    "simulation_tick_count": 1, "source_frame_count": 1,
+                    "present_count": 1,
                     "present_delta_ns": 33_333_333,
                     "present_deadline_misses": 1,
                 })
             pacing = MODULE.summarize(capture)["presentation"]
             self.assertEqual(pacing["cadence_hz"]["guest_vblank"], 50.0)
             self.assertEqual(pacing["cadence_hz"]["simulation_tick"], 50.0)
+            self.assertEqual(pacing["cadence_hz"]["source_frame"], 50.0)
             self.assertEqual(pacing["cadence_hz"]["present"], 50.0)
             self.assertEqual(pacing["mean_delta_ms"]["present"], 33.333)
             self.assertEqual(pacing["counters"]["present_deadline_misses"], 1)
+
+    def test_emits_title_simulation_time_ratio(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            capture = pathlib.Path(temporary) / "capture.csv"
+            fields = (
+                FIELDS
+                + list(MODULE.PRESENTATION_COLUMNS)
+                + list(MODULE.SIMULATION_TIME_COLUMNS)
+            )
+            with capture.open("w", encoding="utf-8", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=fields)
+                writer.writeheader()
+                base = dict.fromkeys(fields, 0)
+                writer.writerow(base | {"frame_time_us": 100_000})
+                for _ in range(2):
+                    writer.writerow(base | {
+                        "frame_time_us": 20_000,
+                        "simulation_tick_count": 2,
+                        "simulation_time_ns": 20_000_000,
+                    })
+            timing = MODULE.summarize(capture)["presentation"]["simulation_time"]
+            self.assertEqual(timing["seconds"], 0.04)
+            self.assertEqual(timing["active_wall_seconds"], 0.04)
+            self.assertEqual(timing["wall_time_ratio"], 1.0)
+            self.assertEqual(timing["mean_update_ms"], 10.0)
+            self.assertEqual(timing["invalid_deltas"], 0)
 
     def test_emits_complete_optional_resolve_readback_totals(self):
         with tempfile.TemporaryDirectory() as temporary:

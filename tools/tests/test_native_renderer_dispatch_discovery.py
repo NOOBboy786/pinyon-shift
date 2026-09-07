@@ -1,4 +1,5 @@
 import importlib.util
+import re
 import sys
 import tempfile
 import unittest
@@ -935,6 +936,20 @@ def procedural_model_image():
 
 
 class NativeRendererDispatchDiscoveryTests(unittest.TestCase):
+    def test_packet_inventory_covers_every_declared_type3_opcode(self):
+        xenos = (
+            ROOT
+            / "thirdparty"
+            / "shiftglue-sdk"
+            / "include"
+            / "rex"
+            / "graphics"
+            / "xenos.h"
+        ).read_text(encoding="utf-8")
+        enum_body = xenos.split("enum Type3Opcode {", 1)[1].split("};", 1)[0]
+        declared = set(re.findall(r"^\s*(PM4_[A-Z0-9_]+)\s*=", enum_body, re.MULTILINE))
+        self.assertEqual(declared, set(MODULE.PACKET_OPCODES.values()))
+
     def build(self, chunks, image=None):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "pinyon_shift_recomp.1.cpp"
@@ -1590,194 +1605,6 @@ class NativeRendererDispatchDiscoveryTests(unittest.TestCase):
                 procedural_model_image(),
             )
 
-    def test_runtime_hooks_are_default_off_bounded_and_passive(self):
-        hooks = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        analysis = (ROOT / "config/rexglue/analysis/main-xex.toml").read_text(
-            encoding="utf-8"
-        )
-        capture = (
-            ROOT / "tools/capture-native-renderer-dispatch.ps1"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            "pinyon_shift_native_renderer_dispatch_discovery, false", hooks
-        )
-        self.assertIn("kDispatchCallerCapacity = 256", hooks)
-        self.assertIn('"suppression_allowed", "false"', hooks)
-        claim = hooks.index("entry.key.compare_exchange_strong")
-        initial_count = hooks.index("entry.calls.store(1", claim)
-        first_sample = hooks.index("entry.first_frame.store", claim)
-        self.assertLess(initial_count, first_sample)
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveDrawIndexedDispatch"'), 1
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveDrawImmediateDispatch"'),
-            1,
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveDrawAdapterDispatch"'),
-            1,
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveDrawPacketSubmission"'),
-            2,
-        )
-        for address in (
-            "824095B4",
-            "82416EFC",
-            "8246FC1C",
-            "8263BD64",
-            "829E8E88",
-            "829EC49C",
-        ):
-            self.assertIn(f"address = 0x{address}", analysis)
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveIndirectPacket{address}"'
-                ),
-                1,
-            )
-        for function, entry, exit_address in (
-            ("82409398", "8240939C", "82409660"),
-            ("82416A00", "82416A04", "82417054"),
-            ("8246FB98", "8246FB9C", "8246FC78"),
-            ("8263BCB8", "8263BCBC", "8263BDF0"),
-            ("829E8E00", "829E8E04", "829E8ED4"),
-            ("829EC400", "829EC404", "829EC5AC"),
-        ):
-            self.assertIn(f"address = 0x{entry}", analysis)
-            self.assertIn(f"address = 0x{exit_address}", analysis)
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveIndirectConstructor{function}Entry"'
-                ),
-                1,
-            )
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveIndirectConstructor{function}Exit"'
-                ),
-                1,
-            )
-        for name, entry, exit_address in (
-            ("Constructor", "82E1C9A4", "82E1CA0C"),
-            ("Destructor", "82E1CA2C", "82E1CBD0"),
-            ("Visibility", "82E1FD04", "82E208CC"),
-            ("RenderState", "824170DC", "82417410"),
-        ):
-            self.assertIn(f"address = 0x{entry}", analysis)
-            self.assertIn(f"address = 0x{exit_address}", analysis)
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveProceduralModel{name}Entry"'
-                ),
-                1,
-            )
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveProceduralModel{name}Exit"'
-                ),
-                1,
-            )
-        for function, entry, exit_address in (
-            ("82409668", "8240966C", "8240983C"),
-            ("824167F8", "824167FC", "82416898"),
-            ("8246E8F8", "8246E8FC", "8246E938"),
-            ("829F5FF0", "829F5FF4", "829F6358"),
-        ):
-            self.assertIn(f"address = 0x{entry}", analysis)
-            self.assertIn(f"address = 0x{exit_address}", analysis)
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveIndirectOwner{function}Entry"'
-                ),
-                1,
-            )
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveIndirectOwner{function}Exit"'
-                ),
-                1,
-            )
-        for function, entry, exit_address in (
-            ("8240D070", "8240D074", "8240D1F0"),
-            ("82417060", "82417064", "824170C0"),
-            ("829F6360", "829F6364", "829F63FC"),
-        ):
-            self.assertIn(f"address = 0x{entry}", analysis)
-            self.assertIn(f"address = 0x{exit_address}", analysis)
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveIndirectProducer{function}Entry"'
-                ),
-                1,
-            )
-            self.assertEqual(
-                analysis.count(
-                    f'name = "PinyonShiftObserveIndirectProducer{function}Exit"'
-                ),
-                1,
-            )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveVizQueryBeginDispatch"'),
-            1,
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveVizQueryEndDispatch"'),
-            1,
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveResolveControllerDispatch"'),
-            1,
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveResolveSetupDispatch"'),
-            1,
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveVizQueryOwnerDispatch"'),
-            1,
-        )
-        self.assertEqual(
-            analysis.count(
-                'name = "PinyonShiftObserveBinningScissorStateDispatch"'
-            ),
-            1,
-        )
-        self.assertEqual(
-            analysis.count('name = "PinyonShiftObserveBinningStateResetDispatch"'),
-            1,
-        )
-        self.assertIn('address = 0x824079BC', analysis)
-        self.assertIn('address = 0x8240F4DC', analysis)
-        self.assertIn('address = 0x82410328', analysis)
-        self.assertIn('address = 0x824587DC', analysis)
-        self.assertIn('address = 0x82458A8C', analysis)
-        self.assertIn('address = 0x829F21A4', analysis)
-        self.assertIn('address = 0x829F2284', analysis)
-        self.assertIn('address = 0x829F7C74', analysis)
-        self.assertIn('address = 0x829F7CB0', analysis)
-        self.assertIn('address = 0x82D951E4', analysis)
-        self.assertIn('address = 0x82413ABC', analysis)
-        self.assertIn('address = 0x824736F4', analysis)
-        self.assertEqual(
-            analysis.count(
-                'registers = ["r3", "r4", "r5", "r6", "r7", "r8", '
-                '"r9", "r10", "r12"]'
-            ),
-            27,
-        )
-        self.assertIn(
-            "REX_PINYON_SHIFT_NATIVE_RENDERER_DISPATCH_DISCOVERY", capture
-        )
-        self.assertIn("REX_PINYON_SHIFT_NATIVE_RENDERER_CENSUS", capture)
-        self.assertIn("PINYON_SHIFT_NATIVE_RENDERER_SCENE", capture)
-        self.assertIn("[string]$Scene = 'unmarked'", capture)
-        self.assertIn("launch-preview.ps1", capture)
-        for forbidden in ("SetDrawSuppression", "SetCopySuppression"):
-            self.assertNotIn(forbidden, hooks + analysis + capture)
 
 
 if __name__ == "__main__":

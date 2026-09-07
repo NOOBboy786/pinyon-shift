@@ -109,14 +109,6 @@ class TrackScopeSpatialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "violates safety"):
             MODULE.build(events, catalog())
 
-    def test_source_contract_is_passive_and_bounded(self):
-        source = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(encoding="utf-8")
-        self.assertIn("kTrackWorldScopeSpatialCapacity = 1024", source)
-        self.assertIn("RecordTrackWorldScopeSpatialSnapshot", source)
-        self.assertIn(MODULE.ENTRY, source)
-        self.assertIn('"scope_spatial_export", "numeric_words_hash_variation_only"', source)
-        self.assertIn('"native_admission", "false"', source)
-        self.assertIn('"suppression_allowed", "false"', source)
 
 
 if __name__ == "__main__":

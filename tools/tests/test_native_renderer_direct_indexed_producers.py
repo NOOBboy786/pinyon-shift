@@ -101,28 +101,6 @@ class DirectIndexedProducerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "instruction drift"):
             MODULE.build(functions, image)
 
-    def test_runtime_hook_is_bounded_and_passive(self):
-        analysis = (
-            ROOT / "config" / "rexglue" / "analysis" / "main-xex.toml"
-        ).read_text(encoding="utf-8")
-        hooks = (ROOT / "src" / "native_renderer" / "graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("address = 0x82416380", analysis)
-        self.assertIn(
-            'name = "PinyonShiftObserveDirectIndexedDrawProducer"', analysis
-        )
-        self.assertIn('registers = ["r26", "r31", "lr"]', analysis)
-        self.assertIn("address = 0x824167EC", analysis)
-        self.assertIn(
-            'name = "PinyonShiftObserveDirectIndexedDrawProducerExit"', analysis
-        )
-        self.assertIn("kDirectIndexedDrawProducerCount = 13", hooks)
-        self.assertIn("kUnifiedTrackMeshTransformCapacity = 4096", hooks)
-        self.assertIn("bounded_64_byte_live_transform", hooks)
-        self.assertIn('{"guest_state_changed", "false"}', hooks)
-        self.assertIn('{"native_admission", "false"}', hooks)
-        self.assertIn('{"xenos_authority", "true"}', hooks)
 
 
 if __name__ == "__main__":

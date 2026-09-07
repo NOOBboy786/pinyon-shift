@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Get', 'Apply', 'Reset', 'Restore', 'SetRenderer',
-        'ResetRenderer', 'SetSkyHorizonSuppression')]
+    [ValidateSet('Get', 'Apply', 'Reset', 'Restore')]
     [string]$Action = 'Get',
     [ValidateSet(4, 8, 16)]
     [int]$Anisotropy = 4,
@@ -9,28 +8,22 @@ param(
     [string]$PostEffect = 'none',
     [ValidateSet(1, 2, 3)]
     [int]$ResolutionScale = 1,
-    [ValidateSet('custom', 'shipping_1x', 'experimental_2x', 'experimental_3x', 'accurate_showroom')]
+    [ValidateSet('custom', 'shipping_1x', 'experimental_2x', 'experimental_3x')]
     [string]$Preset = 'custom',
-    [ValidateSet('none', 'fast', 'some', 'full')]
-    [string]$ReadbackResolve = 'none',
     [ValidateSet('legacy', 'fake', 'fast', 'strict')]
     [string]$OcclusionQuery = 'legacy',
     [ValidateSet('report_layout', 'pairwise_sentinel', 'relaxed_sentinel')]
     [string]$ZpdEndPolicy = 'report_layout',
     [ValidateSet('none', 'pairwise_sentinel', 'relaxed_sentinel')]
     [string]$ZpdEndFallback = 'pairwise_sentinel',
-    [ValidateSet(0, 30, 60)]
-    [int]$PresentationFps = 60,
+    [ValidateSet(0, 30, 60, 120, 240)]
+    [int]$PresentationFps = 0,
+    [ValidateRange(0, 240)]
+    [int]$RenderFps = 0,
     [ValidateSet('true', 'false')]
     [string]$DisableMotionBlur = 'false',
     [ValidateSet('true', 'false')]
     [string]$DisableDepthOfField = 'false',
-    [ValidateSet('xenos', 'diagnostic_clear', 'diagnostic_triangle',
-        'diagnostic_retained_pass', 'native_prototype', 'hybrid_prototype',
-        'comparison_native', 'comparison_xenos')]
-    [string]$NativeRenderer = 'xenos',
-    [ValidateSet('true', 'false')]
-    [string]$SkyHorizonSuppression = 'false',
     [string]$StateRoot,
     [switch]$Json
 )
@@ -51,8 +44,8 @@ $backupDirectory = Join-Path $configDirectory 'backups'
 function Get-DefaultConfigText {
     @'
 # Pinyon Shift host configuration.
-# Schema 11 adds the fail-closed native-renderer family control plane.
-pinyon_shift_config_schema = 11
+# Schema 21 makes the FH1 native route unconditional.
+pinyon_shift_config_schema = 21
 input_backend = "sdl"
 hid_mappings_file = "gamecontrollerdb.txt"
 mnk_mode = true
@@ -60,12 +53,12 @@ keybind_a = "LMB,Space"
 keybind_start = "Return"
 d3d12_allow_variable_refresh_rate_and_tearing = false
 vsync = true
-host_present_fps_limit = 60
+host_present_fps_limit = 0
 host_present_sleep_spin = true
 pinyon_shift_stabilize_vehicle_presentation = false
 pinyon_shift_skip_opening_movies = false
-pinyon_shift_native_renderer = "xenos"
-pinyon_shift_native_renderer_sky_horizon_suppression = false
+pinyon_shift_fh1_render_fps_limit = 0
+pinyon_shift_fh1_source_presentation = true
 xma_relaxed_padding_admission = false
 anisotropic_override = 3
 swap_post_effect = "none"
@@ -74,10 +67,6 @@ disable_depth_of_field = false
 draw_resolution_scale_x = 1
 draw_resolution_scale_y = 1
 clear_memory_page_state = true
-readback_resolve = "none"
-readback_resolve_half_pixel_offset = false
-readback_memexport = true
-readback_memexport_fast = true
 occlusion_query = "legacy"
 zpd_end_policy = "report_layout"
 zpd_end_fallback = "pairwise_sentinel"
@@ -110,6 +99,13 @@ function Set-TomlValue([string]$Text, [string]$Name, [string]$Value) {
     "$trimmed`r`n$replacement`r`n"
 }
 
+function Remove-TomlValue([string]$Text, [string]$Name) {
+    [regex]::Replace(
+        $Text,
+        '(?m)^\s*' + [regex]::Escape($Name) + '\s*=.*(?:\r?\n|$)',
+        '')
+}
+
 function Get-TomlValue([string]$Text, [string]$Name, [string]$Default) {
     $pattern = '(?m)^\s*' + [regex]::Escape($Name) + '\s*=\s*(?<value>[^#\r\n]+)'
     $match = [regex]::Match($Text, $pattern)
@@ -134,24 +130,15 @@ function Get-SettingsResult([string]$Text, [string]$BackupPath, [string]$Operati
     $override = [int](Get-TomlValue $Text 'anisotropic_override' '3')
     $anisotropyValue = switch ($override) { 3 { 4 } 4 { 8 } 5 { 16 } default { 4 } }
     $resolutionScale = [int](Get-TomlValue $Text 'draw_resolution_scale_x' '1')
-    $readbackResolve = Get-TomlValue $Text 'readback_resolve' 'none'
-    $halfPixel = (Get-TomlValue $Text 'readback_resolve_half_pixel_offset' 'false') -eq 'true'
     $clearPageState = (Get-TomlValue $Text 'clear_memory_page_state' 'true') -eq 'true'
-    $memexport = (Get-TomlValue $Text 'readback_memexport' 'true') -eq 'true'
-    $memexportFast = (Get-TomlValue $Text 'readback_memexport_fast' 'true') -eq 'true'
     $vsyncEnabled = (Get-TomlValue $Text 'vsync' 'true') -eq 'true'
-    $presentationFps = [int](Get-TomlValue $Text 'host_present_fps_limit' '60')
-    $presetName = if ($clearPageState -and $readbackResolve -eq 'full') {
-        'accurate_showroom'
-    } elseif ($clearPageState -and $resolutionScale -eq 2 -and
-        $readbackResolve -eq 'fast' -and $halfPixel) {
+    $presentationFps = [int](Get-TomlValue $Text 'host_present_fps_limit' '0')
+    $renderFps = [int](Get-TomlValue $Text 'pinyon_shift_fh1_render_fps_limit' '0')
+    $presetName = if ($clearPageState -and $resolutionScale -eq 2) {
         'experimental_2x'
-    } elseif ($clearPageState -and $resolutionScale -eq 3 -and
-        $readbackResolve -eq 'fast' -and $halfPixel) {
+    } elseif ($clearPageState -and $resolutionScale -eq 3) {
         'experimental_3x'
-    } elseif ($clearPageState -and $resolutionScale -eq 1 -and
-        $readbackResolve -eq 'none' -and -not $halfPixel -and $memexport -and
-        $memexportFast -and $vsyncEnabled) {
+    } elseif ($clearPageState -and $resolutionScale -eq 1 -and $vsyncEnabled) {
         'shipping_1x'
     } else {
         'custom'
@@ -168,21 +155,15 @@ function Get-SettingsResult([string]$Text, [string]$BackupPath, [string]$Operati
             disable_depth_of_field = (Get-TomlValue $Text 'disable_depth_of_field' 'false') -eq 'true'
             preset = $presetName
             resolution_scale = $resolutionScale
-            readback_resolve = $readbackResolve
-            readback_resolve_half_pixel_offset = $halfPixel
             clear_memory_page_state = $clearPageState
-            readback_memexport = $memexport
-            readback_memexport_fast = $memexportFast
             vsync = $vsyncEnabled
             host_present_fps_limit = $presentationFps
+            fh1_render_fps_limit = $renderFps
             host_present_sleep_spin =
                 (Get-TomlValue $Text 'host_present_sleep_spin' 'true') -eq 'true'
             occlusion_query = Get-TomlValue $Text 'occlusion_query' 'legacy'
             zpd_end_policy = Get-TomlValue $Text 'zpd_end_policy' 'report_layout'
             zpd_end_fallback = Get-TomlValue $Text 'zpd_end_fallback' 'pairwise_sentinel'
-            native_renderer = Get-TomlValue $Text 'pinyon_shift_native_renderer' 'xenos'
-            sky_horizon_suppression =
-                (Get-TomlValue $Text 'pinyon_shift_native_renderer_sky_horizon_suppression' 'false') -eq 'true'
         }
         restart_required = $Operation -ne 'Get'
     }
@@ -196,7 +177,7 @@ switch ($Action) {
             Get-Content -LiteralPath $configPath -Raw
         } else { Get-DefaultConfigText }
         $schema = Get-SchemaVersion $text
-        if ($schema -notin @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)) { throw "Unsupported host configuration schema: $schema" }
+        if ($schema -lt 1 -or $schema -gt 21) { throw "Unsupported host configuration schema: $schema" }
     }
     'Reset' {
         $backup = New-ConfigBackup
@@ -213,7 +194,7 @@ switch ($Action) {
         $backup = New-ConfigBackup
         $text = Get-Content -LiteralPath $source.FullName -Raw
         $schema = Get-SchemaVersion $text
-        if ($schema -notin @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)) { throw "Backup uses unsupported schema: $schema" }
+        if ($schema -lt 1 -or $schema -gt 21) { throw "Backup uses unsupported schema: $schema" }
         Write-Config $text
     }
     'Apply' {
@@ -221,9 +202,20 @@ switch ($Action) {
             Get-Content -LiteralPath $configPath -Raw
         } else { Get-DefaultConfigText }
         $schema = Get-SchemaVersion $text
-        if ($schema -notin @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)) { throw "Unsupported host configuration schema: $schema" }
+        if ($schema -lt 1 -or $schema -gt 21) { throw "Unsupported host configuration schema: $schema" }
         $backup = New-ConfigBackup
-        $text = Set-TomlValue $text 'pinyon_shift_config_schema' '11'
+        $text = Remove-TomlValue $text 'pinyon_shift_fh1_guest_vblank_hz'
+        $text = Remove-TomlValue $text 'pinyon_shift_native_renderer_texture_bridge'
+        $text = Remove-TomlValue $text 'pinyon_shift_native_renderer'
+        $text = Remove-TomlValue $text 'pinyon_shift_native_renderer_sky_horizon_suppression'
+        $text = Remove-TomlValue $text 'pinyon_shift_fh1_native_v4'
+        $text = Remove-TomlValue $text 'readback_resolve'
+        $text = Remove-TomlValue $text 'readback_resolve_half_pixel_offset'
+        $text = Remove-TomlValue $text 'readback_memexport'
+        $text = Remove-TomlValue $text 'readback_memexport_fast'
+        $text = Set-TomlValue $text 'pinyon_shift_config_schema' '21'
+        $text = Set-TomlValue $text 'pinyon_shift_fh1_render_fps_limit' '0'
+        $text = Set-TomlValue $text 'pinyon_shift_fh1_source_presentation' 'true'
         if (-not [regex]::IsMatch($text, '(?m)^\s*xma_relaxed_padding_admission\s*=')) {
             $text = Set-TomlValue $text 'xma_relaxed_padding_admission' 'false'
         }
@@ -234,20 +226,8 @@ switch ($Action) {
             'shipping_1x' { 1 }
             'experimental_2x' { 2 }
             'experimental_3x' { 3 }
-            'accurate_showroom' { 1 }
             default { $ResolutionScale }
         }
-        $effectiveReadback = switch ($Preset) {
-            'shipping_1x' { 'none' }
-            'experimental_2x' { 'fast' }
-            'experimental_3x' { 'fast' }
-            'accurate_showroom' { 'full' }
-            default { $ReadbackResolve }
-        }
-        $effectiveHalfPixel = $Preset -in @('experimental_2x', 'experimental_3x') -or
-            ($Preset -eq 'custom' -and $effectiveResolution -gt 1 -and
-                $effectiveReadback -ne 'none')
-        $effectiveHalfPixelText = if ($effectiveHalfPixel) { 'true' } else { 'false' }
         $override = switch ($Anisotropy) { 4 { 3 } 8 { 4 } 16 { 5 } }
         $text = Set-TomlValue $text 'anisotropic_override' ([string]$override)
         $text = Set-TomlValue $text 'swap_post_effect' ('"' + $PostEffect + '"')
@@ -257,64 +237,12 @@ switch ($Action) {
         $text = Set-TomlValue $text 'draw_resolution_scale_y' ([string]$effectiveResolution)
         $text = Set-TomlValue $text 'vsync' 'true'
         $text = Set-TomlValue $text 'host_present_fps_limit' ([string]$PresentationFps)
+        $text = Set-TomlValue $text 'pinyon_shift_fh1_render_fps_limit' ([string]$RenderFps)
         $text = Set-TomlValue $text 'host_present_sleep_spin' 'true'
         $text = Set-TomlValue $text 'clear_memory_page_state' 'true'
-        $text = Set-TomlValue $text 'readback_resolve' ('"' + $effectiveReadback + '"')
-        $text = Set-TomlValue $text 'readback_resolve_half_pixel_offset' $effectiveHalfPixelText
-        $text = Set-TomlValue $text 'readback_memexport' 'true'
-        $text = Set-TomlValue $text 'readback_memexport_fast' 'true'
         $text = Set-TomlValue $text 'occlusion_query' ('"' + $OcclusionQuery + '"')
         $text = Set-TomlValue $text 'zpd_end_policy' ('"' + $ZpdEndPolicy + '"')
         $text = Set-TomlValue $text 'zpd_end_fallback' ('"' + $ZpdEndFallback + '"')
-        $text = Set-TomlValue $text 'pinyon_shift_native_renderer' ('"' + $NativeRenderer + '"')
-        if (-not [regex]::IsMatch($text,
-            '(?m)^\s*pinyon_shift_native_renderer_sky_horizon_suppression\s*=')) {
-            $text = Set-TomlValue $text `
-                'pinyon_shift_native_renderer_sky_horizon_suppression' 'false'
-        }
-        Write-Config $text
-    }
-    'ResetRenderer' {
-        $text = if (Test-Path -LiteralPath $configPath -PathType Leaf) {
-            Get-Content -LiteralPath $configPath -Raw
-        } else { Get-DefaultConfigText }
-        $schema = Get-SchemaVersion $text
-        if ($schema -notin @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)) {
-            throw "Unsupported host configuration schema: $schema"
-        }
-        $backup = New-ConfigBackup
-        $text = Set-TomlValue $text 'pinyon_shift_config_schema' '11'
-        $text = Set-TomlValue $text 'pinyon_shift_native_renderer' '"xenos"'
-        $text = Set-TomlValue $text `
-            'pinyon_shift_native_renderer_sky_horizon_suppression' 'false'
-        Write-Config $text
-    }
-    'SetRenderer' {
-        $text = if (Test-Path -LiteralPath $configPath -PathType Leaf) {
-            Get-Content -LiteralPath $configPath -Raw
-        } else { Get-DefaultConfigText }
-        $schema = Get-SchemaVersion $text
-        if ($schema -notin @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)) {
-            throw "Unsupported host configuration schema: $schema"
-        }
-        $backup = New-ConfigBackup
-        $text = Set-TomlValue $text 'pinyon_shift_native_renderer' `
-            ('"' + $NativeRenderer + '"')
-        Write-Config $text
-    }
-    'SetSkyHorizonSuppression' {
-        $text = if (Test-Path -LiteralPath $configPath -PathType Leaf) {
-            Get-Content -LiteralPath $configPath -Raw
-        } else { Get-DefaultConfigText }
-        $schema = Get-SchemaVersion $text
-        if ($schema -notin @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)) {
-            throw "Unsupported host configuration schema: $schema"
-        }
-        $backup = New-ConfigBackup
-        $text = Set-TomlValue $text 'pinyon_shift_config_schema' '11'
-        $text = Set-TomlValue $text `
-            'pinyon_shift_native_renderer_sky_horizon_suppression' `
-            $SkyHorizonSuppression
         Write-Config $text
     }
 }

@@ -1,5 +1,6 @@
 #include "pinyon_shift_app.h"
 #include "pinyon_shift_init.h"
+#include "fh1_render_test.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -17,23 +18,22 @@
 #include <rex/runtime.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xthread.h>
+#include <rex/ui/flags.h>
 
 #include "native_renderer/graphics_hooks.h"
 #include "native_renderer/guest_output_renderer.h"
 #include "native_renderer/shader_capture.h"
-#include "native_renderer/texture_resource_bridge.h"
 #include "pinyon_shift_diagnostics.h"
 
 #include <cstdio>
 
-REXCVAR_DEFINE_UINT32(pinyon_shift_config_schema, 11, "Pinyon Shift",
+REXCVAR_DEFINE_UINT32(pinyon_shift_config_schema, 21, "Pinyon Shift",
                       "Pinyon Shift host configuration schema version");
 REXCVAR_DEFINE_BOOL(pinyon_shift_capture_performance, true, "Pinyon Shift",
                     "Capture lightweight per-frame performance counters to a session CSV");
-
 namespace {
 
-constexpr uint32_t kConfigSchema = 11;
+constexpr uint32_t kConfigSchema = 21;
 
 bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
                            bool& migrated) {
@@ -56,14 +56,14 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
               "keybind_start = \"Return\"\n"
               "d3d12_allow_variable_refresh_rate_and_tearing = false\n"
               "vsync = true\n"
-              "host_present_fps_limit = 60\n"
+              "host_present_fps_limit = 0\n"
               "host_present_sleep_spin = true\n"
               "pinyon_shift_capture_performance = true\n"
               "xma_relaxed_padding_admission = false\n"
               "pinyon_shift_stabilize_vehicle_presentation = false\n"
               "pinyon_shift_skip_opening_movies = false\n"
-              "pinyon_shift_native_renderer = \"xenos\"\n"
-              "pinyon_shift_native_renderer_sky_horizon_suppression = false\n"
+              "pinyon_shift_fh1_render_fps_limit = 0\n"
+              "pinyon_shift_fh1_source_presentation = true\n"
               "anisotropic_override = 3\n"
               "swap_post_effect = \"none\"\n"
               "disable_motion_blur = false\n"
@@ -71,10 +71,6 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
               "draw_resolution_scale_x = 1\n"
               "draw_resolution_scale_y = 1\n"
               "clear_memory_page_state = true\n"
-              "readback_resolve = \"none\"\n"
-              "readback_resolve_half_pixel_offset = false\n"
-              "readback_memexport = true\n"
-              "readback_memexport_fast = true\n"
               "occlusion_query = \"legacy\"\n"
               "zpd_end_policy = \"report_layout\"\n"
               "zpd_end_fallback = \"pairwise_sentinel\"\n";
@@ -101,7 +97,7 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
     if (schema == kConfigSchema) {
       return true;
     }
-    if (schema < 1 || schema > 10) {
+    if (schema < 1 || schema > 20) {
       return false;
     }
 
@@ -119,6 +115,41 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
     migrated_text.replace(static_cast<size_t>(match.position(1)),
                           static_cast<size_t>(match.length(1)),
                           std::to_string(kConfigSchema));
+    const std::regex rejected_interpolation_pattern(
+        R"((?:^|\n)\s*pinyon_shift_fh1_frame_interpolation\s*=\s*(?:true|false)\s*(?:#.*)?(?:\r?\n|$))",
+        std::regex::icase);
+    migrated_text = std::regex_replace(migrated_text,
+                                       rejected_interpolation_pattern, "\n");
+    migrated_text = std::regex_replace(
+        migrated_text,
+        std::regex(R"((host_present_fps_limit\s*=\s*)\d+)",
+                   std::regex::icase),
+        "$1 0");
+    migrated_text = std::regex_replace(
+        migrated_text,
+        std::regex(
+            R"((?:^|\n)\s*pinyon_shift_fh1_guest_vblank_hz\s*=\s*\d+\s*(?:#.*)?(?:\r?\n|$))",
+            std::regex::icase),
+        "\n");
+    migrated_text = std::regex_replace(
+        migrated_text,
+        std::regex(
+            R"((?:^|\n)\s*pinyon_shift_native_renderer_texture_bridge\s*=\s*(?:true|false)\s*(?:#.*)?(?:\r?\n|$))",
+            std::regex::icase),
+        "\n");
+    for (const char* retired_setting : {
+             "pinyon_shift_native_renderer",
+             "pinyon_shift_native_renderer_sky_horizon_suppression",
+             "pinyon_shift_fh1_native_v4",
+             "readback_resolve",
+             "readback_resolve_half_pixel_offset"}) {
+      migrated_text = std::regex_replace(
+          migrated_text,
+          std::regex("(?:^|\\n)\\s*" + std::string(retired_setting) +
+                         "\\s*=.*(?:\\r?\\n|$)",
+                     std::regex::icase),
+          "\n");
+    }
     if (schema == 1) {
       const std::regex stabilization_pattern(
           R"((?:^|\n)\s*pinyon_shift_stabilize_vehicle_presentation\s*=\s*(true|false)\s*(?:#.*)?(?:\r?\n|$))");
@@ -156,21 +187,16 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
         {"draw_resolution_scale_x", "draw_resolution_scale_x = 1\n"},
         {"draw_resolution_scale_y", "draw_resolution_scale_y = 1\n"},
         {"vsync", "vsync = true\n"},
-        {"host_present_fps_limit", "host_present_fps_limit = 60\n"},
+        {"host_present_fps_limit", "host_present_fps_limit = 0\n"},
         {"host_present_sleep_spin", "host_present_sleep_spin = true\n"},
         {"clear_memory_page_state", "clear_memory_page_state = true\n"},
-        {"readback_resolve", "readback_resolve = \"none\"\n"},
-        {"readback_resolve_half_pixel_offset",
-         "readback_resolve_half_pixel_offset = false\n"},
-        {"readback_memexport", "readback_memexport = true\n"},
-        {"readback_memexport_fast", "readback_memexport_fast = true\n"},
         {"occlusion_query", "occlusion_query = \"legacy\"\n"},
         {"zpd_end_policy", "zpd_end_policy = \"report_layout\"\n"},
         {"zpd_end_fallback", "zpd_end_fallback = \"pairwise_sentinel\"\n"},
-        {"pinyon_shift_native_renderer",
-         "pinyon_shift_native_renderer = \"xenos\"\n"},
-        {"pinyon_shift_native_renderer_sky_horizon_suppression",
-         "pinyon_shift_native_renderer_sky_horizon_suppression = false\n"},
+        {"pinyon_shift_fh1_render_fps_limit",
+         "pinyon_shift_fh1_render_fps_limit = 0\n"},
+        {"pinyon_shift_fh1_source_presentation",
+         "pinyon_shift_fh1_source_presentation = true\n"},
     };
     for (const auto& [name, line] : graphics_settings) {
       const std::regex setting_pattern("(?:^|\\n)\\s*" + std::string(name) +
@@ -261,6 +287,29 @@ void PinyonShiftApp::OnConfigurePaths(rex::PathConfig& paths) {
        {"log", REXCVAR_GET(log_file)}});
 }
 
+std::optional<rex::PathConfig> PinyonShiftApp::OnFinalizePaths(
+    const rex::PathConfig& defaults,
+    std::function<void(rex::PathConfig)> resume) {
+  (void)resume;
+  DEVMODEW mode{};
+  mode.dmSize = sizeof(mode);
+  MONITORINFOEXW monitor_info{};
+  monitor_info.cbSize = sizeof(monitor_info);
+  const HWND hwnd = window() ? static_cast<HWND>(window()->GetNativeWindowHandle())
+                             : nullptr;
+  const HMONITOR monitor =
+      hwnd ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : nullptr;
+  if (monitor && GetMonitorInfoW(monitor, &monitor_info) &&
+      EnumDisplaySettingsW(monitor_info.szDevice, ENUM_CURRENT_SETTINGS, &mode) &&
+      mode.dmDisplayFrequency >= 24 && mode.dmDisplayFrequency <= 240) {
+    REXCVAR_SET(video_mode_refresh_rate, double(mode.dmDisplayFrequency));
+    pinyon_shift::diagnostics::RecordEvent(
+        "display.refresh.detected",
+        {{"hz", std::to_string(mode.dmDisplayFrequency)}});
+  }
+  return defaults;
+}
+
 void PinyonShiftApp::OnPostInitLogging() {
   std::string perf_csv = rex::cvar::GetFlagByName("perf_log_csv");
   if (perf_csv.empty() && REXCVAR_GET(pinyon_shift_capture_performance)) {
@@ -292,15 +341,6 @@ void PinyonShiftApp::OnPostInitLogging() {
                          rex::cvar::GetFlagByName("draw_resolution_scale_y")},
                         {"clear_memory_page_state",
                          rex::cvar::GetFlagByName("clear_memory_page_state")},
-                        {"readback_resolve",
-                         rex::cvar::GetFlagByName("readback_resolve")},
-                        {"readback_resolve_half_pixel_offset",
-                         rex::cvar::GetFlagByName(
-                             "readback_resolve_half_pixel_offset")},
-                        {"readback_memexport",
-                         rex::cvar::GetFlagByName("readback_memexport")},
-                        {"readback_memexport_fast",
-                         rex::cvar::GetFlagByName("readback_memexport_fast")},
                         {"anisotropic_override",
                          rex::cvar::GetFlagByName("anisotropic_override")},
                         {"swap_post_effect", rex::cvar::GetFlagByName("swap_post_effect")},
@@ -308,18 +348,15 @@ void PinyonShiftApp::OnPostInitLogging() {
                          rex::cvar::GetFlagByName("disable_motion_blur")},
                         {"disable_depth_of_field",
                          rex::cvar::GetFlagByName("disable_depth_of_field")},
-                        {"native_renderer_census",
+                        {"fh1_gpu_corpus",
                          rex::cvar::GetFlagByName(
-                             "pinyon_shift_native_renderer_census")},
-                        {"native_renderer_texture_bridge",
+                             "pinyon_shift_fh1_gpu_corpus")},
+                        {"fh1_render_fps_limit",
                          rex::cvar::GetFlagByName(
-                             "pinyon_shift_native_renderer_texture_bridge")},
-                        {"native_renderer",
+                             "pinyon_shift_fh1_render_fps_limit")},
+                        {"fh1_source_presentation",
                          rex::cvar::GetFlagByName(
-                             "pinyon_shift_native_renderer")},
-                        {"native_renderer_sky_horizon_suppression",
-                         rex::cvar::GetFlagByName(
-                             "pinyon_shift_native_renderer_sky_horizon_suppression")},
+                             "pinyon_shift_fh1_source_presentation")},
                         {"occlusion_query", rex::cvar::GetFlagByName("occlusion_query")},
                         {"zpd_end_policy", rex::cvar::GetFlagByName("zpd_end_policy")},
                         {"zpd_end_fallback", rex::cvar::GetFlagByName("zpd_end_fallback")},
@@ -331,9 +368,11 @@ void PinyonShiftApp::OnPostInitLogging() {
 }
 
 void PinyonShiftApp::OnPreSetup(rex::RuntimeConfig& config) {
-  // ReXGlue 0.9 separates the Xenos implementation into a runtime-loaded
-  // plugin. The CMake helper stages it; this selects it deliberately.
-  config.gpu_plugin = "xenos";
+  config.gpu_plugin =
+      GetEnvironmentVariableW(L"PINYON_SHIFT_FH1_DISC_SHADER_CORPUS_DIR", nullptr, 0)
+          ? "fh1-producer"
+          : "fh1";
+  pinyon_shift::fh1_render_test::Configure(config);
   pinyon_shift::diagnostics::RecordEvent(
       "runtime.setup.begin",
       {{"graphics_requested", (config.graphics || !config.gpu_plugin.empty()) ? "1" : "0"},
@@ -358,8 +397,6 @@ void PinyonShiftApp::OnPostSetup() {
   pinyon_shift::native_renderer::InstallGraphicsCensus(
       runtime() ? runtime()->graphics_system() : nullptr,
       runtime() ? runtime()->memory() : nullptr);
-  pinyon_shift::native_renderer::InstallTextureResourceBridge(
-      runtime() ? runtime()->graphics_system() : nullptr);
   pinyon_shift::native_renderer::InstallShaderCapture(
       runtime() ? runtime()->graphics_system() : nullptr);
   pinyon_shift::diagnostics::RecordEvent(
@@ -380,6 +417,9 @@ void PinyonShiftApp::OnPreLaunchModule() {
 void PinyonShiftApp::OnPostLaunchModule(rex::system::XThread* thread) {
   const std::string thread_id = thread ? std::to_string(thread->thread_id()) : "none";
   pinyon_shift::diagnostics::RecordEvent("guest.thread.prepared", {{"thread_id", thread_id}});
+  pinyon_shift::fh1_render_test::Start(
+      runtime() ? runtime()->graphics_system() : nullptr, &app_context(),
+      window(), [this] { OnWindowCloseRequested(); });
 }
 
 void PinyonShiftApp::OnGuestThreadExit(rex::system::XThread* thread) {
@@ -395,20 +435,17 @@ bool PinyonShiftApp::OnWindowCloseRequested() {
       runtime() ? runtime()->graphics_system() : nullptr);
   pinyon_shift::native_renderer::UninstallGraphicsCensus(
       runtime() ? runtime()->graphics_system() : nullptr);
-  pinyon_shift::native_renderer::UninstallTextureResourceBridge(
-      runtime() ? runtime()->graphics_system() : nullptr);
   RecordShutdownOnce();
   return true;
 }
 
 void PinyonShiftApp::OnShutdown() {
+  pinyon_shift::fh1_render_test::Stop();
   pinyon_shift::native_renderer::UninstallShaderCapture(
       runtime() ? runtime()->graphics_system() : nullptr);
   pinyon_shift::native_renderer::UninstallGuestOutputRenderer(
       runtime() ? runtime()->graphics_system() : nullptr);
   pinyon_shift::native_renderer::UninstallGraphicsCensus(
-      runtime() ? runtime()->graphics_system() : nullptr);
-  pinyon_shift::native_renderer::UninstallTextureResourceBridge(
       runtime() ? runtime()->graphics_system() : nullptr);
   RecordShutdownOnce();
 }

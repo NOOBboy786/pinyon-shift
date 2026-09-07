@@ -109,14 +109,6 @@ class TrackReferenceCompositionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "accounting is incomplete"):
             MODULE.build(events, catalog())
 
-    def test_source_contract_is_exact_and_passive(self):
-        source = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(encoding="utf-8")
-        self.assertIn("kTrackWorldReferenceSpatialCapacity = 2048", source)
-        self.assertIn("StageTrackWorldReferenceSpatial(r22.u32, r5.u32)", source)
-        self.assertIn("ConsumeTrackWorldReferenceSpatial(child_address, descriptor_address,", source)
-        self.assertNotIn("g_pending_track_world_reference_spatial = {};\n  if (!snapshot.valid)", source)
-        self.assertIn(MODULE.REFERENCE_ENTRY, source)
-        self.assertIn('"suppression_allowed", "false"', source)
 
 
 if __name__ == "__main__":

@@ -102,20 +102,6 @@ class VehicleAssetMaterialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "owner relation"):
             MODULE.build(functions, bodies, image)
 
-    def test_runtime_hook_is_passive_and_exact(self):
-        config = (ROOT / "config/rexglue/analysis/main-xex.toml").read_text(
-            encoding="utf-8"
-        )
-        source = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("address = 0x82549670", config)
-        self.assertIn("PinyonShiftObserveVehicleMaterialBinding", config)
-        self.assertIn("kVehicleMaterialBindingObjectOffset = 1056", source)
-        self.assertIn("kVehicleMaterialAssetKeyOffset = 1712", source)
-        self.assertIn("guest_payload_exported", source)
-        self.assertIn('{"xenos_authority", "true"}', source)
-        self.assertIn('{"suppression_allowed", "false"}', source)
 
 
 if __name__ == "__main__":

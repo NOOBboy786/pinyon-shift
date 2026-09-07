@@ -5,7 +5,16 @@ param(
     [string]$GameRoot,
     [string]$StateRoot,
     [string]$ShaderCaptureDir,
+    [string]$DiscShaderCorpusDir,
+    [string]$RenderTestScript,
+    [string]$RenderTestOutput,
+    [ValidateRange(1, 3600)]
+    [int]$RenderTestTimeoutSeconds,
+    [switch]$CollectFh1PassInventory,
+    [switch]$RenderTestIncludeOpeningMovies,
+    [switch]$DirectChildProcess,
     [string[]]$GameArguments = @(),
+    [string]$GameArgumentsJson,
     [switch]$Json,
     [switch]$CrashSelfTest
 )
@@ -45,11 +54,81 @@ if (Test-Path -LiteralPath $pendingReport -PathType Leaf) {
     Remove-Item -LiteralPath $pendingReport -Force
 }
 
+$stagedNativeShaderPack = $null
+$stagedNativePipelineCache = $null
+$stagedShaderProducer = $null
+if ($DiscShaderCorpusDir) {
+    $producerSource = Join-Path $repoRoot `
+        'out/build/win-amd64-release/rexglue-artifacts/rexgpu-fh1-producer.dll'
+    if (-not (Test-Path -LiteralPath $producerSource -PathType Leaf)) {
+        throw 'Build the rexgpu-fh1-producer target before producing FH1 shaders.'
+    }
+    $stagedShaderProducer = Join-Path (Split-Path $executable -Parent) `
+        'rexgpu-fh1-producer.dll'
+    Copy-Item -LiteralPath $producerSource -Destination $stagedShaderProducer -Force
+}
+if (-not ($RenderTestScript -or $ShaderCaptureDir -or $DiscShaderCorpusDir)) {
+    $scale = 1
+    $configPath = Join-Path $resolvedStateRoot 'config/pinyon_shift.toml'
+    if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+        $config = Get-Content -LiteralPath $configPath -Raw
+        $scaleMatch = [regex]::Match($config, '(?m)^\s*draw_resolution_scale_x\s*=\s*([1-3])\s*$')
+        if ($scaleMatch.Success) { $scale = [int]$scaleMatch.Groups[1].Value }
+    }
+    $localPack = Join-Path $repoRoot ".local/native-renderer/fh1-disc-aot-complete-${scale}x.pnsp"
+    if (Test-Path -LiteralPath $localPack -PathType Leaf) {
+        $pack = & python (Join-Path $PSScriptRoot 'native-shader-pack.py') stage $localPack `
+            --state-root $resolvedStateRoot --scale $scale |
+            ConvertFrom-Json
+        $stagedNativeShaderPack = $pack.destination
+    }
+
+    $prewarmRoot = Join-Path $repoRoot '.local/native-renderer/fh1-native-prewarm/cache'
+    if (Test-Path -LiteralPath $prewarmRoot -PathType Container) {
+        $prewarmFiles = @(
+            'fh1-gpu-prewarm-v3.txt',
+            'fh1-native-shaders-v2.bin',
+            'fh1-native-pipelines-v1.bin'
+        )
+        $missing = @($prewarmFiles | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $prewarmRoot $_) -PathType Leaf)
+        })
+        if ($missing.Count -ne 0) {
+            throw "The FH1 native prewarm cache is incomplete: $($missing -join ', ')"
+        }
+        foreach ($relative in $prewarmFiles) {
+            $source = Join-Path $prewarmRoot $relative
+            $destination = Join-Path (Join-Path $resolvedStateRoot 'cache') $relative
+            [void](New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent))
+            $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+            $destinationExists = Test-Path -LiteralPath $destination -PathType Leaf
+            $copyNeeded = -not $destinationExists
+            if ($destinationExists) {
+                $destinationLength = (Get-Item -LiteralPath $destination).Length
+                $copyNeeded = $relative -eq 'fh1-gpu-prewarm-v3.txt' -or
+                    $destinationLength -lt (Get-Item -LiteralPath $source).Length -or
+                    ($destinationLength -eq (Get-Item -LiteralPath $source).Length -and
+                     (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $sourceHash)
+            }
+            if ($copyNeeded) {
+                Copy-Item -LiteralPath $source -Destination $destination -Force
+                if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $sourceHash) {
+                    throw "Failed to stage the FH1 native prewarm cache: $relative"
+                }
+            }
+        }
+        $stagedNativePipelineCache = $prewarmRoot
+    }
+}
+
 $savedStateRoot = $env:PINYON_SHIFT_STATE_ROOT
 $savedGameRoot = $env:PINYON_SHIFT_GAME_ROOT
 $savedTearing = $env:REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING
 $savedCrashTest = $env:PINYON_SHIFT_CRASH_SELF_TEST
 $savedShaderCaptureDir = $env:PINYON_SHIFT_NATIVE_SHADER_CAPTURE_DIR
+$savedDiscShaderCorpusDir = $env:PINYON_SHIFT_FH1_DISC_SHADER_CORPUS_DIR
+$savedRenderTestScript = $env:PINYON_SHIFT_FH1_RENDER_TEST_SCRIPT
+$savedRenderTestOutput = $env:PINYON_SHIFT_FH1_RENDER_TEST_OUTPUT
 $startedUtc = [DateTime]::UtcNow
 $process = $null
 try {
@@ -62,17 +141,61 @@ try {
     } else {
         $null
     }
+    $env:PINYON_SHIFT_FH1_DISC_SHADER_CORPUS_DIR = if ($DiscShaderCorpusDir) {
+        (Resolve-Path -LiteralPath $DiscShaderCorpusDir).Path
+    } else {
+        $null
+    }
+    $env:PINYON_SHIFT_FH1_RENDER_TEST_SCRIPT = if ($RenderTestScript) {
+        (Resolve-Path -LiteralPath $RenderTestScript).Path
+    } else {
+        $null
+    }
+    $env:PINYON_SHIFT_FH1_RENDER_TEST_OUTPUT = if ($RenderTestOutput) {
+        [IO.Path]::GetFullPath($RenderTestOutput)
+    } else {
+        $null
+    }
     $start = @{
         FilePath = $executable
         WorkingDirectory = (Split-Path $executable -Parent)
         PassThru = $true
     }
     $normalizedGameArguments = @($GameArguments)
+    if ($GameArgumentsJson) {
+        foreach ($gameArgument in (ConvertFrom-Json -InputObject $GameArgumentsJson)) {
+            $normalizedGameArguments += [string]$gameArgument
+        }
+    }
+    if ($RenderTestScript) {
+        if (-not $RenderTestIncludeOpeningMovies) {
+            $normalizedGameArguments += '--pinyon_shift_skip_opening_movies=true'
+        }
+    }
+    if ($CollectFh1PassInventory) {
+        $normalizedGameArguments += '--pinyon_shift_fh1_gpu_corpus=true'
+    }
     if ($normalizedGameArguments.Count -ne 0) {
         $start.ArgumentList = $normalizedGameArguments
     }
+    if ($DirectChildProcess) {
+        # Keep capture/debugger child-process hooks on the launching process.
+        $start.NoNewWindow = $true
+    }
     $process = Start-Process @start
-    $process.WaitForExit()
+    if ($DirectChildProcess) {
+        # Cache the live handle so ExitCode remains available after exit.
+        $null = $process.Handle
+    }
+    if ($RenderTestTimeoutSeconds) {
+        if (-not $process.WaitForExit($RenderTestTimeoutSeconds * 1000)) {
+            Stop-Process -Id $process.Id -Force
+            $process.WaitForExit()
+            throw "Pinyon Shift render test timed out after $RenderTestTimeoutSeconds seconds."
+        }
+    } else {
+        $process.WaitForExit()
+    }
     $process.Refresh()
 }
 finally {
@@ -81,6 +204,12 @@ finally {
     $env:REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING = $savedTearing
     $env:PINYON_SHIFT_CRASH_SELF_TEST = $savedCrashTest
     $env:PINYON_SHIFT_NATIVE_SHADER_CAPTURE_DIR = $savedShaderCaptureDir
+    $env:PINYON_SHIFT_FH1_DISC_SHADER_CORPUS_DIR = $savedDiscShaderCorpusDir
+    $env:PINYON_SHIFT_FH1_RENDER_TEST_SCRIPT = $savedRenderTestScript
+    $env:PINYON_SHIFT_FH1_RENDER_TEST_OUTPUT = $savedRenderTestOutput
+    if ($stagedShaderProducer) {
+        Remove-Item -LiteralPath $stagedShaderProducer -Force -ErrorAction SilentlyContinue
+    }
 }
 
 if ($null -eq $process) { throw 'Windows did not start Pinyon Shift.' }
@@ -106,5 +235,7 @@ $result = [ordered]@{
     result = 'normal-exit'
     process_id = $process.Id
     exit_code = $exitCode
+    native_shader_pack = $stagedNativeShaderPack
+    native_pipeline_cache = $stagedNativePipelineCache
 }
 if ($Json) { $result | ConvertTo-Json -Compress } else { $result }

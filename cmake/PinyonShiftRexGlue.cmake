@@ -196,7 +196,7 @@ function(pinyon_shift_attach_rexglue target_name)
     target_compile_definitions(${target_name} PRIVATE
         PINYON_SHIFT_CPU_BASELINE="${PINYON_SHIFT_CPU_BASELINE}")
     add_dependencies(${target_name} pinyon_shift_codegen)
-    rexglue_configure_target(${target_name} GPU_PLUGINS xenos)
+    rexglue_configure_target(${target_name} GPU_PLUGINS fh1)
     if(REXSDK_DIR)
         # rex/version.h is configured into the SDK sub-build and is needed only
         # by the injected rex_app.cpp consumer source.
@@ -213,9 +213,9 @@ function(pinyon_shift_attach_rexglue target_name)
                 $<TARGET_FILE:rexruntime>
                 $<TARGET_FILE_DIR:${target_name}>/$<TARGET_FILE_NAME:rexruntime>
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:rexgpu-xenos>
-                $<TARGET_FILE_DIR:${target_name}>/$<TARGET_FILE_NAME:rexgpu-xenos>
-            DEPENDS ${target_name} rexruntime rexgpu-xenos
+                $<TARGET_FILE:rexgpu-fh1>
+                $<TARGET_FILE_DIR:${target_name}>/$<TARGET_FILE_NAME:rexgpu-fh1>
+            DEPENDS ${target_name} rexruntime rexgpu-fh1
             COMMENT "Staging the current ReXGlue runtime and graphics backend beside ${target_name}"
             VERBATIM)
     endif()

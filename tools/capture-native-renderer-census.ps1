@@ -38,8 +38,6 @@ param(
     [switch]$PhaseCQualification,
     [switch]$VehicleDrawCorrelation,
     [switch]$ShadowCasterProvenance,
-    [switch]$ProceduralFrameAccumulator,
-    [switch]$ScaledAccumulatorQualification,
     [ValidateSet(
         'baseline',
         'trackfardistance',
@@ -74,16 +72,6 @@ if ($PhaseCQualification) {
     $ContinuousTrackWorld = $true
     $ContinuousStaticWorld = $true
     $VehicleDrawCorrelation = $true
-}
-
-if ($ScaledAccumulatorQualification) {
-    if ($Scene -eq 'unmarked') {
-        $Scene = 'open_world_day'
-    }
-    $ProceduralFrameAccumulator = $true
-    $ContinuousWorldWorkset = $true
-    $ContinuousTrackWorld = $true
-    $ContinuousStaticWorld = $true
 }
 
 if (-not $StateRoot) {
@@ -268,11 +256,6 @@ if ($ConsumerReadbackDir) {
 
 $savedCensus = $env:REX_PINYON_SHIFT_NATIVE_RENDERER_CENSUS
 $savedDiscovery = $env:REX_PINYON_SHIFT_NATIVE_RENDERER_DISPATCH_DISCOVERY
-$savedProceduralFrameAccumulator =
-    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_PROCEDURAL_FRAME_ACCUMULATOR
-$savedScaledAccumulatorQualification =
-    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_ACCUMULATOR_QUALIFICATION
-$savedNativeRenderer = $env:REX_PINYON_SHIFT_NATIVE_RENDERER
 $savedScene = $env:PINYON_SHIFT_NATIVE_RENDERER_SCENE
 $savedIndexScan = $env:PINYON_SHIFT_NATIVE_RENDERER_INDEX_SCAN_SIGNATURE
 $savedTextureScan = $env:PINYON_SHIFT_NATIVE_RENDERER_TEXTURE_SCAN_SIGNATURE
@@ -327,13 +310,6 @@ try {
             $ShadowCasterProvenance -or $trackDifferentialRequested) {
             'true'
         } else { $savedDiscovery }
-    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_PROCEDURAL_FRAME_ACCUMULATOR =
-        if ($ProceduralFrameAccumulator) { 'true' } else { $null }
-    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_ACCUMULATOR_QUALIFICATION =
-        if ($ScaledAccumulatorQualification) { 'true' } else { $null }
-    if ($ScaledAccumulatorQualification) {
-        $env:REX_PINYON_SHIFT_NATIVE_RENDERER = 'xenos'
-    }
     $env:PINYON_SHIFT_NATIVE_RENDERER_SCENE = $Scene
     $env:PINYON_SHIFT_NATIVE_RENDERER_INDEX_SCAN_SIGNATURE = $IndexScanSignature
     $env:PINYON_SHIFT_NATIVE_RENDERER_TEXTURE_SCAN_SIGNATURE = $TextureScanSignature
@@ -396,11 +372,6 @@ try {
 finally {
     $env:REX_PINYON_SHIFT_NATIVE_RENDERER_CENSUS = $savedCensus
     $env:REX_PINYON_SHIFT_NATIVE_RENDERER_DISPATCH_DISCOVERY = $savedDiscovery
-    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_PROCEDURAL_FRAME_ACCUMULATOR =
-        $savedProceduralFrameAccumulator
-    $env:REX_PINYON_SHIFT_NATIVE_RENDERER_SCALED_ACCUMULATOR_QUALIFICATION =
-        $savedScaledAccumulatorQualification
-    $env:REX_PINYON_SHIFT_NATIVE_RENDERER = $savedNativeRenderer
     $env:PINYON_SHIFT_NATIVE_RENDERER_SCENE = $savedScene
     $env:PINYON_SHIFT_NATIVE_RENDERER_INDEX_SCAN_SIGNATURE = $savedIndexScan
     $env:PINYON_SHIFT_NATIVE_RENDERER_TEXTURE_SCAN_SIGNATURE = $savedTextureScan

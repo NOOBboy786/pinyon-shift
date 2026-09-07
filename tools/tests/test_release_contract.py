@@ -23,6 +23,11 @@ class ReleaseContractTests(unittest.TestCase):
             workflow,
         )
 
+    def test_preview_release_uses_dev_and_stable_keeps_main(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertIn("if ($release.channel -eq 'preview') { 'dev' } else { 'main' }", workflow)
+        self.assertIn('--main-ref "refs/remotes/origin/$branch"', workflow)
+
     def test_supported_dump_uses_exact_hash_and_size(self):
         data = json.loads((ROOT / "config/supported-dumps.json").read_text())
         self.assertEqual(data["policy"]["match"], "exact_sha256_and_size")
@@ -70,8 +75,27 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("rexglue-sdk EXCLUDE_FROM_ALL", integration)
         self.assertIn("PINYON_SHIFT_REXGLUE_CODEGEN_DEPENDS", integration)
         self.assertIn("$<TARGET_FILE:rexruntime>", integration)
-        self.assertIn("$<TARGET_FILE:rexgpu-xenos>", integration)
-        self.assertIn("DEPENDS ${target_name} rexruntime rexgpu-xenos", integration)
+        self.assertIn("$<TARGET_FILE:rexgpu-fh1>", integration)
+        self.assertIn("DEPENDS ${target_name} rexruntime rexgpu-fh1", integration)
+        graphics_cmake = (
+            ROOT / "thirdparty/shiftglue-sdk/src/graphics/CMakeLists.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("rexgpu-fh1-producer SHARED EXCLUDE_FROM_ALL", graphics_cmake)
+        self.assertIn("REXGPU_FH1_SHADER_PRODUCER=1", graphics_cmake)
+        self.assertNotIn("rexgpu-fh1-producer", integration)
+        self.assertNotIn("packet_disassembler.cpp", graphics_cmake)
+        command_processor = (
+            ROOT / "thirdparty/shiftglue-sdk/src/graphics/d3d12/command_processor.cpp"
+        ).read_text(encoding="utf-8")
+        render_target_cache = (
+            ROOT / "thirdparty/shiftglue-sdk/src/graphics/d3d12/render_target_cache.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("isolated_draw_request_observer", command_processor)
+        self.assertNotIn("IsolatedReplay", command_processor)
+        self.assertNotIn("IsolatedReplay", render_target_cache)
+        launcher = (ROOT / "tools/launch-preview.ps1").read_text(encoding="utf-8")
+        self.assertIn("rexgpu-fh1-producer.dll", launcher)
+        self.assertIn("Remove-Item -LiteralPath $stagedShaderProducer", launcher)
 
         package_script = (ROOT / "tools/package-launcher.ps1").read_text()
         self.assertIn("$_.Name -ne 'generated'", package_script)
@@ -186,12 +210,13 @@ class ReleaseContractTests(unittest.TestCase):
 
     def test_graphics_schema_and_diagnostics_contract(self):
         app = (ROOT / "src/pinyon_shift_app.cpp").read_text(encoding="utf-8")
-        self.assertIn("constexpr uint32_t kConfigSchema = 11", app)
+        self.assertIn("constexpr uint32_t kConfigSchema = 21", app)
         self.assertIn(".schema", app)
         for setting in ("anisotropic_override", "swap_post_effect", "draw_resolution_scale_x"):
             self.assertIn(setting, app)
             self.assertIn(setting, (ROOT / "tools/create-crash-report.ps1").read_text(encoding="utf-8"))
-        for setting in ("host_present_fps_limit", "host_present_sleep_spin"):
+        for setting in ("host_present_fps_limit", "host_present_sleep_spin",
+                        "pinyon_shift_fh1_render_fps_limit"):
             self.assertIn(setting, app)
             self.assertIn(setting, (ROOT / "tools/set-graphics-experiment.ps1").read_text(encoding="utf-8"))
             self.assertIn(setting, (ROOT / "tools/create-crash-report.ps1").read_text(encoding="utf-8"))
@@ -227,6 +252,7 @@ class ReleaseContractTests(unittest.TestCase):
             self.assertIn(counter, counters)
 
     def test_runtime_config_migrates_vehicle_stabilization_and_menu_accept_input(self):
+        sdk = ROOT / "thirdparty/shiftglue-sdk"
         app = (ROOT / "src/pinyon_shift_app.cpp").read_text(encoding="utf-8")
         hooks = (ROOT / "src/pinyon_shift_runtime_hooks.cpp").read_text(encoding="utf-8")
         launcher = (ROOT / "launcher/PinyonShift.Launcher/MainWindow.xaml.cs").read_text(
@@ -235,20 +261,63 @@ class ReleaseContractTests(unittest.TestCase):
         launcher_xaml = (ROOT / "launcher/PinyonShift.Launcher/MainWindow.xaml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("constexpr uint32_t kConfigSchema = 11;", app)
-        self.assertRegex(app, r"pinyon_shift_config_schema,\s*11,")
+        self.assertIn("constexpr uint32_t kConfigSchema = 21;", app)
+        self.assertRegex(app, r"pinyon_shift_config_schema,\s*21,")
         self.assertIn('"pinyon_shift_stabilize_vehicle_presentation = false\\n"', app)
         self.assertIn('"keybind_a = \\"LMB,Space\\"\\n"', app)
-        self.assertIn("schema < 1 || schema > 10", app)
+        self.assertIn("schema < 1 || schema > 20", app)
+        self.assertIn("display.refresh.detected", app)
+        self.assertIn("EnumDisplaySettingsW", app)
+        graphics = (
+            ROOT / "thirdparty/shiftglue-sdk/src/graphics/graphics_system.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertIn("REXCVAR_GET(video_mode_refresh_rate)", graphics)
+        self.assertNotIn("render_fps_limit ? double(render_fps_limit) * 2.0 : 1000.0", graphics)
+        self.assertIn("pinyon_shift_native_renderer_texture_bridge", app)
         self.assertIn('"occlusion_query = \\"legacy\\"\\n"', app)
         self.assertIn('"zpd_end_policy = \\"report_layout\\"\\n"', app)
-        self.assertIn('"readback_resolve = \\"none\\"\\n"', app)
+        self.assertNotIn('"readback_resolve = \\"none\\"\\n"', app)
+        self.assertNotIn("REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_native_v4", app)
+        self.assertNotIn("pinyon_shift_fh1_require_precompiled_shaders", app)
+        pipeline_cache = (sdk / "src/graphics/d3d12/pipeline_cache.cpp").read_text(
+            encoding="utf-8"
+        )
+        command_processor = (sdk / "src/graphics/d3d12/command_processor.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("Fh1NativeV4Enabled", pipeline_cache)
+        self.assertNotIn("Fh1NativeV4Enabled", command_processor)
+        self.assertIn("kFh1UseNativeWorldVertexShaders = false", pipeline_cache)
+        self.assertIn("kFh1UseNativeDepthMeshVertexShaders = false", pipeline_cache)
+        self.assertNotIn("state_desc.PS = {shaders::fh1_world_lit_ps", pipeline_cache)
+        self.assertIn("native_guest_output_gpu_timing_active_ = true;", command_processor)
+        self.assertIn("EndNativeGuestOutputGpuTimingFrame();", command_processor)
+        self.assertIn("frame % 60", command_processor)
+        self.assertIn("prepared_observation.index_count = index_count;", command_processor)
+        self.assertNotIn("fh1_world_lit_native_draw", command_processor)
+        self.assertNotIn("IsFh1WorldLitNativeActive", command_processor)
+        self.assertIn('\\"index_buffer_guest_base\\":{}', (
+            ROOT / "src/native_renderer/fh1_gpu_corpus.cpp"
+        ).read_text(encoding="utf-8"))
+        self.assertIn("kFh1GpuPassTimingCapacity = 256", (
+            sdk / "include/rex/graphics/d3d12/command_processor.h"
+        ).read_text(encoding="utf-8"))
+        self.assertIn("std::unordered_set<uint64_t> fh1_execution_allowlist_", (
+            sdk / "include/rex/graphics/d3d12/pipeline_cache.h"
+        ).read_text(encoding="utf-8"))
+        generic_command_processor = (
+            sdk / "src/graphics/command_processor.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "WriteRegisterRangeFromRing(reader, base_index, count);",
+            generic_command_processor,
+        )
         self.assertIn('"clear_memory_page_state = true\\n"', app)
-        self.assertIn("Accurate showroom", launcher_xaml)
+        self.assertNotIn("Accurate showroom", launcher_xaml)
         self.assertIn("DisableMotionBlurCheckBox", launcher_xaml)
         self.assertIn("DisableDepthOfFieldCheckBox", launcher_xaml)
-        self.assertIn("NativeRendererComboBox", launcher_xaml)
-        self.assertIn("ResetRendererButton", launcher_xaml)
+        self.assertNotIn("NativeRendererComboBox", launcher_xaml)
+        self.assertNotIn("ResetRendererButton", launcher_xaml)
         self.assertIn('Environment.GetEnvironmentVariable("PINYON_SHIFT_STATE_ROOT")', launcher)
         self.assertIn('"-StateRoot", _stateRoot', launcher)
         self.assertIn("DetectPendingReport();\n            UpdatePrimaryButton();", launcher)

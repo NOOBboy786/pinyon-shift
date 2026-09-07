@@ -126,37 +126,10 @@ class NativeRendererTrackConfigTests(unittest.TestCase):
         self.assertIn("[string[]]$GameArguments = @()", launch)
         self.assertIn("$normalizedGameArguments = @($GameArguments)", launch)
         self.assertIn("$start.ArgumentList = $normalizedGameArguments", launch)
+        self.assertNotIn("pinyon_shift_fh1_require_precompiled_shaders", launch)
+        self.assertIn("fh1-native-prewarm/cache", launch)
+        self.assertIn("native_pipeline_cache = $stagedNativePipelineCache", launch)
 
-    def test_runtime_hook_reports_title_acceptance_without_native_admission(self):
-        analysis = (ROOT / "config/rexglue/analysis/main-xex.toml").read_text(
-            encoding="utf-8"
-        )
-        hooks = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        for address, name in (
-            ("0x824F7DC0", "PinyonShiftObserveTrackFarDistanceConfiguration"),
-            ("0x8259C834", "PinyonShiftObserveFastTrackRenderConfiguration"),
-            ("0x8259C89C", "PinyonShiftObserveRoadDetailBlurConfiguration"),
-            ("0x8259C8DC", "PinyonShiftObserveTrackCommandBufferConfiguration"),
-        ):
-            self.assertIn(f"address = {address}", analysis)
-            self.assertIn(f'name = "{name}"', analysis)
-            self.assertIn(f"void {name}", hooks)
-        self.assertIn('"native_renderer.discovery.track_render_config"', hooks)
-        self.assertIn(
-            '"exact_option_and_runtime_overrides_824F7DC0_8259C834_8259C89C_8259C8DC"',
-            hooks,
-        )
-        self.assertIn("f0.f64 = expected.track_far_distance;", hooks)
-        self.assertIn("ExpectedTrackRenderValues(TrackRenderModeMarker())", hooks)
-        self.assertIn("r11.u32 = expected.road_detail_blur;", hooks)
-        self.assertIn("r11.u32 = expected.track_command_buffers;", hooks)
-        self.assertIn("prepared_candidate_rejection_mask", hooks)
-        self.assertIn('{"mechanical_rejection_mask",', hooks)
-        self.assertIn('{"xenos_authority", "true"}', hooks)
-        self.assertIn('{"native_draw", "false"}', hooks)
-        self.assertIn('{"suppression_allowed", "false"}', hooks)
 
 
 if __name__ == "__main__":

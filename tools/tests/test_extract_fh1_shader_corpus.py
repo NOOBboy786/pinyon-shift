@@ -1,0 +1,87 @@
+import importlib.util
+import struct
+import tempfile
+import unittest
+from pathlib import Path
+from zipfile import ZipFile
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location(
+    "extract_fh1_shader_corpus", ROOT / "tools" / "extract-fh1-shader-corpus.py"
+)
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+
+
+def container(code: bytes, vertex: bool = True, interpolators: int = 0) -> bytes:
+    virtual_size = 64
+    physical_size = len(code)
+    header = struct.pack(
+        ">9I", 0x102A1101 if vertex else 0x102A1100,
+        virtual_size, physical_size, 0, 36, 0, 40, 0, 0
+    )
+    shader = struct.pack(">6I", 0, len(code), 0, 0, 0, interpolators << 5)
+    return header + b"\0" * 4 + shader + code
+
+
+class ExtractFh1ShaderCorpusTests(unittest.TestCase):
+    def test_patches_fh1_vertex_fetches_from_the_asset_declaration(self):
+        code = struct.pack(
+            ">6I", 0x05F82000, 0x00000E88, 0,
+            0x05F81000, 0x00000FC8, 0,
+        )
+        shader_elements = ((0, 0, 0), (1, 5, 0))
+        declaration = (
+            ((0, 0, 0x002A23B9, 0, 0), (0, 12, 0x002C23A5, 5, 0)),
+            (20,),
+        )
+
+        patched = MODULE.patch_vertex_shader(code, shader_elements, declaration)
+
+        self.assertEqual(
+            struct.pack(
+                ">6I", 0x25F82000, 0x00393E88, 5,
+                0x05F81000, 0x40253FC8, 0x305,
+            ),
+            patched,
+        )
+
+    def test_extracts_and_deduplicates_valid_fxobj_containers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shaders = root / "media" / "shaders"
+            shaders.mkdir(parents=True)
+            vertex = bytes(range(12))
+            pixel = bytes(range(12, 24))
+            (shaders / "one.fxobj").write_bytes(b"junk" + container(vertex, interpolators=3))
+            (shaders / "two.fxobj").write_bytes(
+                container(vertex, interpolators=3) + container(pixel, False, 6)
+            )
+            tracks = root / "media" / "tracks"
+            tracks.mkdir()
+            archived_pixel = bytes(range(24, 36))
+            with ZipFile(tracks / "bin.zip", "w") as archive:
+                archive.writestr("shaders/track/three.fxobj", container(archived_pixel, False, 4))
+            output = root / "corpus.json"
+            binary_dir = root / "ucode"
+
+            manifest = MODULE.extract(root, output, binary_dir)
+
+            self.assertEqual(4, manifest["container_count"])
+            self.assertEqual(3, manifest["shader_count"])
+            self.assertEqual(["pixel", "pixel", "vertex"],
+                             [e["stage"] for e in manifest["entries"]])
+            self.assertEqual([[6], [4], [3]],
+                             [e["interpolator_counts"] for e in manifest["entries"]])
+            self.assertEqual(3, len(list(binary_dir.glob("*.bin"))))
+            self.assertEqual(1, len(list(binary_dir.glob("pixel-i06-*.bin"))))
+            self.assertEqual(1, len(list(binary_dir.glob("pixel-i04-*.bin"))))
+            self.assertEqual(1, len(list(binary_dir.glob("vertex-i03-*.bin"))))
+            self.assertIn("media/tracks/bin.zip!/shaders/track/three.fxobj",
+                          manifest["entries"][1]["sources"][0]["path"])
+            self.assertTrue(output.is_file())
+
+
+if __name__ == "__main__":
+    unittest.main()

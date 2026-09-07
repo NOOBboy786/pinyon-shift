@@ -12,7 +12,7 @@ from typing import Any
 
 SCHEMA = "pinyon-shift.native-renderer-candidate-selection.v1"
 CENSUS_SCHEMA = "pinyon-shift.native-renderer-census.v1"
-SHADER_SCHEMA = "pinyon-shift.native-shader-pack.v1"
+SHADER_SCHEMA = "pinyon-shift.native-shader-pack.v2"
 PHYSICAL_MASK = 0x1FFFFFFF
 MAX_TEXTURE_RESOURCES = 4
 PREPARED_PIPELINE_FIELDS = (

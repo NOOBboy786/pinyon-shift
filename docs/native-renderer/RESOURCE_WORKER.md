@@ -1,5 +1,12 @@
 # Native resource worker and prewarm queue
 
+This is a historical qualification record. The current title-side renderer
+does not contain this worker or a `DrainCommits` integration; its
+`guest_output_renderer.cpp` only installs the render-test output observer.
+Do not treat the metadata-worker results below as current native texture
+ownership or as an available upload implementation. Current execution status
+is recorded in the [performance checkpoint](NATIVE_RENDERER_PERFORMANCE_CHECKPOINT_2026-09-04.md).
+
 NR-03G begins with a backend-neutral two-stage worker contract. CPU-only
 preparation runs on a fixed set of `std::jthread` workers. Backend resource,
 view, descriptor, and pipeline creation remains exclusively in the bounded

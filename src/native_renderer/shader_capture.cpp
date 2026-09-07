@@ -28,9 +28,23 @@
 
 namespace {
 
-constexpr size_t kMaximumEntries = 256;
+constexpr size_t kMaximumEntries = 65'535;
 constexpr size_t kMaximumBytecodeBytes = 16 * 1024 * 1024;
-constexpr size_t kMaximumCaptureBytes = 128 * 1024 * 1024;
+constexpr size_t kMaximumCaptureBytes = 512 * 1024 * 1024;
+constexpr size_t kMaximumBindings = 255;
+
+struct CaptureConfig {
+  uint32_t translator_version = 0;
+  uint32_t vendor_id = 0;
+  bool bindless_resources = false;
+  bool edram_rov = false;
+  bool gamma_render_target_as_unorm8 = false;
+  bool msaa_2x = false;
+  uint32_t draw_resolution_scale_x = 1;
+  uint32_t draw_resolution_scale_y = 1;
+
+  bool operator==(const CaptureConfig &) const = default;
+};
 
 struct CaptureEntry {
   rex::system::GraphicsShaderStage stage{};
@@ -39,6 +53,9 @@ struct CaptureEntry {
   size_t bytecode_size = 0;
   std::array<std::byte, 32> digest{};
   std::string file_name;
+  std::vector<rex::system::GraphicsShaderTextureBinding> texture_bindings;
+  std::vector<rex::system::GraphicsShaderSamplerBinding> sampler_bindings;
+  uint32_t used_texture_mask = 0;
 };
 
 struct CaptureState {
@@ -48,6 +65,8 @@ struct CaptureState {
   size_t bytecode_bytes = 0;
   size_t duplicate_callbacks = 0;
   size_t rejected_callbacks = 0;
+  CaptureConfig config{};
+  bool has_config = false;
   bool active = false;
 };
 
@@ -157,9 +176,8 @@ bool ExistingFileMatches(const std::filesystem::path &path,
          std::equal(actual.begin(), actual.end(), expected.begin());
 }
 
-bool WriteManifestLocked(const CaptureEntry &pending) {
+bool WriteManifestLocked() {
   std::vector<CaptureEntry> entries = g_capture.entries;
-  entries.push_back(pending);
   std::sort(entries.begin(), entries.end(),
             [](const auto &left, const auto &right) {
               if (left.stage != right.stage) {
@@ -172,8 +190,24 @@ bool WriteManifestLocked(const CaptureEntry &pending) {
             });
 
   std::string document =
-      "{\n  \"schema\": \"pinyon-shift.native-shader-pack.v1\",\n"
-      "  \"backend\": \"d3d12\",\n  \"entries\": [\n";
+      fmt::format(
+          "{{\n  \"schema\": \"pinyon-shift.native-shader-pack.v2\",\n"
+          "  \"backend\": \"d3d12\",\n"
+          "  \"translation\": {{\n"
+          "    \"translator_version\": \"{:08X}\",\n"
+          "    \"vendor_id\": {},\n"
+          "    \"bindless_resources\": {},\n"
+          "    \"edram_rov\": {},\n"
+          "    \"gamma_render_target_as_unorm8\": {},\n"
+          "    \"msaa_2x\": {},\n"
+          "    \"draw_resolution_scale_x\": {},\n"
+          "    \"draw_resolution_scale_y\": {}\n"
+          "  }},\n  \"entries\": [\n",
+          g_capture.config.translator_version, g_capture.config.vendor_id,
+          g_capture.config.bindless_resources, g_capture.config.edram_rov,
+          g_capture.config.gamma_render_target_as_unorm8,
+          g_capture.config.msaa_2x, g_capture.config.draw_resolution_scale_x,
+          g_capture.config.draw_resolution_scale_y);
   for (size_t index = 0; index < entries.size(); ++index) {
     const CaptureEntry &entry = entries[index];
     const char *stage = entry.stage == rex::system::GraphicsShaderStage::kVertex
@@ -183,10 +217,34 @@ bool WriteManifestLocked(const CaptureEntry &pending) {
                             "      \"guest_hash\": \"{:016X}\",\n"
                             "      \"specialization_mask\": \"{:016X}\",\n"
                             "      \"bytecode\": \"dxil/{}\",\n"
-                            "      \"sha256\": \"{}\"\n    }}{}\n",
+                            "      \"sha256\": \"{}\",\n"
+                            "      \"texture_bindings\": [",
                             stage, entry.guest_hash, entry.specialization_mask,
-                            entry.file_name, DigestHex(entry.digest),
-                            index + 1 == entries.size() ? "" : ",");
+                            entry.file_name, DigestHex(entry.digest));
+    for (size_t binding_index = 0;
+         binding_index < entry.texture_bindings.size(); ++binding_index) {
+      const auto &binding = entry.texture_bindings[binding_index];
+      document += fmt::format(
+          "{}{{\"bindless_descriptor_index\":{},\"fetch_constant\":{},"
+          "\"dimension\":{},\"is_signed\":{}}}",
+          binding_index ? "," : "", binding.bindless_descriptor_index,
+          binding.fetch_constant, binding.dimension, binding.is_signed);
+    }
+    document += "],\n      \"sampler_bindings\": [";
+    for (size_t binding_index = 0;
+         binding_index < entry.sampler_bindings.size(); ++binding_index) {
+      const auto &binding = entry.sampler_bindings[binding_index];
+      document += fmt::format(
+          "{}{{\"bindless_descriptor_index\":{},\"fetch_constant\":{},"
+          "\"mag_filter\":{},\"min_filter\":{},\"mip_filter\":{},"
+          "\"aniso_filter\":{}}}",
+          binding_index ? "," : "", binding.bindless_descriptor_index,
+          binding.fetch_constant, binding.mag_filter, binding.min_filter,
+          binding.mip_filter, binding.aniso_filter);
+    }
+    document += fmt::format(
+        "],\n      \"used_texture_mask\": {}\n    }}{}\n",
+        entry.used_texture_mask, index + 1 == entries.size() ? "" : ",");
   }
   document += "  ]\n}\n";
   return WriteFileAtomically(
@@ -198,6 +256,15 @@ void ObserveShaderTranslation(
     const rex::system::GraphicsShaderTranslationObservation &observation) {
   const auto bytecode =
       std::as_bytes(std::span(observation.bytecode, observation.bytecode_size));
+  const CaptureConfig config{
+      observation.translator_version,
+      observation.vendor_id,
+      observation.bindless_resources,
+      observation.edram_rov,
+      observation.gamma_render_target_as_unorm8,
+      observation.msaa_2x,
+      observation.draw_resolution_scale_x,
+      observation.draw_resolution_scale_y};
   std::lock_guard lock(g_capture.mutex);
   if (!g_capture.active) {
     return;
@@ -206,7 +273,14 @@ void ObserveShaderTranslation(
        observation.stage != rex::system::GraphicsShaderStage::kPixel) ||
       observation.guest_hash == 0 || bytecode.size() < 4 ||
       bytecode.size() > kMaximumBytecodeBytes ||
-      std::memcmp(bytecode.data(), "DXBC", 4) != 0) {
+      std::memcmp(bytecode.data(), "DXBC", 4) != 0 ||
+      !config.translator_version || !config.vendor_id ||
+      !config.draw_resolution_scale_x || !config.draw_resolution_scale_y ||
+      observation.texture_binding_count > kMaximumBindings ||
+      observation.sampler_binding_count > kMaximumBindings ||
+      (observation.texture_binding_count && !observation.texture_bindings) ||
+      (observation.sampler_binding_count && !observation.sampler_bindings) ||
+      (g_capture.has_config && g_capture.config != config)) {
     ++g_capture.rejected_callbacks;
     return;
   }
@@ -233,6 +307,30 @@ void ObserveShaderTranslation(
   entry.guest_hash = observation.guest_hash;
   entry.specialization_mask = observation.specialization_mask;
   entry.bytecode_size = bytecode.size();
+  if (observation.texture_binding_count) {
+    entry.texture_bindings.assign(
+        observation.texture_bindings,
+        observation.texture_bindings + observation.texture_binding_count);
+  }
+  if (observation.sampler_binding_count) {
+    entry.sampler_bindings.assign(
+        observation.sampler_bindings,
+        observation.sampler_bindings + observation.sampler_binding_count);
+  }
+  entry.used_texture_mask = observation.used_texture_mask;
+  uint32_t observed_texture_mask = 0;
+  for (const auto &binding : entry.texture_bindings) {
+    if (binding.fetch_constant >= 32 || binding.dimension > 3 ||
+        binding.is_signed > 1) {
+      ++g_capture.rejected_callbacks;
+      return;
+    }
+    observed_texture_mask |= 1u << binding.fetch_constant;
+  }
+  if (observed_texture_mask != entry.used_texture_mask) {
+    ++g_capture.rejected_callbacks;
+    return;
+  }
   if (!ComputeSha256(bytecode, &entry.digest)) {
     ++g_capture.rejected_callbacks;
     return;
@@ -254,12 +352,15 @@ void ObserveShaderTranslation(
     ++g_capture.rejected_callbacks;
     return;
   }
-  if (!WriteManifestLocked(entry)) {
-    ++g_capture.rejected_callbacks;
-    return;
-  }
+  g_capture.config = config;
+  g_capture.has_config = true;
   g_capture.bytecode_bytes += bytecode.size();
   g_capture.entries.push_back(std::move(entry));
+  // Keep a recoverable checkpoint without rewriting a multi-megabyte manifest
+  // for every shader in the finite FH1 disc corpus.
+  if ((g_capture.entries.size() & 255) == 0) {
+    WriteManifestLocked();
+  }
 }
 
 } // namespace
@@ -300,12 +401,14 @@ void InstallShaderCapture(rex::system::IGraphicsSystem *graphics_system) {
     g_capture.bytecode_bytes = 0;
     g_capture.duplicate_callbacks = 0;
     g_capture.rejected_callbacks = 0;
+    g_capture.config = {};
+    g_capture.has_config = false;
     g_capture.active = true;
   }
   graphics_system->SetShaderTranslationObserver(&ObserveShaderTranslation);
   diagnostics::RecordEvent("native_renderer.shader_capture.installed",
-                           {{"entry_limit", "256"},
-                            {"byte_limit", "134217728"},
+                           {{"entry_limit", "65535"},
+                            {"byte_limit", "536870912"},
                             {"output", "local_only"},
                             {"mode", "pass_through"}});
 }
@@ -324,6 +427,9 @@ void UninstallShaderCapture(rex::system::IGraphicsSystem *graphics_system) {
       return;
     }
     g_capture.active = false;
+    if (!g_capture.entries.empty() && !WriteManifestLocked()) {
+      ++g_capture.rejected_callbacks;
+    }
     entries = g_capture.entries.size();
     bytes = g_capture.bytecode_bytes;
     duplicates = g_capture.duplicate_callbacks;

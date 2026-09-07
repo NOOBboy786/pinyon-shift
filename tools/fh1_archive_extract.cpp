@@ -1,0 +1,130 @@
+#include <algorithm>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include <rex/system/lzx.h>
+
+static bool ParseXmemPayload(const std::vector<uint8_t>& compressed,
+                             size_t uncompressed_size,
+                             std::vector<uint8_t>& payload) {
+  payload.clear();
+  size_t compressed_offset = 0;
+  size_t output_count = 0;
+  while (output_count < uncompressed_size) {
+    size_t block_compressed;
+    size_t block_uncompressed;
+    size_t header_size;
+    if (compressed_offset < compressed.size() &&
+        compressed[compressed_offset] == 0xFF) {
+      if (compressed.size() - compressed_offset < 5) {
+        return false;
+      }
+      block_uncompressed = size_t(compressed[compressed_offset + 1]) << 8 |
+                           compressed[compressed_offset + 2];
+      block_compressed = size_t(compressed[compressed_offset + 3]) << 8 |
+                         compressed[compressed_offset + 4];
+      header_size = 5;
+    } else {
+      if (compressed.size() - compressed_offset < 2) {
+        return false;
+      }
+      block_uncompressed = std::min<size_t>(0x8000, uncompressed_size - output_count);
+      block_compressed = size_t(compressed[compressed_offset]) << 8 |
+                         compressed[compressed_offset + 1];
+      header_size = 2;
+    }
+    compressed_offset += header_size;
+    if (!block_compressed || !block_uncompressed ||
+        block_compressed > compressed.size() - compressed_offset ||
+        block_uncompressed > uncompressed_size - output_count) {
+      return false;
+    }
+    payload.insert(payload.end(), compressed.begin() + compressed_offset,
+                   compressed.begin() + compressed_offset + block_compressed);
+    compressed_offset += block_compressed;
+    output_count += block_uncompressed;
+  }
+  return true;
+}
+
+int main(int argc, char** argv) {
+  if (argc == 2 && std::string(argv[1]) == "--self-test") {
+    const std::vector<uint8_t> framed = {
+        0x00, 0x03, 1, 2, 3, 0xFF, 0x00, 0x02, 0x00, 0x02, 4, 5};
+    std::vector<uint8_t> payload;
+    return ParseXmemPayload(framed, 0x8002, payload) &&
+                   payload == std::vector<uint8_t>({1, 2, 3, 4, 5})
+               ? 0
+               : 1;
+  }
+  if (argc != 6) {
+    std::cerr << "usage: fh1_archive_extract <archive> <offset> <compressed-size> "
+                 "<uncompressed-size> <output>\n";
+    return 2;
+  }
+
+  uint64_t offset;
+  size_t compressed_size;
+  size_t uncompressed_size;
+  try {
+    offset = std::stoull(argv[2]);
+    compressed_size = std::stoull(argv[3]);
+    uncompressed_size = std::stoull(argv[4]);
+  } catch (const std::exception&) {
+    std::cerr << "invalid archive entry range\n";
+    return 2;
+  }
+  constexpr size_t kMaximumShaderEntrySize = 16 * 1024 * 1024;
+  if (!compressed_size || !uncompressed_size ||
+      compressed_size > kMaximumShaderEntrySize ||
+      uncompressed_size > kMaximumShaderEntrySize) {
+    std::cerr << "archive shader entry is outside the supported size range\n";
+    return 2;
+  }
+  std::ifstream input(argv[1], std::ios::binary);
+  std::vector<uint8_t> compressed(compressed_size);
+  input.seekg(static_cast<std::streamoff>(offset));
+  if (!input.read(reinterpret_cast<char*>(compressed.data()), compressed.size())) {
+    std::cerr << "unable to read compressed archive entry\n";
+    return 1;
+  }
+
+  std::vector<uint8_t> payload;
+  if (!ParseXmemPayload(compressed, uncompressed_size, payload)) {
+    std::cerr << "invalid XMem block stream\n";
+    return 1;
+  }
+
+  std::vector<uint8_t> output(uncompressed_size);
+  int result = 1;
+  for (uint32_t window_size : {uint32_t(1) << 16, uint32_t(1) << 17,
+                               uint32_t(1) << 15}) {
+    result = lzx_decompress(payload.data(), payload.size(), output.data(),
+                            output.size(), window_size, nullptr, 0);
+    if (!result) {
+      break;
+    }
+  }
+  if (result) {
+    std::cerr << "XMem LZX decompression failed\n";
+    return 1;
+  }
+
+  const std::filesystem::path output_path(argv[5]);
+  std::error_code error;
+  if (!output_path.parent_path().empty()) {
+    std::filesystem::create_directories(output_path.parent_path(), error);
+  }
+  if (error) {
+    std::cerr << "unable to create output directory\n";
+    return 1;
+  }
+  std::ofstream output_file(output_path, std::ios::binary | std::ios::trunc);
+  output_file.write(reinterpret_cast<const char*>(output.data()), output.size());
+  return output_file ? 0 : 1;
+}

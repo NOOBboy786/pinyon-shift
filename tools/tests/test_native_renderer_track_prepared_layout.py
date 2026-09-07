@@ -136,21 +136,6 @@ class TrackPreparedLayoutTests(unittest.TestCase):
         )
         self.assertIn("pivot away", document["next_step"])
 
-    def test_runtime_census_is_shutdown_only_and_observation_only(self):
-        source = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("kTrackWorldPreparedLayoutCapacity = 1024", source)
-        self.assertIn("RecordTrackWorldPreparedLayout", source)
-        self.assertIn("track_world_prepared_layout_entry", source)
-        summary = source.split(
-            "void EmitTrackRenderModelRuntimeJoinSummary()", 1
-        )[1].split("void EmitTrackRenderModelRuntimeJoinCheckpoint", 1)[0]
-        self.assertIn("EmitTrackWorldPreparedLayoutEntries", summary)
-        checkpoint = source.split(
-            "void EmitTrackRenderModelRuntimeJoinCheckpoint", 1
-        )[1].split("void EmitStaticWorldRuntimeJoinEvent", 1)[0]
-        self.assertNotIn("EmitTrackWorldPreparedLayoutEntries", checkpoint)
 
 
 if __name__ == "__main__":

@@ -27,40 +27,6 @@ class ShadowDepthPublicationContractTests(unittest.TestCase):
         self.assertIn("must be below $localRoot", wrapper)
 
 
-    def test_continuous_depth_publication_fails_closed_without_suppression(self):
-        hooks = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        capture = (
-            ROOT / "tools/capture-native-renderer-census.ps1"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            "PINYON_SHIFT_NATIVE_RENDERER_SHADOW_DEPTH_CONTINUOUS", hooks
-        )
-        self.assertIn(
-            "PINYON_SHIFT_NATIVE_RENDERER_SHADOW_DEPTH_CONTINUOUS_EPOCH_LIMIT",
-            hooks,
-        )
-        self.assertIn("epoch_limit < 2", hooks)
-        self.assertIn("epoch_limit > 120", hooks)
-        self.assertIn('"bounded_multi_epoch_complete"', hooks)
-        self.assertIn("FailClosedContinuousShadowDepth", hooks)
-        self.assertIn('"non_contiguous_epoch"', hooks)
-        self.assertIn('"backend_replay_failure"', hooks)
-        self.assertIn('"publication_failure"', hooks)
-        self.assertIn(
-            '"native_renderer.shadow_depth_continuous.fail_closed"', hooks
-        )
-        self.assertIn('"fallback", "authoritative_xenos_content"', hooks)
-        self.assertIn('"draw_suppression", "false"', hooks)
-        self.assertIn('"resolve_suppression", "false"', hooks)
-        self.assertNotIn("SetDrawSuppression", hooks)
-        self.assertNotIn("SetCopySuppression", hooks)
-        self.assertIn("[switch]$ContinuousShadowDepth", capture)
-        self.assertIn("[int]$ContinuousShadowDepthEpochs = 8", capture)
-        self.assertIn(
-            "ContinuousShadowDepth requires PublishShadowDepth", capture
-        )
 
     def test_continuous_qualification_verifier_accepts_exact_safe_epochs(self):
         verifier = (

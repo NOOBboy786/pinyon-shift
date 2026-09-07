@@ -131,21 +131,6 @@ def fixture(shared=3):
 
 
 class TrackModelRuntimeJoinTests(unittest.TestCase):
-    def test_runtime_census_promotes_only_exact_nested_track_identity(self):
-        source = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("kTrackWorldPointeePrefixWords = 16", source)
-        self.assertIn("kTrackWorldPointeeRootCapacity = 16", source)
-        self.assertIn("kTrackWorldResourceReferenceCapacity = 64", source)
-        self.assertIn("CensusTrackWorldPointees", source)
-        self.assertIn("world_pointee_direct_relations", source)
-        self.assertIn("world_pointee_nested_relations", source)
-        census = source.split("void CensusTrackWorldPointees", 1)[1].split(
-            "void AddTrackWorldResourceReference", 1
-        )[0]
-        self.assertIn("ClassifyTrackWorldResourceVtable(nested_vtable)", census)
-        self.assertIn("kTrackWorldResourceNestedPointer", census)
 
     def test_qualifies_scope_and_shared_identity(self):
         document = MODULE.build(fixture())
@@ -361,25 +346,6 @@ class TrackModelRuntimeJoinTests(unittest.TestCase):
         self.assertEqual("incomplete", document["status"])
         self.assertIn("scope_overlaps is nonzero", document["failures"])
 
-    def test_source_contract_has_exact_balanced_hooks(self):
-        hooks = (ROOT / "src/native_renderer/graphics_hooks.cpp").read_text(
-            encoding="utf-8"
-        )
-        analysis = (ROOT / "config/rexglue/analysis/main-xex.toml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("kTrackRenderModelInstanceUnifiedVtable = 0x820019CC", hooks)
-        self.assertIn("kTrackRenderModelUnifiedVtable = 0x82001D74", hooks)
-        self.assertIn("BeginTrackRenderModelDispatch", hooks)
-        self.assertIn("EndTrackRenderModelDispatch", hooks)
-        self.assertIn("rex::memory::QueryProtect", hooks)
-        self.assertIn("EmitTrackRenderModelRuntimeJoinCheckpoint", hooks)
-        self.assertIn(
-            '"native_renderer.discovery.track_render_model_runtime_join_checkpoint"',
-            hooks,
-        )
-        self.assertIn("address = 0x8240EC80", analysis)
-        self.assertIn("address = 0x8240ECAC", analysis)
 
 
 if __name__ == "__main__":

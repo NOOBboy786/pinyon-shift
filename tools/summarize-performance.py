@@ -74,12 +74,17 @@ PRESENTATION_COLUMNS = (
     "guest_vblank_count",
     "guest_vblank_delta_ns",
     "simulation_tick_count",
+    "source_frame_count",
     "present_count",
     "present_delta_ns",
     "present_queue_depth",
     "present_deadline_misses",
     "duplicate_present_count",
     "dropped_present_count",
+)
+SIMULATION_TIME_COLUMNS = (
+    "simulation_time_ns",
+    "simulation_delta_invalid",
 )
 NATIVE_GPU_TIMING_COLUMNS = (
     "guest_frame_gpu_time_ns",
@@ -90,8 +95,6 @@ NATIVE_GPU_TIMING_COLUMNS = (
     "native_selection_gpu_timing_samples",
     "native_gpu_timing_drops",
 )
-
-
 class CaptureError(ValueError):
     """Raised when a capture cannot produce a trustworthy summary."""
 
@@ -156,6 +159,18 @@ def summarize(path: pathlib.Path) -> dict[str, Any]:
                 "capture has an incomplete presentation counter set: "
                 + ", ".join(missing_presentation)
             )
+        available_simulation_time = columns.intersection(SIMULATION_TIME_COLUMNS)
+        if (
+            available_simulation_time
+            and available_simulation_time != set(SIMULATION_TIME_COLUMNS)
+        ):
+            missing_simulation_time = sorted(
+                set(SIMULATION_TIME_COLUMNS) - available_simulation_time
+            )
+            raise CaptureError(
+                "capture has an incomplete simulation-time counter set: "
+                + ", ".join(missing_simulation_time)
+            )
         available_native_gpu_timing = columns.intersection(
             NATIVE_GPU_TIMING_COLUMNS
         )
@@ -170,7 +185,6 @@ def summarize(path: pathlib.Path) -> dict[str, Any]:
                 "capture has an incomplete native GPU timing counter set: "
                 + ", ".join(missing_native_gpu_timing)
             )
-
         frame_times: list[float] = []
         totals = {name: 0.0 for name in TOTAL_COLUMNS}
         memexport_totals = {name: 0.0 for name in MEMEXPORT_COLUMNS} if available_memexport else None
@@ -182,6 +196,12 @@ def summarize(path: pathlib.Path) -> dict[str, Any]:
             {name: 0.0 for name in PRESENTATION_COLUMNS}
             if available_presentation else None
         )
+        simulation_time_totals = (
+            {name: 0.0 for name in SIMULATION_TIME_COLUMNS}
+            if available_simulation_time
+            else None
+        )
+        simulation_active_frame_time_us = 0.0
         native_gpu_timing_totals = (
             {name: 0.0 for name in NATIVE_GPU_TIMING_COLUMNS}
             if available_native_gpu_timing
@@ -211,6 +231,10 @@ def summarize(path: pathlib.Path) -> dict[str, Any]:
                 name: finite_number(row[name], column=name, row_number=row_number)
                 for name in PRESENTATION_COLUMNS
             } if presentation_totals is not None else {})
+            row_simulation_time = ({
+                name: finite_number(row[name], column=name, row_number=row_number)
+                for name in SIMULATION_TIME_COLUMNS
+            } if simulation_time_totals is not None else {})
             row_native_gpu_timing = ({
                 name: finite_number(row[name], column=name, row_number=row_number)
                 for name in NATIVE_GPU_TIMING_COLUMNS
@@ -234,6 +258,10 @@ def summarize(path: pathlib.Path) -> dict[str, Any]:
                 presentation_totals[name] += value
                 if name in presentation_delta_samples and value > 0:
                     presentation_delta_samples[name] += 1
+            for name, value in row_simulation_time.items():
+                simulation_time_totals[name] += value
+            if row_simulation_time.get("simulation_time_ns", 0) > 0:
+                simulation_active_frame_time_us += frame_time
             for name, value in row_native_gpu_timing.items():
                 native_gpu_timing_totals[name] += value
 
@@ -299,6 +327,7 @@ def summarize(path: pathlib.Path) -> dict[str, Any]:
             "cadence_hz": {
                 "guest_vblank": round(counters["guest_vblank_count"] / duration_seconds, 3),
                 "simulation_tick": round(counters["simulation_tick_count"] / duration_seconds, 3),
+                "source_frame": round(counters["source_frame_count"] / duration_seconds, 3),
                 "present": round(counters["present_count"] / duration_seconds, 3),
             },
             "mean_delta_ms": {
@@ -316,6 +345,28 @@ def summarize(path: pathlib.Path) -> dict[str, Any]:
                 ),
             },
         }
+        if simulation_time_totals is not None:
+            simulation_time_ns = int(simulation_time_totals["simulation_time_ns"])
+            active_wall_seconds = simulation_active_frame_time_us / 1_000_000.0
+            result["presentation"]["simulation_time"] = {
+                "seconds": round(simulation_time_ns / 1_000_000_000.0, 6),
+                "active_wall_seconds": round(active_wall_seconds, 6),
+                "wall_time_ratio": round(
+                    simulation_time_ns
+                    / 1_000_000_000.0
+                    / max(active_wall_seconds, 1e-9),
+                    6,
+                ),
+                "mean_update_ms": round(
+                    simulation_time_ns
+                    / max(1, counters["simulation_tick_count"])
+                    / 1_000_000.0,
+                    6,
+                ),
+                "invalid_deltas": int(
+                    simulation_time_totals["simulation_delta_invalid"]
+                ),
+            }
     if native_gpu_timing_totals is not None:
         counters = {
             name: int(value) if value.is_integer() else value
@@ -413,6 +464,7 @@ def markdown(summary: dict[str, Any]) -> str:
             "",
             f"- Guest vblank cadence: {pacing['cadence_hz']['guest_vblank']:.3f} Hz",
             f"- Simulation cadence: {pacing['cadence_hz']['simulation_tick']:.3f} Hz",
+            f"- FH1 source-frame cadence: {pacing['cadence_hz']['source_frame']:.3f} Hz",
             f"- Host present cadence: {pacing['cadence_hz']['present']:.3f} Hz",
             f"- Present deadline misses: {pacing['counters']['present_deadline_misses']}",
             f"- Duplicate presents: {pacing['counters']['duplicate_present_count']}",

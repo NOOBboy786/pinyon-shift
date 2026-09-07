@@ -18,6 +18,7 @@
 #include <rex/system/xmemory.h>
 
 #include "pinyon_shift_diagnostics.h"
+#include "fh1_render_test.h"
 #include "native_renderer/graphics_hooks.h"
 
 REXCVAR_DEFINE_BOOL(pinyon_shift_skip_opening_movies, false, "Pinyon Shift",
@@ -402,6 +403,16 @@ void PinyonShiftTraceFrameTelemetry(PPCRegister& r28, PPCRegister& r31) {
        {"transition_active", Hex32(transition_active)}});
 }
 
+void PinyonShiftObserveSimulationDelta(PPCRegister& f31) {
+  const double seconds = f31.f64;
+  if (!std::isfinite(seconds) || seconds < 0.0 || seconds > 0.25) {
+    PROFILE_SIMULATION_DELTA_INVALID();
+    return;
+  }
+  PROFILE_SIMULATION_TIME_NS(
+      static_cast<int64_t>(std::llround(seconds * 1'000'000'000.0)));
+}
+
 void PinyonShiftTraceVehiclePose(PPCRegister& r1, PPCRegister& r30,
                                  PPCRegister& r31) {
   if (r31.u32 == 0) {
@@ -494,23 +505,8 @@ void PinyonShiftTraceVehiclePose(PPCRegister& r1, PPCRegister& r30,
     StoreVehiclePose(position_address, forward_address, effective);
   }
 
-  pinyon_shift::native_renderer::ObserveVehiclePose(
-      {.generation = generation,
-       .source = r30.u32,
-       .owner = r31.u32,
-       .owner_vtable = LoadGuestU32(r31.u32),
-       .slot = slot,
-       .position_address = position_address,
-       .forward_address = forward_address,
-       .x = effective.x,
-       .y = effective.y,
-       .z = effective.z,
-       .w = effective.w,
-       .forward_x = effective.forward_x,
-       .forward_y = effective.forward_y,
-       .forward_z = effective.forward_z,
-       .forward_w = effective.forward_w,
-       .presentation_stabilized = suppressed});
+  pinyon_shift::fh1_render_test::ObserveVehiclePose(effective.x, effective.y,
+                                                    effective.z);
 
   if (suppressed && FrameTelemetryEnabled()) {
     uint64_t previous_discontinuity_ms =
@@ -561,43 +557,6 @@ void PinyonShiftTraceVehiclePose(PPCRegister& r1, PPCRegister& r30,
        {"forward_x", fmt::format("{}", effective.forward_x)},
        {"forward_y", fmt::format("{}", effective.forward_y)},
        {"forward_z", fmt::format("{}", effective.forward_z)}});
-}
-
-void PinyonShiftObserveVehicleMapEntity(PPCRegister& r3) {
-  if (!r3.u32) {
-    return;
-  }
-  pinyon_shift::native_renderer::ObserveVehicleMapEntity(
-      g_title_generation.load(std::memory_order_acquire), r3.u32,
-      LoadGuestU32(r3.u32), LoadGuestU32(r3.u32 + 12),
-      LoadGuestU32(r3.u32 + 16));
-}
-
-void PinyonShiftObserveVehicleMapEntityIdAssignment(PPCRegister& r3,
-                                                    PPCRegister& r4) {
-  if (!r3.u32) {
-    return;
-  }
-  pinyon_shift::native_renderer::ObserveVehicleMapEntityIdAssignment(
-      g_title_generation.load(std::memory_order_acquire), r3.u32,
-      LoadGuestU32(r3.u32), r4.u32, LoadGuestU32(r3.u32 + 16));
-}
-
-void PinyonShiftObserveVehiclePlayerPool(PPCRegister& r3, PPCRegister& r31) {
-  constexpr uint32_t kPlayerEntityOffset = 32;
-  constexpr uint32_t kPlayerTypeNameOffset = 16;
-  constexpr uint32_t kPoolContextOffset = 4;
-  if (!r3.u32 || !r31.u32 || (r3.u32 & 3) || (r31.u32 & 3) ||
-      r3.u32 > UINT32_MAX - kPlayerEntityOffset - kPlayerTypeNameOffset ||
-      r31.u32 > UINT32_MAX - kPoolContextOffset) {
-    return;
-  }
-  const uint32_t entity = r3.u32 + kPlayerEntityOffset;
-  pinyon_shift::native_renderer::ObserveVehiclePlayerPool(
-      g_title_generation.load(std::memory_order_acquire), entity,
-      LoadGuestU32(entity), LoadGuestU32(entity + 12),
-      LoadGuestU32(entity + kPlayerTypeNameOffset), r3.u32, r31.u32,
-      r31.u32 + kPoolContextOffset);
 }
 
 void PinyonShiftTraceBdz82AD8138(PPCRegister& ctr) {

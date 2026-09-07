@@ -612,7 +612,7 @@ public partial class MainWindow : Window
     private void GraphicsPresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_applyingGraphicsResult || GraphicsPresetComboBox.SelectedItem is null ||
-            ResolutionComboBox is null || ReadbackResolveComboBox is null) return;
+            ResolutionComboBox is null) return;
         _applyingGraphicsResult = true;
         try
         {
@@ -620,19 +620,12 @@ public partial class MainWindow : Window
             {
                 case "shipping_1x":
                     SelectTag(ResolutionComboBox, "1");
-                    SelectTag(ReadbackResolveComboBox, "none");
                     break;
                 case "experimental_2x":
                     SelectTag(ResolutionComboBox, "2");
-                    SelectTag(ReadbackResolveComboBox, "fast");
                     break;
                 case "experimental_3x":
                     SelectTag(ResolutionComboBox, "3");
-                    SelectTag(ReadbackResolveComboBox, "fast");
-                    break;
-                case "accurate_showroom":
-                    SelectTag(ResolutionComboBox, "1");
-                    SelectTag(ReadbackResolveComboBox, "full");
                     break;
             }
         }
@@ -640,33 +633,22 @@ public partial class MainWindow : Window
         {
             _applyingGraphicsResult = false;
         }
-        UpdateShowroomWarning();
     }
 
     private void GraphicsControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_applyingGraphicsResult || ResolutionComboBox?.SelectedItem is null ||
-            ReadbackResolveComboBox?.SelectedItem is null || GraphicsPresetComboBox is null) return;
-        var inferred = (SelectedTag(ResolutionComboBox), SelectedTag(ReadbackResolveComboBox)) switch
+            GraphicsPresetComboBox is null) return;
+        var inferred = SelectedTag(ResolutionComboBox) switch
         {
-            ("1", "none") => "shipping_1x",
-            ("2", "fast") => "experimental_2x",
-            ("3", "fast") => "experimental_3x",
-            (_, "full") => "accurate_showroom",
+            "1" => "shipping_1x",
+            "2" => "experimental_2x",
+            "3" => "experimental_3x",
             _ => "custom"
         };
         _applyingGraphicsResult = true;
         SelectTag(GraphicsPresetComboBox, inferred);
         _applyingGraphicsResult = false;
-        UpdateShowroomWarning();
-    }
-
-    private void UpdateShowroomWarning()
-    {
-        if (ShowroomWarning is null || ReadbackResolveComboBox?.SelectedItem is null) return;
-        ShowroomWarning.Visibility = SelectedTag(ReadbackResolveComboBox) == "full"
-            ? Visibility.Visible
-            : Visibility.Collapsed;
     }
 
     private async void ResetGraphicsButton_Click(object sender, RoutedEventArgs e)
@@ -681,10 +663,6 @@ public partial class MainWindow : Window
 
     private async void RestoreGraphicsButton_Click(object sender, RoutedEventArgs e) =>
         await ChangeGraphicsSettingsAsync("Restore", "Latest settings backup restored. Restart the preview to apply it.");
-
-    private async void ResetRendererButton_Click(object sender, RoutedEventArgs e) =>
-        await ChangeGraphicsSettingsAsync("ResetRenderer",
-            "Native output reset to Xenos. Restart the preview to apply it.");
 
     private async Task ChangeGraphicsSettingsAsync(string action, string success, bool revealBackup = false)
     {
@@ -737,10 +715,8 @@ public partial class MainWindow : Window
             "-Anisotropy", SelectedTag(AnisotropyComboBox), "-PostEffect", SelectedTag(PostEffectComboBox),
             "-ResolutionScale", SelectedTag(ResolutionComboBox),
             "-Preset", SelectedTag(GraphicsPresetComboBox),
-            "-ReadbackResolve", SelectedTag(ReadbackResolveComboBox),
             "-DisableMotionBlur", DisableMotionBlurCheckBox.IsChecked == true ? "true" : "false",
             "-DisableDepthOfField", DisableDepthOfFieldCheckBox.IsChecked == true ? "true" : "false",
-            "-NativeRenderer", SelectedTag(NativeRendererComboBox),
             "-Json"
         }) startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo) ??
@@ -771,16 +747,13 @@ public partial class MainWindow : Window
             SelectTag(PostEffectComboBox, result.Settings.PostEffect);
             SelectTag(GraphicsPresetComboBox, result.Settings.Preset);
             SelectTag(ResolutionComboBox, result.Settings.ResolutionScale.ToString());
-            SelectTag(ReadbackResolveComboBox, result.Settings.ReadbackResolve);
             DisableMotionBlurCheckBox.IsChecked = result.Settings.DisableMotionBlur;
             DisableDepthOfFieldCheckBox.IsChecked = result.Settings.DisableDepthOfField;
-            SelectTag(NativeRendererComboBox, result.Settings.NativeRenderer);
         }
         finally
         {
             _applyingGraphicsResult = false;
         }
-        UpdateShowroomWarning();
     }
 
     private static void SelectTag(ComboBox comboBox, string value)
@@ -795,14 +768,11 @@ public partial class MainWindow : Window
         PostEffectComboBox.IsEnabled = enabled;
         ResolutionComboBox.IsEnabled = enabled;
         GraphicsPresetComboBox.IsEnabled = enabled;
-        ReadbackResolveComboBox.IsEnabled = enabled;
         DisableMotionBlurCheckBox.IsEnabled = enabled;
         DisableDepthOfFieldCheckBox.IsEnabled = enabled;
-        NativeRendererComboBox.IsEnabled = enabled;
         SaveGraphicsButton.IsEnabled = enabled;
         ResetGraphicsButton.IsEnabled = enabled;
         RestoreGraphicsButton.IsEnabled = enabled;
-        ResetRendererButton.IsEnabled = enabled;
     }
 
     private sealed record ProgressMessage(string? Stage, int Percent, string? Message);
@@ -828,11 +798,6 @@ public partial class MainWindow : Window
         [property: JsonPropertyName("disable_depth_of_field")] bool DisableDepthOfField,
         [property: JsonPropertyName("preset")] string Preset,
         [property: JsonPropertyName("resolution_scale")] int ResolutionScale,
-        [property: JsonPropertyName("readback_resolve")] string ReadbackResolve,
-        [property: JsonPropertyName("readback_resolve_half_pixel_offset")] bool ReadbackHalfPixelOffset,
         [property: JsonPropertyName("clear_memory_page_state")] bool ClearMemoryPageState,
-        [property: JsonPropertyName("readback_memexport")] bool ReadbackMemexport,
-        [property: JsonPropertyName("readback_memexport_fast")] bool ReadbackMemexportFast,
-        [property: JsonPropertyName("vsync")] bool Vsync,
-        [property: JsonPropertyName("native_renderer")] string NativeRenderer);
+        [property: JsonPropertyName("vsync")] bool Vsync);
 }

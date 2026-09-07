@@ -31,6 +31,16 @@ class NativeShaderPackTests(unittest.TestCase):
                 {
                     "schema": PACK.SCHEMA,
                     "backend": "d3d12",
+                    "translation": {
+                        "translator_version": "20260827",
+                        "vendor_id": 0x10DE,
+                        "bindless_resources": True,
+                        "edram_rov": False,
+                        "gamma_render_target_as_unorm8": True,
+                        "msaa_2x": True,
+                        "draw_resolution_scale_x": 1,
+                        "draw_resolution_scale_y": 1,
+                    },
                     "entries": entries,
                 }
             ),
@@ -46,6 +56,9 @@ class NativeShaderPackTests(unittest.TestCase):
         return {
             "bytecode": name,
             "sha256": hashlib.sha256(bytecode).hexdigest(),
+            "texture_bindings": [],
+            "sampler_bindings": [],
+            "used_texture_mask": 0,
         }
 
     def test_manifest_order_does_not_change_pack(self):
@@ -68,7 +81,43 @@ class NativeShaderPackTests(unittest.TestCase):
             self.assertEqual(first, second)
             metadata = PACK.verify_pack(first)
             self.assertEqual(metadata["entry_count"], 2)
+            self.assertEqual(metadata["translator_version"], "20260827")
+            self.assertEqual(metadata["vendor_id"], 0x10DE)
             self.assertEqual(metadata["pack_sha256"], hashlib.sha256(first).hexdigest().upper())
+
+    def test_bindings_round_trip_and_texture_mask_is_checked(self):
+        with tempfile.TemporaryDirectory(prefix="pinyon-shader-pack-") as temporary:
+            root = pathlib.Path(temporary)
+            entry = {
+                "stage": "pixel",
+                "guest_hash": "0000000000000001",
+                "specialization_mask": "0000000000000002",
+                **self.make_shader(root, "pixel.dxil", b"pixel"),
+                "texture_bindings": [
+                    {
+                        "bindless_descriptor_index": 7,
+                        "fetch_constant": 3,
+                        "dimension": 1,
+                        "is_signed": 0,
+                    }
+                ],
+                "sampler_bindings": [
+                    {
+                        "bindless_descriptor_index": 5,
+                        "fetch_constant": 3,
+                        "mag_filter": 0,
+                        "min_filter": 1,
+                        "mip_filter": 2,
+                        "aniso_filter": 3,
+                    }
+                ],
+                "used_texture_mask": 1 << 3,
+            }
+            data = PACK.serialize(PACK.load_manifest(self.make_manifest(root, [entry])))
+            self.assertEqual(PACK.verify_pack(data)["entry_count"], 1)
+            entry["used_texture_mask"] = 0
+            with self.assertRaisesRegex(PACK.PackError, "does not match bindings"):
+                PACK.load_manifest(self.make_manifest(root, [entry]))
 
     def test_duplicate_identity_and_hash_mismatch_are_rejected(self):
         with tempfile.TemporaryDirectory(prefix="pinyon-shader-pack-") as temporary:
@@ -85,6 +134,74 @@ class NativeShaderPackTests(unittest.TestCase):
             bad = dict(entry, sha256="00" * 32)
             with self.assertRaisesRegex(PACK.PackError, "does not match"):
                 PACK.load_manifest(self.make_manifest(root, [bad]))
+
+    def test_build_merges_manifests_with_the_same_configuration(self):
+        with tempfile.TemporaryDirectory(prefix="pinyon-shader-pack-") as temporary:
+            root = pathlib.Path(temporary)
+            first_entry = {
+                "stage": "vertex",
+                "guest_hash": "0000000000000001",
+                "specialization_mask": "0000000000000000",
+                **self.make_shader(root, "first.dxil", b"first"),
+            }
+            first = self.make_manifest(root, [first_entry])
+            first = first.rename(root / "first.json")
+            second_entry = {
+                "stage": "pixel",
+                "guest_hash": "0000000000000002",
+                "specialization_mask": "0000000000000000",
+                **self.make_shader(root, "second.dxil", b"second"),
+            }
+            second = self.make_manifest(root, [second_entry])
+            second = second.rename(root / "second.json")
+            output = root / "merged.pnsp"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    SCRIPT,
+                    "build",
+                    first,
+                    second,
+                    "--output",
+                    output,
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["entry_count"], 2)
+
+    def test_stage_uses_exact_fh1_runtime_name_and_scale(self):
+        with tempfile.TemporaryDirectory(prefix="pinyon-shader-pack-") as temporary:
+            root = pathlib.Path(temporary)
+            entry = {
+                "stage": "vertex",
+                "guest_hash": "0000000000000001",
+                "specialization_mask": "0000000000000000",
+                **self.make_shader(root, "vertex.dxil", b"vertex"),
+            }
+            pack = root / "source.pnsp"
+            pack.write_bytes(PACK.serialize(PACK.load_manifest(self.make_manifest(root, [entry]))))
+            result = PACK._stage(
+                type("Arguments", (), {"pack": pack, "state_root": root / "state", "scale": 1})
+            )
+            destination = pathlib.Path(result["destination"])
+            self.assertEqual(
+                destination.name, "4D5309C9.fh1-native-v2.10DE.0D.1x1.pnsp"
+            )
+            self.assertEqual(destination.read_bytes(), pack.read_bytes())
+            self.assertTrue(result["changed"])
+            self.assertFalse(
+                PACK._stage(
+                    type("Arguments", (), {"pack": pack, "state_root": root / "state", "scale": 1})
+                )["changed"]
+            )
+            with self.assertRaisesRegex(PACK.PackError, "requested 2x"):
+                PACK._stage(
+                    type("Arguments", (), {"pack": pack, "state_root": root / "state", "scale": 2})
+                )
 
     def test_path_escape_and_non_dxil_input_are_rejected(self):
         with tempfile.TemporaryDirectory(prefix="pinyon-shader-pack-") as temporary:
@@ -161,11 +278,12 @@ class NativeShaderPackTests(unittest.TestCase):
                 json.loads(verify.stdout)["pack_sha256"],
             )
 
-    def test_public_format_keeps_xenos_fallback_and_local_payload_boundary(self):
+    def test_public_format_is_runtime_capable_and_keeps_local_payload_boundary(self):
         document = (
             ROOT / "docs/native-renderer/SHADER_PACK_FORMAT.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("Xenos remains authoritative", document)
+        self.assertIn("runtime renderer input", document)
+        self.assertIn("texture and sampler binding metadata", document)
         self.assertIn("must remain under `.local`", document)
         self.assertIn("does not enable guest draw or resolve suppression", document)
         policy = json.loads(
@@ -175,30 +293,76 @@ class NativeShaderPackTests(unittest.TestCase):
         self.assertIn(".dxbc", policy["forbidden_extensions"])
         self.assertIn(".pnsp", policy["forbidden_extensions"])
 
-    def test_runtime_load_is_restart_scoped_and_never_changes_xenos_authority(self):
+    def test_runtime_pack_does_not_restore_the_removed_title_side_loader(self):
         source = (
             ROOT / "src/native_renderer/guest_output_renderer.cpp"
         ).read_text(encoding="utf-8")
-        self.assertIn('pinyon_shift_native_shader_pack, ""', source)
-        self.assertIn("g_shader_pack.Load", source)
-        self.assertIn('"native_renderer.shader_pack.ready"', source)
-        self.assertIn('"native_renderer.shader_pack.failure"', source)
-        self.assertIn('{"fallback", "xenos"}', source)
+        self.assertNotIn("pinyon_shift_native_shader_pack", source)
+        self.assertNotIn("g_shader_pack", source)
+        pipeline = (
+            ROOT / "thirdparty/shiftglue-sdk/src/graphics/d3d12/pipeline_cache.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertIn("fh1_shader_pack_.Find", pipeline)
+        self.assertIn("REXGPU_FH1_SHADER_PRODUCER", pipeline)
+        self.assertIn("translation.RejectPrecompiledMiss()", pipeline)
+        self.assertNotIn("Fh1RequirePrecompiledShaders", pipeline)
+        shutdown = pipeline.split("void PipelineCache::Shutdown()", 1)[1].split(
+            "void PipelineCache::InitializeShaderStorage", 1
+        )[0]
         self.assertLess(
-            source.index("g_shader_pack.Load"),
-            source.index('diagnostics::RecordEvent("native_renderer.output.state"'),
+            shutdown.index("WriteFh1ShaderAnalysisCatalog"),
+            shutdown.index("ShutdownShaderStorage()"),
         )
+        self.assertLess(
+            shutdown.index("WriteFh1ShaderAnalysisCatalog"),
+            shutdown.index("shaders_.clear()"),
+        )
+        analysis = pipeline.split(
+            "void PipelineCache::AnalyzeShaderUcode", 1
+        )[1].split("PipelineCache::GetCurrentVertexShaderModification", 1)[0]
+        self.assertIn("if (shader.is_ucode_analyzed())", analysis)
+        self.assertIn("fh1_analysis_catalog_dirty_", analysis)
+        end_submission = pipeline.split(
+            "void PipelineCache::EndSubmission()", 1
+        )[1].split("bool PipelineCache::IsCreatingPipelines", 1)[0]
+        self.assertIn("WriteFh1ShaderAnalysisCatalog", end_submission)
+        for shader_hash in (
+            "C41DD15CBD361350",
+            "CE81AE65F9C5A57B",
+            "D60688109AC80358",
+            "81EF4F2E5B5DDBD1",
+            "A81FE6B4247E184B",
+            "D445FABAE890A455",
+        ):
+            self.assertIn(shader_hash, pipeline)
         report = (ROOT / "tools/create-crash-report.ps1").read_text(
             encoding="utf-8"
         )
-        self.assertIn("native_shader_pack = $nativeShaderPack", report)
-        self.assertIn("'native_renderer.shader_pack.ready'", report)
-        self.assertIn("'native_renderer.shader_pack.failure'", report)
-        self.assertNotIn("pinyon_shift_native_shader_pack'", report)
+        self.assertNotIn("native_shader_pack =", report)
         package = (ROOT / "tools/package-launcher.ps1").read_text(encoding="utf-8")
         self.assertIn("'tools/native-shader-pack.py'", package)
         self.assertIn("'.dxil', '.pnsp'", package)
         self.assertIn("'.dxil', '.pnsp'", report)
+
+    def test_runtime_pack_loader(self):
+        executable = (
+            ROOT / "out/build/win-amd64-release/pinyon_shift_fh1_shader_pack_tests.exe"
+        )
+        if sys.platform != "win32" or not executable.is_file():
+            self.skipTest("Build pinyon_shift_fh1_shader_pack_tests for the Windows loader check")
+        bytecode = b"DXBCpixel"
+        entry = PACK.ShaderEntry(
+            PACK.ShaderIdentity(2, 1, 2), bytecode, hashlib.sha256(bytecode).digest(),
+            ((7, 3, 1, 0),), ((5, 3, 0, 1, 2, 3),), 1 << 3,
+        )
+        config = PACK.TranslationConfig(0x20260827, 0x10DE, 0xD, 1, 1)
+        with tempfile.TemporaryDirectory(prefix="pinyon-shader-pack-runtime-") as temporary:
+            fixture = pathlib.Path(temporary) / "fixture.pnsp"
+            fixture.write_bytes(PACK.serialize(PACK.PackInput(config, (entry,))))
+            result = subprocess.run(
+                [str(executable), str(fixture)], capture_output=True, text=True, timeout=30
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
