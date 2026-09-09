@@ -168,3 +168,29 @@ verified all 326 translated shards use the copied tree and no codegen invocation
 exists. The initial assertion also matched the generated target's PCH filename;
 it was corrected to check source basenames. The corrected build is running;
 use `build-frozen-baseline-corrected.log`, not the interrupted build log.
+
+### Full baseline completed; ThinLTO build started
+
+The corrected full baseline completed successfully and is staged under
+`.local/non-renderer-optimization/compiler-baseline/`, including binary hashes,
+effective commands and CMake cache. All 680 copied generated files still match
+the snapshot manifest. This compiler baseline is distinct from the earlier
+trace-on package; do not mix their results or binaries.
+
+| Baseline module | SHA-256 |
+| --- | --- |
+| Executable | `38e1f94756a100f32c777345e6ff0cc9c12611eff80c71b2e23b1be4c53f3bfa` |
+| Runtime | `c6bb0619dd042e1362ea811989d646aa95ab864cd48d164375df4a0f32113dc3` |
+| Renderer | `38f56643340179e9b078f9f4aac1975686d3c1b53efbd658f6364d7ca2a1f4d0` |
+
+ThinLTO is now compiling from the same snapshot after reconfiguration without
+reapplying the preset. `tools/check-recomp-experiment.py` verified all 326
+translated shards retain snapshot paths, SSE4.1 and asynchronous exceptions,
+with ThinLTO enabled and no runtime LTO or codegen invocation. Its regression
+test rejects preset path resets, unexpected IPO state and enabled codegen.
+
+Validation: `python tools/tests/test_recomp_experiment.py` passed;
+`python tools/check-recomp-experiment.py out/build/non-renderer-baseline
+.local/non-renderer-optimization/generated --ipo` passed. Candidate compilation
+is recorded in `build-thinlto.log`. Full baseline and candidate runtime
+qualification and matched performance measurements remain pending.
