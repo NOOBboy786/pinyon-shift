@@ -3,6 +3,33 @@
 Branch: `codex/non-renderer-optimization-experiments`.
 Plan: [optimization research](NON_RENDERER_OPTIMIZATION_RESEARCH.md).
 
+## Current decision status
+
+No runtime optimization is recommended for merge yet. Build/profile collection
+controls have working smoke evidence; hardware requirements and broad gameplay
+correctness are not qualified. The following table is a scope audit, not a
+replacement for the experiments below.
+
+| Item | Evidence now | Required next decision |
+| --- | --- | --- |
+| CPU-01 | Frozen source/module identities, effective flags, live CPU/memory recorder | Repeated uninstrumented scene runs; CPU ownership remains unmeasured |
+| CPU-02 | Trace-only DLL builds and one short pair | Several matched pairs with process CPU and frame tails; do not disable diagnostics by default yet |
+| CPU-03 | Successful ThinLTO build; smaller code; four variable stationary runs | No demonstrated FPS win; qualify footprint independently or defer default enablement |
+| CPU-04 | Three-scene training, explicit main profile dump, successful USE build | Matched OFF/USE held-out tests and repeated timing comparisons |
+| CPU-05 | Unused main registration omitted; PGO build and driving smoke pass | Complete normal build/scene verification; avoid attributing combined image-size changes to PGO |
+| CPU-06 | Frequent small helpers identified by profile counts | Obtain CPU-time evidence before localized-register or native-function replacements |
+| IO-01 | Synchronous read path confirmed; process I/O samples work; WPR denied | I/O volume does not prove critical-path latency; attribution still missing |
+| IO-02 | Conditional, no implementation | Defer async/coalescing changes until IO-01 supports them |
+| RT-01 | Frequent guest delay/polling candidate with no-op delay hints | Measure candidate CPU cost and scheduling effect before changing behavior |
+| RT-02 | Sampled XMA stall counters, no stalls in one short training window | No audio/decompression hotspot established; no speculative rewrite |
+| QUAL-01 | Short captures, session/exit checks and simulation counters | Held-out race/map, repeated routes, broad audio/timing checks, cold/warm and lower-spec limits remain |
+
+The matched baseline build's 332 generated compile commands were compared with
+the staged PGO USE commands and differ only by `-fprofile-use`; both retain the
+same source list (without unused main registration), SSE4.1 and exception flags.
+See `matched-compile-check.txt`. Completion of that build and binary/runtime
+verification are separate gates, not implied by this command comparison.
+
 ## Starting state — 2026-09-09 UTC
 
 The initial branch switch preserved the existing uncommitted renderer/runtime
@@ -468,3 +495,67 @@ the unused main registration unit excluded just like the candidate, is running
 with four compiler jobs (`build-matched-baseline.log`). The actual compile
 database passes the 326-shard OFF-mode isolation check. The saved original
 baseline and PGO packages remain available independently of this build tree.
+
+The matched non-PGO build completed successfully and is staged independently as
+`compiler-matched-baseline`. Both packages have identical runtime and renderer
+hashes. Matched executable sizes are 101,242,368 bytes OFF and 99,198,976 bytes
+USE: approximately 2.02% smaller with PGO. The old baseline was 108,432,896
+bytes, so its combined reduction must not be attributed entirely to PGO.
+The matched baseline map run `20260909T061856Z-p41396` exited normally; PGO's
+matching map run is now underway. Scene and performance qualification remain
+separate from this verified build-size comparison.
+
+Matched PGO map session `20260909T061944Z-p48828` exited normally. Both map
+sessions passed exact-session collection and used byte-identical settings.
+The map image's mean absolute channel difference is 0.997 on the 0–255 scale.
+Free-roam/return differences are 10.71/17.46 with differing vehicle positions;
+do not mislabel those moving-scene differences as a compiler rendering defect
+or treat the images as pixel-equivalent correctness proof.
+
+Matched baseline race session `20260909T062031Z-p2304` exited normally. The
+existing `first_race_hud_summary` check passed on `race-moving`, and visual
+inspection confirms the car on track with lap 1/2, place 8/8 and the standings
+HUD. The event-menu capture also identifies Recaro Rush. This verifies the
+held-out scenario actually entered a race. The matching PGO race is running;
+paired performance conclusions remain pending.
+
+PGO race session `20260909T062220Z-p50776` exited normally, passed exact-session
+collection and the existing race HUD check, and visually reached the track.
+Settings match baseline byte-for-byte. Vehicle-position differences are below
+0.05 world units through race-ready and 0.237 at race-moving. NPC animation and
+the standings highlight differ between captures; these short stills do not
+qualify animation timing or audio.
+
+First matched race pair, cumulative CSV window 70–75 seconds:
+
+| Run | Median ms | p95 ms | p99 ms | Process CPU core equivalents |
+| --- | ---: | ---: | ---: | ---: |
+| OFF a1 | 26.030 | 110.526 | 119.631 | 3.031 |
+| USE b1 | 22.705 | 118.849 | 124.957 | 3.014 |
+
+Both process estimates use only five samples over roughly 4.15 seconds and
+their clock is separate from cumulative CSV time. Both CSV windows report zero
+invalid simulation deltas/XMA stall recoveries and about 5.05 seconds of
+simulation. This pair shows mixed frame metrics and nearly unchanged process
+CPU, not a reproducible PGO win. The high tails recur in both variants. Reverse
+order repetition has started (`matched-race-b2`); retain per-run results and
+do not pool frames to conceal run-level uncertainty.
+
+The reverse-order pair completed normally and passed exact-session collection
+and race HUD checks: USE b2 `20260909T062400Z-p46712`, then OFF a2
+`20260909T062534Z-p51312`. Same 70–75 second summary:
+
+| Run | Median ms | p95 ms | p99 ms | Process CPU core equivalents |
+| --- | ---: | ---: | ---: | ---: |
+| USE b2 | 22.296 | 107.667 | 124.629 | 2.911 |
+| OFF a2 | 23.634 | 119.138 | 135.263 | 2.887 |
+
+Across the first four runs PGO has lower medians, inconsistent tail improvement
+and no consistent process CPU reduction. A third pair is underway. Retain the
+short five-sample CPU-window limitation when interpreting small differences.
+Inspection of the first three CSVs groups 20–25 frames above 80 ms per window;
+their GPU timing samples average roughly 40–44 ms. Recorded command-buffer
+stalls, readback wait time and memexport fence waits are zero in those groups.
+This shows substantial concurrent GPU cost, not complete CPU/GPU critical-path
+attribution, and zero specific counters do not prove absence of other waits.
+Raw grouped evidence is in `race-tail-counters.json`.
