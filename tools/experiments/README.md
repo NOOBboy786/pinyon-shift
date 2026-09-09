@@ -4,6 +4,13 @@ These patches preserve diagnostic edits separately from renderer work that was
 already dirty when the experiment branch began. They are already applied in
 the current working tree; do not apply them again there.
 
+The recommended build-only change is `non-renderer-registration.patch`. It
+applies independently at the project root against starting commit `f4c39de`;
+both forward application against that file and reverse application against the
+tested current file were checked. It excludes the unused main registration
+translation unit while retaining the image mapping table and facade entries.
+The remaining patches below are optional diagnostic infrastructure.
+
 - `non-renderer-tooling.patch` applies at the project root against the three
   original files in the private `baseline-20260909T050809Z/project/files`
   snapshot. It adds isolated build selection, performance-only recording,
@@ -19,7 +26,7 @@ the current working tree; do not apply them again there.
   at hard exit are omitted. Profiling overhead still prevents treating its
   measurements as an uninstrumented performance comparison.
 
-Both passed `git apply --reverse --check` against the tested working files.
+All passed `git apply --reverse --check` against the tested working files.
 Preserved line endings matter for the tooling patch. Before integrating either,
 apply it to the corresponding prerequisite revision and run the recorder's
 `--self-test`, an isolated launch, and the read-profiling on/off checks as

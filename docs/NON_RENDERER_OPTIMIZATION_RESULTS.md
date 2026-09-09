@@ -5,20 +5,20 @@ Plan: [optimization research](NON_RENDERER_OPTIMIZATION_RESEARCH.md).
 
 ## Current decision status
 
-No runtime optimization is recommended for merge yet. Build/profile collection
+No runtime optimization is recommended for merge. Build/profile collection
 controls have working smoke evidence; hardware requirements and broad gameplay
 correctness are not qualified. The following table is a scope audit, not a
 replacement for the experiments below.
 
 | Item | Evidence now | Required next decision |
 | --- | --- | --- |
-| CPU-01 | Frozen identities/flags; repeated CPU/frame/I/O samples; thread CPU attribution | Useful baseline established; scheduling wait durations and instruction stacks remain unavailable |
+| CPU-01 | Frozen identities/flags; repeated CPU/frame/I/O samples; thread CPU and aggregated guest-wait durations | Bounded baselines established; OS ready-time/context-switch traces and instruction stacks remain unavailable |
 | CPU-02 | Six stationary runs, runtime-only change, matched settings/poses | Retain tracing ON; no consistent runtime benefit from OFF |
 | CPU-03 | Six stationary runs; smaller code; variable results | Keep IPO OFF; no reliable runtime win in this experiment |
 | CPU-04 | Three-scene training; map check; six held-out race runs | Keep PGO OFF; 2.02% smaller executable, no consistent runtime win |
 | CPU-05 | Unused main registration excluded; normal/PGO builds, map and repeated race checks | Recommend the narrow build exclusion; defer O2/O3 sweeps without hot-path evidence |
 | CPU-06 | Frequent small helpers plus measured guest-thread CPU use | Explicitly defer register/native-function changes: counts and thread totals do not identify instruction cost |
-| IO-01 | Warm town synchronous-read durations measured; process I/O samples | Timed reads do not explain large warm-run stalls; open/stat and cold-storage latency unresolved |
+| IO-01 | Warm town read and VFS open/create durations, including failed lookups; process I/O samples | Measured warm paths do not explain large stalls; cold storage and unrelated metadata syscalls remain unqualified |
 | IO-02 | Warm gameplay sample: 161 reads take 2.471 ms total | Explicitly defer async/coalescing rewrite; current evidence does not justify its semantic risk |
 | RT-01 | Frequent polling candidate; command and guest threads both consume CPU | Explicitly defer scheduling/polling changes until the polling function's time and wait behavior are measured |
 | RT-02 | No recorded XMA stalls/recoveries in analyzed windows; no timed decompression hotspot | Explicitly defer audio/decompression changes; absence of counters is not broad audio qualification |
@@ -748,7 +748,7 @@ application checks; committed patch bytes match the checked files; all 680
 frozen generated files match their initial hashes. Existing dirty renderer work
 was neither reverted nor swept into the experiment commits.
 
-The objective remains open at this audit. Thread CPU totals and two state
+At this earlier audit the objective remained open. Thread CPU totals and two state
 snapshots do not establish scheduling wait durations, and the warm read-call
 probe does not cover open/stat latency or cold storage. Those are explicitly
 weaker than complete scheduling/I/O attribution. The runtime flag experiments
@@ -823,3 +823,38 @@ or determine which producer a wait depends on. No scheduler change is justified
 from these totals; RT-01 remains explicitly deferred. The profile is archived
 as a separate SDK patch and the recorder patch recognizes its aggregate lines.
 Default-off gameplay verification is running before final review.
+
+## Final research disposition
+
+The aggregate diagnostic's default-off town session
+`20260909T065943Z-p36648` completed normally, passed exact-session collection,
+and emitted neither wait nor I/O profiling lines. The recorder self-test passed.
+Guest-object wait-duration and VFS open/create probes described above close the
+bounded measurement gaps from the earlier audit; OS scheduler traces and cold
+storage remain explicit limits, not silently inferred measurements.
+
+The research produced one recommended build-only change: omit unused main
+registration compilation. `tools/experiments/non-renderer-registration.patch`
+is a focused export, checked independently against starting project commit
+`f4c39de` and against the tested current file. It does not require adopting the
+PGO, tracing or profiling controls. Build savings and normal/PGO map/race
+qualification are recorded above. No runtime numerical, timing, memory-order,
+save, wait or I/O policy change is recommended.
+
+CPU-02/03/04 have bounded measured negative runtime conclusions; CPU-05 retains
+the build exclusion and defers an unbounded flag sweep. CPU-06, IO-02 and
+RT-01/02 are explicitly deferred on their recorded attribution evidence.
+QUAL-01 supports the limited build recommendation through successful builds,
+exact sessions, matched captures/poses, simulation counters and repeated races;
+it does not qualify experimental compiler settings for general release.
+Long-play audio/NPC timing, cold-media behavior and lower-spec hardware would
+be required before broader performance or compatibility claims. No such claim,
+merge, push or release was made by this experiment.
+
+The final checks revalidated three staged package manifests, all 12 repeated
+race/tracing sessions, compiler isolation and session-collector regressions,
+all 680 frozen generated-file hashes, and the saved patch payloads. The branch
+retains pre-existing dirty renderer work separately; optional diagnostic edits
+are exported with their prerequisites rather than included through an unrelated
+SDK pointer update. This is completion of the bounded research/merge-candidate
+evaluation, not completion of every possible recomp optimization.
