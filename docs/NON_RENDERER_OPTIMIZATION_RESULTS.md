@@ -12,17 +12,17 @@ replacement for the experiments below.
 
 | Item | Evidence now | Required next decision |
 | --- | --- | --- |
-| CPU-01 | Frozen source/module identities, effective flags, live CPU/memory recorder | Repeated uninstrumented scene runs; CPU ownership remains unmeasured |
-| CPU-02 | Trace-only DLL builds and one short pair | Several matched pairs with process CPU and frame tails; do not disable diagnostics by default yet |
-| CPU-03 | Successful ThinLTO build; smaller code; four variable stationary runs | No demonstrated FPS win; qualify footprint independently or defer default enablement |
-| CPU-04 | Three-scene training, explicit main profile dump, successful USE build | Matched OFF/USE held-out tests and repeated timing comparisons |
-| CPU-05 | Unused main registration omitted; PGO build and driving smoke pass | Complete normal build/scene verification; avoid attributing combined image-size changes to PGO |
-| CPU-06 | Frequent small helpers identified by profile counts | Obtain CPU-time evidence before localized-register or native-function replacements |
-| IO-01 | Synchronous read path confirmed; process I/O samples work; WPR denied | I/O volume does not prove critical-path latency; attribution still missing |
-| IO-02 | Conditional, no implementation | Defer async/coalescing changes until IO-01 supports them |
-| RT-01 | Frequent guest delay/polling candidate with no-op delay hints | Measure candidate CPU cost and scheduling effect before changing behavior |
-| RT-02 | Sampled XMA stall counters, no stalls in one short training window | No audio/decompression hotspot established; no speculative rewrite |
-| QUAL-01 | Short captures, session/exit checks and simulation counters | Held-out race/map, repeated routes, broad audio/timing checks, cold/warm and lower-spec limits remain |
+| CPU-01 | Frozen identities/flags; repeated CPU/frame/I/O samples; thread CPU attribution | Useful baseline established; scheduling wait durations and instruction stacks remain unavailable |
+| CPU-02 | Six stationary runs, runtime-only change, matched settings/poses | Retain tracing ON; no consistent runtime benefit from OFF |
+| CPU-03 | Six stationary runs; smaller code; variable results | Keep IPO OFF; no reliable runtime win in this experiment |
+| CPU-04 | Three-scene training; map check; six held-out race runs | Keep PGO OFF; 2.02% smaller executable, no consistent runtime win |
+| CPU-05 | Unused main registration excluded; normal/PGO builds, map and repeated race checks | Recommend the narrow build exclusion; defer O2/O3 sweeps without hot-path evidence |
+| CPU-06 | Frequent small helpers plus measured guest-thread CPU use | Explicitly defer register/native-function changes: counts and thread totals do not identify instruction cost |
+| IO-01 | Warm town synchronous-read durations measured; process I/O samples | Timed reads do not explain large warm-run stalls; open/stat and cold-storage latency unresolved |
+| IO-02 | Warm gameplay sample: 161 reads take 2.471 ms total | Explicitly defer async/coalescing rewrite; current evidence does not justify its semantic risk |
+| RT-01 | Frequent polling candidate; command and guest threads both consume CPU | Explicitly defer scheduling/polling changes until the polling function's time and wait behavior are measured |
+| RT-02 | No recorded XMA stalls/recoveries in analyzed windows; no timed decompression hotspot | Explicitly defer audio/decompression changes; absence of counters is not broad audio qualification |
+| QUAL-01 | Normal exits, exact sessions, simulation counters, held-out map/race and matched poses | No broad runtime optimization is qualified; cold storage, lower-spec, long-play audio/NPC timing remain limitations |
 
 The matched baseline build's 332 generated compile commands were compared with
 the staged PGO USE commands and differ only by `-fprofile-use`; both retain the
@@ -724,3 +724,34 @@ additional discovery recorder. In the same 32–43 second CSV window:
 does not resolve the earlier inconsistent pairs or establish stable tail/CPU
 improvement. The code-footprint reduction remains valid; it is not evidence of
 lower hardware requirements. `compiler-third-pair.json` retains this pair.
+
+## Merge recommendation and remaining audit gaps
+
+Recommend the narrow exclusion of the unused main registration translation
+unit in `cmake/PinyonShiftRexGlue.cmake`. It removes a verified expensive compile
+and about 7.19 MB from the non-PGO executable in these builds; the entrypoint
+still registers through `PPCFuncMappings`, and facade registration is retained.
+Normal builds, map checks and repeated races exercised the resulting package.
+This is a build/footprint improvement, not a demonstrated gameplay FPS gain.
+It is currently part of `bd79dea` alongside the training-profile exit fix;
+reviewers wanting only the exclusion should take just that CMake hunk.
+
+The default-off IPO/PGO controls, exact-session collector and frozen-build
+checker are useful experiment infrastructure, not production optimization
+presets. Keep trace logging ON, IPO OFF and PGO OFF. Do not merge the diagnostic
+patches as performance fixes; their README records prerequisite work and their
+on/off smoke checks. No SDK pointer update, remote merge or release was made.
+
+Final checks so far: both compiler package isolation checks and collector/
+checker regression tests pass; both saved diagnostic patches pass reverse
+application checks; committed patch bytes match the checked files; all 680
+frozen generated files match their initial hashes. Existing dirty renderer work
+was neither reverted nor swept into the experiment commits.
+
+The objective remains open at this audit. Thread CPU totals and two state
+snapshots do not establish scheduling wait durations, and the warm read-call
+probe does not cover open/stat latency or cold storage. Those are explicitly
+weaker than complete scheduling/I/O attribution. The runtime flag experiments
+have measured dispositions; their negative results do not fill these remaining
+measurement gaps or qualify broad animation/audio correctness. No lower
+hardware requirement is claimed.
