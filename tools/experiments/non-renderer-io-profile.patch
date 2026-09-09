@@ -1,0 +1,44 @@
+diff --git a/src/kernel/xboxkrnl/xboxkrnl_io.cpp b/src/kernel/xboxkrnl/xboxkrnl_io.cpp
+index f6a36bf..2b9831e 100644
+--- a/src/kernel/xboxkrnl/xboxkrnl_io.cpp
++++ b/src/kernel/xboxkrnl/xboxkrnl_io.cpp
+@@ -12,6 +12,9 @@
+ // Disable warnings about unused parameters for kernel functions
+ #pragma GCC diagnostic ignored "-Wunused-parameter"
+ 
++#include <chrono>
++#include <rex/cvar.h>
++
+ #include <rex/filesystem/device.h>
+ #include <rex/kernel/xboxkrnl/private.h>
+ #include <rex/logging.h>
+@@ -29,6 +32,9 @@
+ #include <rex/system/xtypes.h>
+ #include <rex/thread/mutex.h>
+ 
++REXCVAR_DEFINE_BOOL(profile_guest_file_reads, false, "Kernel",
++                   "Log synchronous guest read durations for isolated profiling runs");
++
+ namespace rex::kernel::xboxkrnl {
+ using namespace rex::system;
+ 
+@@ -267,9 +273,19 @@ u32 NtReadFile_entry(u32 file_handle, u32 event_handle, mapped_void apc_routine_
+   if (XSUCCEEDED(result)) {
+     if (true || file->is_synchronous()) {
+       // Synchronous.
++      const bool profile_read = REXCVAR_GET(profile_guest_file_reads);
++      const auto read_start = profile_read ? std::chrono::steady_clock::now()
++                                          : std::chrono::steady_clock::time_point{};
+       result = file->Read(buffer.guest_address(), buffer_length,
+                           byte_offset_ptr ? static_cast<uint64_t>(*byte_offset_ptr) : -1,
+                           &bytes_read, apc_context.guest_address());
++      if (profile_read) {
++        const auto read_us = std::chrono::duration_cast<std::chrono::microseconds>(
++            std::chrono::steady_clock::now() - read_start).count();
++        REXKRNL_INFO("IO_PROFILE read handle={:08X} requested={} bytes={} us={} status={:08X}",
++                     static_cast<uint32_t>(file_handle), static_cast<uint32_t>(buffer_length),
++                     bytes_read, read_us, static_cast<uint32_t>(result));
++      }
+       if (io_status_block) {
+         io_status_block->status = result;
+         io_status_block->information = bytes_read;

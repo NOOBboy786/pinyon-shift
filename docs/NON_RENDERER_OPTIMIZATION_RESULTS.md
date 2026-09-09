@@ -559,3 +559,168 @@ stalls, readback wait time and memexport fence waits are zero in those groups.
 This shows substantial concurrent GPU cost, not complete CPU/GPU critical-path
 attribution, and zero specific counters do not prove absence of other waits.
 Raw grouped evidence is in `race-tail-counters.json`.
+
+Third pair completed normally: OFF a3 `20260909T062718Z-p53052`, USE b3
+`20260909T062852Z-p2656`. All six runs pass exact-session collection, race HUD
+checks and byte-identical settings comparison. Final pair:
+
+| Run | Median ms | p95 ms | p99 ms | Process CPU core equivalents |
+| --- | ---: | ---: | ---: | ---: |
+| OFF a3 | 23.790 | 108.524 | 137.264 | 2.988 |
+| USE b3 | 23.859 | 122.669 | 149.849 | 3.168 |
+
+**PGO disposition for this training corpus and configuration: leave OFF by
+default.** Two lower medians followed by a slight regression, inconsistent
+tails and no consistent CPU reduction do not establish a runtime benefit.
+The roughly 2% executable-size reduction is real but does not establish lower
+RAM/GPU requirements. `matched-race-six-runs.json` retains all run-level metrics.
+This is a bounded negative result for the current experiment, not a claim that
+PGO cannot help another corpus, CPU-bound setting or combined LTO build.
+Do not broaden into a flag sweep without new attribution evidence.
+
+CPU-02 repeated evaluation has started with `trace-stationary-a1`. Before
+launch, hashes confirmed the tracing packages differ only in `rexruntime.dll`
+among the five game modules (`trace-pair-module-check.json`). These packages
+are a separate comparison from the compiler packages and must not be mixed
+into their performance results.
+
+First tracing stationary pair completed normally with exact-session collection:
+ON a1 `20260909T063042Z-p52704`, OFF b1 `20260909T063150Z-p52612`.
+The ON endpoint capture shows the stationary car at the Recaro Rush event.
+The 32–43 second CSV/process summaries are:
+
+| Run | Median ms | p95 ms | p99 ms | Process CPU core equivalents |
+| --- | ---: | ---: | ---: | ---: |
+| Trace ON a1 | 17.145 | 21.502 | 23.896 | 3.267 |
+| Trace OFF b1 | 16.688 | 21.547 | 25.319 | 3.234 |
+
+Each process estimate has 11 samples over about 10.48 seconds. Both windows
+report approximately 11 seconds of simulation and zero recorded invalid
+simulation deltas/XMA stalls/recoveries. This first pair is mixed and cannot
+justify disabling import reachability diagnostics. Reverse-order repetition
+is underway (`trace-stationary-b2`).
+
+Reverse tracing pair completed normally with exact-session collection: OFF b2
+`20260909T063255Z-p48520`, ON a2 `20260909T063359Z-p24608`.
+
+| Run | Median ms | p95 ms | p99 ms | Process CPU core equivalents |
+| --- | ---: | ---: | ---: | ---: |
+| Trace OFF b2 | 16.777 | 21.556 | 29.510 | 3.248 |
+| Trace ON a2 | 16.642 | 20.784 | 24.179 | 3.202 |
+
+The first three runs have byte-identical settings and endpoint coordinates
+within 0.001 world units, with no vehicle motion between their captures. The
+reverse pair does not reproduce an advantage for tracing OFF; ON a2 is better
+on all four listed metrics. A third pair is underway. Do not choose a default
+from the first favorable pair or discard this negative replication.
+
+Final tracing pair: ON a3 `20260909T063506Z-p38620`, OFF b3
+`20260909T063609Z-p32252`; both exited normally and passed exact-session
+collection. All six settings files are byte-identical.
+
+| Run | Median ms | p95 ms | p99 ms | Process CPU core equivalents |
+| --- | ---: | ---: | ---: | ---: |
+| Trace ON a3 | 17.140 | 22.471 | 25.382 | 3.218 |
+| Trace OFF b3 | 16.536 | 20.784 | 24.843 | 3.449 |
+
+**CPU-02 disposition: retain tracing ON by default.** OFF has small median wins
+in two pairs, loses the reverse pair, and has no consistent CPU or tail benefit.
+Keep the OFF build control for controlled diagnostics experiments, not as a
+qualified performance preset. Full run-level results are `trace-six-runs.json`.
+
+A private `thread-snapshot.ps1` probe uses .NET thread CPU totals and Win32
+thread descriptions with query-only handles; thread/process creation timestamps
+allow rejection of ID reuse. Its live own-process check returned thread times
+without errors. It does not suspend threads or modify scheduling. A separate
+game attribution run is still required. These totals identify CPU consumption
+by thread, not instruction stacks, wait duration or critical-path causality.
+See [Microsoft's thread timing contract](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getthreadtimes).
+
+### Live thread CPU attribution
+
+Separate stationary baseline session `20260909T063808Z-p37796` exited normally
+and passed exact-session collection. Two query-only snapshots during gameplay
+span 10.052 seconds. The matched thread CPU deltas sum to 33.75 CPU-seconds,
+equal to the process delta, with creation timestamps checked against ID reuse.
+
+| Thread description | CPU seconds | Share of process CPU |
+| --- | ---: | ---: |
+| XThread9D5C (F8001174) | 9.516 | 28.2% |
+| GPU Commands (F8000018) | 8.875 | 26.3% |
+| XThreadCC50 (F8000054) | 5.969 | 17.7% |
+| XThread3BE0 (F80012D0) | 2.516 | 7.5% |
+| XThread76EC (F8001338) | 1.281 | 3.8% |
+| rex::thread::TimerQueue | 0.906 | 2.7% |
+
+Artifacts: `thread-attribution-01/threads-before.json`, `threads-after.json`,
+and `thread-deltas.json`. Thread descriptions identify objects, not guest
+entry-point addresses. Existing logs associate the highest CPU guest thread
+with the opening-movie path and another with a cleanup event, but those isolated
+events do not identify what those threads execute during this measurement.
+Do not equate their CPU totals with the frequent polling function's cost.
+Two instantaneous thread states also cannot establish wait duration.
+
+This narrows CPU-01: command processing and guest execution both matter in this
+stationary scene. I/O critical-path attribution is still missing; the next
+useful measurement is synchronous read duration by thread, not more compiler
+flag combinations. The snapshot overhead belongs to this separate attribution
+run and is excluded from the six-run performance comparisons.
+
+### Synchronous-read duration probe
+
+An opt-in `profile_guest_file_reads` cvar (default false) times the actual
+`XFile::Read` call inside `NtReadFile_entry`, logging after the timer ends.
+It preserves the existing result, byte count, APC and event handling. The
+isolated runtime built successfully. The discovery wrapper can now append
+JSON-specified game arguments, and its log archive recognizes `IO_PROFILE`.
+These are diagnostic edits, not a faster I/O implementation.
+
+Town session `20260909T064157Z-p37956` completed and exited normally; exact-session
+collection passed. The first recorder process predated the new archive filter,
+so its complete runtime log was copied immediately after exit and parsed only
+inside the matching `logging.ready` PID boundary. Artifacts are in
+`io-attribution-town-01/runtime-capture.log` and `read-duration-summary.json`.
+
+- Whole run: 4,538 reads, 189,552,853 returned bytes, 91.103 ms total measured
+  duration across threads; maximum 6.586 ms, three reads above 1 ms, none above
+  10 ms.
+- Local logger interval 00:42:29–00:42:39 (approximately run seconds 32–42):
+  161 reads, 4,395,347 returned bytes, 2.471 ms total, maximum 98 microseconds.
+
+**IO-02 disposition: defer asynchronous/coalesced read changes.** This
+warm-cache town sample does not support synchronous read duration as the cause
+of large frame stalls. It does not qualify cold disks or exclude costs outside
+the timed call (object lookup, file open/stat, decompression, other read paths).
+Per-read logging adds overhead outside the measured interval, so this run must
+not be used as a performance baseline. The default-off branch and full
+save/APC behavior still require normal-build regression review before retaining
+the diagnostic as a mergeable change; the probe alone justifies no runtime
+I/O rewrite. Recorder self-test and diff whitespace checks passed.
+
+The diagnostic's default-off session `20260909T064407Z-p46380` completed
+normally and passed exact-session collection. Parsing its matching runtime-log
+session found no `IO_PROFILE` lines. This verifies the off path and command-line
+opt-in behavior in actual gameplay, not broad save/APC correctness under every
+error condition. Reviewable patches for the diagnostic and inherited tooling
+are preserved under `tools/experiments/`, with prerequisite identities and
+application instructions. They passed reverse-application checks against the
+tested working files; unrelated renderer/SDK edits remain separate.
+
+### ThinLTO final repetition
+
+The third original-baseline/ThinLTO pair completed normally and passed exact
+session collection: OFF `20260909T064540Z-p5936`, ThinLTO
+`20260909T064645Z-p44508`. The config hash still matches the earlier four runs
+(`e267dcac701a0e14a92df00aa059c2fb639d5a0b32b7d3dc279a00a5c974afc7`).
+The original direct-launch/performance-CSV method was retained, without the
+additional discovery recorder. In the same 32–43 second CSV window:
+
+| Run | Median ms | p95 ms | p99 ms |
+| --- | ---: | ---: | ---: |
+| OFF a3 | 17.019 | 21.220 | 25.063 |
+| ThinLTO b3 | 16.361 | 20.896 | 26.140 |
+
+**CPU-03 disposition: leave IPO OFF by default.** This final modest median win
+does not resolve the earlier inconsistent pairs or establish stable tail/CPU
+improvement. The code-footprint reduction remains valid; it is not evidence of
+lower hardware requirements. `compiler-third-pair.json` retains this pair.

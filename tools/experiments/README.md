@@ -1,0 +1,24 @@
+# Non-renderer experiment patches
+
+These patches preserve diagnostic edits separately from renderer work that was
+already dirty when the experiment branch began. They are already applied in
+the current working tree; do not apply them again there.
+
+- `non-renderer-tooling.patch` applies at the project root against the three
+  original files in the private `baseline-20260909T050809Z/project/files`
+  snapshot. It adds isolated build selection, performance-only recording,
+  process I/O counters and extra diagnostic arguments to the existing tools.
+  The discovery tools were originally untracked, so this is a dependent patch,
+  not a standalone change against project HEAD.
+- `non-renderer-io-profile.patch` applies inside `thirdparty/shiftglue-sdk`
+  against SDK commit `6db74f6de0230727358d93f8a221f40fbba6a792`. It adds a
+  default-off synchronous-read duration diagnostic. It changes no I/O policy.
+
+Both passed `git apply --reverse --check` against the tested working files.
+Preserved line endings matter for the tooling patch. Before integrating either,
+apply it to the corresponding prerequisite revision and run the recorder's
+`--self-test`, an isolated launch, and the read-profiling on/off checks as
+applicable. Do not stage unrelated SDK or renderer changes with these patches.
+
+Measurements, sessions, caveats and merge decisions are recorded in
+[the results ledger](../../docs/NON_RENDERER_OPTIMIZATION_RESULTS.md).
