@@ -15,7 +15,7 @@ records source file hashes and binary hashes. It contains no save-file copies.
 This private snapshot distinguishes pre-existing changes from experiment changes;
 it is not a clean source revision or proof that the binaries match current source.
 
-| Component | Starting SHA-256 |
+| Component | Starting identity |
 | --- | --- |
 | Project HEAD | `f4c39de29fb456a0a258fb18d04c45347d573e06` (Git commit, not SHA-256) |
 | SDK HEAD | `6db74f6de0230727358d93f8a221f40fbba6a792` (Git commit, not SHA-256) |
@@ -44,8 +44,8 @@ it is not a clean source revision or proof that the binaries match current sourc
 
 | Item | State | Evidence still required |
 | --- | --- | --- |
-| CPU-01 baseline and effective flags | In progress: starting snapshot saved; isolated baseline configuration underway | Matched workload measurements, symbols and compiler semantics audit |
-| CPU-02 tracing/counters | Pending | Independent baseline/candidate timing and retained diagnostics |
+| CPU-01 baseline and effective flags | In progress: starting snapshot saved; isolated baseline configured successfully | Matched workload measurements, symbols and compiler semantics audit |
+| CPU-02 tracing/counters | Both import-tracing variants built; 95 runtime commands compared | Independent baseline/candidate timing and retained diagnostics |
 | CPU-03 ThinLTO | Pending | Qualified isolated build and matched results |
 | CPU-04 PGO | Pending | Broad multi-module profiles and held-out validation |
 | CPU-05 optimization level/code size | Pending attribution | Hot-code evidence |
@@ -60,3 +60,63 @@ it is not a clean source revision or proof that the binaries match current sourc
 
 None yet. Documentation establishes the experiment plan; no runtime or compiler
 change is qualified for merging. Keep the goal active.
+
+## Build preparation
+
+`out/build/non-renderer-baseline` configured successfully with the existing
+Release preset and `CMAKE_EXPORT_COMPILE_COMMANDS=ON` (Clang 20.1.8, SSE4.1,
+Tracy off, performance counters on). Configuration took approximately 111 s.
+The source-built SDK artifact directory resolves inside this isolated build.
+Configuration output is in `.local/non-renderer-optimization/configure-baseline.log`.
+
+The first compilation targets `rexruntime` with eight build workers and the
+release wrapper's `SOURCE_DATE_EPOCH=1784764800`. It does not invoke the game
+codegen target or replace preview binaries. Output is in
+`.local/non-renderer-optimization/build-baseline-runtime.log`; compilation and
+runtime qualification are still pending. This baseline is preparation for
+CPU-02, not a timing result.
+
+## CPU-02: import-reach tracing isolation
+
+Both `rexruntime` compilations completed successfully. The default tracing build
+is staged in `.local/non-renderer-optimization/trace-on`; the candidate is staged
+in `trace-off`. Each package contains the same saved executable, renderer and
+facade DLLs. Their binary manifests confirm only the runtime DLL differs:
+
+- Trace on: `f081e42d97b3a39f5b8f0b6877f8b8d904f7bc58c0d213bc194d4b0b3773ad3e`.
+- Trace off: `b06f8acae05497c630ea2201a6593f773455dfe807857bb2fbe53924f7df5413`.
+
+All 95 runtime compile commands were compared against the saved baseline. They
+differ only by removal of `-DREXGLUE_TRACE_IMPORTS=1`; source paths and remaining
+options match. The candidate retains performance counters. Build logs and
+`trace-command-check.txt` are stored beside the packages.
+
+The experimental CMake option `PINYON_SHIFT_TRACE_IMPORTS` defaults to ON, preserving
+preview behavior. The existing launcher now accepts optional `-BuildDirectory`
+and resolves both the game executable and shader producer within it. PowerShell
+syntax validation passed. The launcher already had unrelated renderer changes;
+only the new parameter and build-path substitutions belong to this experiment.
+
+A smoke-test attempt was stopped by the pre-launch process check: the regular
+preview was running as PID 53164 from `out/build/win-amd64-release`, starting at
+2026-09-08 23:12:52 local time. It was not stopped or replaced. Runtime smoke tests,
+matched CPU/frame measurements, and any performance conclusion remain pending.
+
+## CPU-03/04: compiler capability probe
+
+A two-function, non-game executable/DLL probe passed with the installed LLVM
+20.1.8 toolchain: `-O3 -msse4.1 -flto=thin -fuse-ld=lld-link`, IR instrumentation
+via `-fprofile-generate -fprofile-update=atomic`, per-module/process profile
+filenames, `llvm-profdata merge`, and a separately linked profile-use build.
+The merged data contained both `main` and the exported DLL function `probe`;
+the profile-use executable returned success with the optimized DLL.
+
+Sources, profile data, summary and success marker are under
+`.local/non-renderer-optimization/compiler-probe/`. The profile runtime library
+and `llvm-profdata.exe` are present in the pinned toolchain. Initial PowerShell
+argument-parsing attempts failed before compilation and were corrected using
+quoted argument arrays; the final compiler and execution checks passed.
+
+This establishes toolchain capability only. It does not validate PPC exception
+semantics, game profile coverage, or performance. CPU-03 and CPU-04 remain pending
+on actual game builds and qualification.

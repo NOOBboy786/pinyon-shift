@@ -14,6 +14,8 @@ set(REXGLUE_ENABLE_TRACY OFF CACHE BOOL
     "Disable Tracy networking in Pinyon Shift builds" FORCE)
 set(PINYON_SHIFT_CAPTURE_PERFORMANCE ON CACHE BOOL
     "Capture lightweight per-frame performance counters in preview builds")
+option(PINYON_SHIFT_TRACE_IMPORTS
+    "Record first-use guest import reachability diagnostics" ON)
 
 if(PINYON_SHIFT_CAPTURE_PERFORMANCE)
     # ReXGlue keeps lightweight counters out of Release by default even when
@@ -58,7 +60,7 @@ if(REXSDK_DIR)
     endif()
     set(PINYON_SHIFT_REXGLUE_CODEGEN_DEPENDS
         "${PINYON_SHIFT_REXGLUE_CODEGEN}")
-    if(TARGET rexruntime)
+    if(TARGET rexruntime AND PINYON_SHIFT_TRACE_IMPORTS)
         target_compile_definitions(rexruntime PRIVATE REXGLUE_TRACE_IMPORTS=1)
     endif()
     message(STATUS "Using ReXGlue SDK from source tree: ${REXSDK_DIR}")
