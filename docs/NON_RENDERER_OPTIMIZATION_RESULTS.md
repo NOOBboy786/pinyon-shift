@@ -212,3 +212,46 @@ ThinLTO reached its final executable link. A partial observation of linker PID
 neither the complete build peak nor necessarily the final link peak. The raw
 observation is in `thinlto-link-observation.json`. Link completion and runtime
 results remain pending.
+
+ThinLTO subsequently linked successfully. Its package is staged in
+`compiler-thinlto/`. Initial manifest validation caught a changed runtime hash
+despite the intended generated-only IPO scope. The candidate package therefore
+explicitly reuses the preserved compiler-baseline runtime and renderer DLLs;
+their hashes are verified equal. Only the executable and generated facade DLLs
+come from the ThinLTO build. The unexpected rebuilt runtime is not used to infer
+an IPO benefit. Candidate binary manifests, sections and effective commands are
+stored in that package. Runtime smoke and matched benchmarks are still pending.
+
+## Initial compiler gameplay comparisons
+
+The frozen baseline and ThinLTO packages both completed the stationary open-world
+script with normal exit and matching settings. Captures were inspected side by
+side: both show the same roadside event scene and parked car, without an obvious
+large visual difference. This is a smoke check, not full visual or semantic
+qualification. Test hardware is Ryzen 7 5800X, RTX 4080, approximately 128 GiB
+RAM; device/driver details are saved in `hardware.json`.
+
+Initial 32–43 s cumulative-CSV windows, excluding the capture boundaries:
+
+| Run | Variant | Median frame ms | p95 frame ms |
+| --- | --- | --- | --- |
+| compiler-a1 | Baseline | 16.610 | 20.518 |
+| compiler-b1 | ThinLTO | 19.945 | 25.682 |
+| compiler-b2-retry | ThinLTO | 16.989 | 21.115 |
+| compiler-a2 | Baseline | 18.401 | 24.887 |
+
+The second ThinLTO run materially differs from the first; no consistent benefit
+or regression is established. The reverse-order baseline also varied notably.
+All four completed sessions and identical settings hashes are recorded in
+`compiler-abba-summary.json`. More attribution and workload coverage are needed;
+these results do not justify enabling IPO by default.
+The first pair accumulated approximately 11 s of simulation time in each 11 s
+window, but this does not establish NPC/UI timing correctness.
+
+An attempted `compiler-b2` exited before gameplay because the wrapper had
+pre-created the output folder, which the render-test API rejects. That attempt
+is excluded and retained for provenance. The successful retry was initially
+misclassified by a wrapper checking PowerShell's stale `$LASTEXITCODE`; its
+normal-exit JSON and completed session verify success. Subsequent wrappers
+check the launch result and session completion explicitly. Neither issue is
+evidence of a ThinLTO game crash.
