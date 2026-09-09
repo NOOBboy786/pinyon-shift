@@ -20,6 +20,30 @@ option(PINYON_SHIFT_FROZEN_CODEGEN
     "Use an existing generated snapshot without invoking the code generator" OFF)
 option(PINYON_SHIFT_RECOMP_IPO
     "Enable interprocedural optimization for generated game code and host" OFF)
+set(PINYON_SHIFT_RECOMP_PGO "OFF" CACHE STRING "Recomp PGO mode: OFF, GENERATE, USE")
+set_property(CACHE PINYON_SHIFT_RECOMP_PGO PROPERTY STRINGS OFF GENERATE USE)
+set(PINYON_SHIFT_RECOMP_PROFILE "" CACHE FILEPATH "Merged LLVM profile for PGO USE")
+if(NOT PINYON_SHIFT_RECOMP_PGO MATCHES "^(OFF|GENERATE|USE)$")
+    message(FATAL_ERROR "Invalid recomp PGO mode")
+endif()
+if(NOT PINYON_SHIFT_RECOMP_PGO STREQUAL "OFF" AND
+   NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR "Recomp PGO currently requires Clang")
+endif()
+if(PINYON_SHIFT_RECOMP_PGO STREQUAL "USE" AND
+   NOT EXISTS "${PINYON_SHIFT_RECOMP_PROFILE}")
+    message(FATAL_ERROR "PGO USE requires an existing merged LLVM profile")
+endif()
+
+function(pinyon_shift_apply_recomp_profile target_name)
+    if(PINYON_SHIFT_RECOMP_PGO STREQUAL "GENERATE")
+        target_compile_options(${target_name} PRIVATE -fprofile-generate -fprofile-update=atomic)
+        target_link_options(${target_name} PRIVATE -fprofile-generate)
+    elseif(PINYON_SHIFT_RECOMP_PGO STREQUAL "USE")
+        target_compile_options(${target_name} PRIVATE "-fprofile-use=${PINYON_SHIFT_RECOMP_PROFILE}")
+        target_link_options(${target_name} PRIVATE "-fprofile-use=${PINYON_SHIFT_RECOMP_PROFILE}")
+    endif()
+endfunction()
 if(PINYON_SHIFT_RECOMP_IPO)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT _pinyon_ipo_supported OUTPUT _pinyon_ipo_error LANGUAGES CXX)
@@ -190,6 +214,8 @@ endif()
 
 function(pinyon_shift_attach_rexglue target_name)
     add_library(${target_name}_recomp OBJECT ${PINYON_SHIFT_GENERATED_SOURCES})
+    pinyon_shift_apply_recomp_profile(${target_name}_recomp)
+    pinyon_shift_apply_recomp_profile(${target_name})
     if(PINYON_SHIFT_RECOMP_IPO)
         set_property(TARGET ${target_name}_recomp ${target_name}
             PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
@@ -253,6 +279,7 @@ function(pinyon_shift_add_generated_module target_name generated_directory gener
     set(_generated_dir
         "${PINYON_SHIFT_GENERATED_ROOT}/${generated_directory}")
     add_library(${target_name} SHARED ${generated_sources})
+    pinyon_shift_apply_recomp_profile(${target_name})
     if(PINYON_SHIFT_RECOMP_IPO)
         set_property(TARGET ${target_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
     endif()

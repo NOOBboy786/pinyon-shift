@@ -46,8 +46,8 @@ it is not a clean source revision or proof that the binaries match current sourc
 | --- | --- | --- |
 | CPU-01 baseline and effective flags | In progress: starting snapshot saved; isolated baseline configured successfully | Matched workload measurements, symbols and compiler semantics audit |
 | CPU-02 tracing/counters | Both import-tracing variants built; 95 runtime commands compared | Independent baseline/candidate timing and retained diagnostics |
-| CPU-03 ThinLTO | Pending | Qualified isolated build and matched results |
-| CPU-04 PGO | Pending | Broad multi-module profiles and held-out validation |
+| CPU-03 ThinLTO | Built; four open-world runs show substantial variance, no consistent timing gain | Broader qualification and CPU attribution; default remains OFF |
+| CPU-04 PGO | Instrumented game build in progress, IPO OFF | Verified profile writing, broad multi-module profiles and held-out validation |
 | CPU-05 optimization level/code size | Pending attribution | Hot-code evidence |
 | CPU-06 guest code/dispatch | Pending attribution | Hot-path and state-preservation evidence |
 | IO-01 streaming attribution | Pending; WPR capability check failed | Alternative attribution or an available capture session |
@@ -255,3 +255,24 @@ misclassified by a wrapper checking PowerShell's stale `$LASTEXITCODE`; its
 normal-exit JSON and completed session verify success. Subsequent wrappers
 check the launch result and session completion explicitly. Neither issue is
 evidence of a ThinLTO game crash.
+
+## PGO collection build
+
+Recomp PGO now has explicit OFF (default), GENERATE and USE build modes. USE
+requires an existing merged profile; unsupported compilers and invalid modes
+are rejected. GENERATE uses IR instrumentation and atomic counters on the host
+and generated game modules, including their final links. Runtime and renderer
+are not instrumented in this experiment. IPO is OFF to evaluate PGO separately.
+
+Configuration and effective-command checks passed: all 333 generated C++ files
+have generation/atomic-update flags, and all 326 translated shards retain the
+frozen source path, SSE4.1 and asynchronous exceptions. The runtime has no PGO
+flags. `check-recomp-experiment.py --pgo generate` and its mode-mismatch
+regression passed. The actual game collection build is still running; see
+`configure-pgo-generate.log` and `build-pgo-generate.log`.
+
+Before longer training, verify nonempty per-module raw profiles on a normal
+game exit. Planned collection covers opening video/title, stationary gameplay,
+driving and town approach. Reserve different routes/events for validation.
+An instrumented run is training evidence, not a performance result. Broad
+coverage, profile-use compilation and qualification remain incomplete.

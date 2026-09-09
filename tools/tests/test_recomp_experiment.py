@@ -22,6 +22,16 @@ class ExperimentIsolationTests(unittest.TestCase):
             ninja = build / "build.ninja"
             ninja.write_text("# frozen")
             self.assertEqual(experiment.check(build, snapshot, True), 1)
+            with self.assertRaisesRegex(ValueError, "PGO mode"):
+                experiment.check(build, snapshot, True, "generate")
+            command["command"] += " -fprofile-generate -fprofile-update=atomic"
+            commands.write_text(json.dumps([command]))
+            self.assertEqual(experiment.check(build, snapshot, True, "generate"), 1)
+            with self.assertRaisesRegex(ValueError, "PGO mode"):
+                experiment.check(build, snapshot, True, "use")
+            command["command"] = command["command"].replace(
+                " -fprofile-generate -fprofile-update=atomic", "")
+            commands.write_text(json.dumps([command]))
             with self.assertRaisesRegex(ValueError, "ThinLTO"):
                 experiment.check(build, snapshot, False)
             command["file"] = str(build / "original" / "pinyon_shift_recomp.0.cpp")
