@@ -135,6 +135,9 @@ if(NOT EXISTS "${PINYON_SHIFT_GENERATED_DIR}/sources.cmake")
 endif()
 include("${PINYON_SHIFT_GENERATED_DIR}/sources.cmake")
 set(PINYON_SHIFT_GENERATED_SOURCES ${GENERATED_SOURCES})
+# Runtime::Setup registers the entrypoint image through PPCFuncMappings.
+# Only facade DLLs need the separate generated registration entry point.
+list(FILTER PINYON_SHIFT_GENERATED_SOURCES EXCLUDE REGEX "/pinyon_shift_register\\.cpp$")
 
 foreach(_module IN ITEMS speech xmedia)
     set(_module_dir "${PINYON_SHIFT_GENERATED_ROOT}/${_module}")
@@ -213,6 +216,9 @@ else()
 endif()
 
 function(pinyon_shift_attach_rexglue target_name)
+    if(PINYON_SHIFT_RECOMP_PGO STREQUAL "GENERATE")
+        target_compile_definitions(${target_name} PRIVATE PINYON_SHIFT_PGO_GENERATE=1)
+    endif()
     add_library(${target_name}_recomp OBJECT ${PINYON_SHIFT_GENERATED_SOURCES})
     pinyon_shift_apply_recomp_profile(${target_name}_recomp)
     pinyon_shift_apply_recomp_profile(${target_name})

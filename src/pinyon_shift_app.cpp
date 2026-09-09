@@ -27,6 +27,10 @@
 
 #include <cstdio>
 
+#ifdef PINYON_SHIFT_PGO_GENERATE
+extern "C" int __llvm_profile_dump(void);
+#endif
+
 REXCVAR_DEFINE_UINT32(pinyon_shift_config_schema, 21, "Pinyon Shift",
                       "Pinyon Shift host configuration schema version");
 REXCVAR_DEFINE_BOOL(pinyon_shift_capture_performance, true, "Pinyon Shift",
@@ -436,6 +440,12 @@ bool PinyonShiftApp::OnWindowCloseRequested() {
   pinyon_shift::native_renderer::UninstallGraphicsCensus(
       runtime() ? runtime()->graphics_system() : nullptr);
   RecordShutdownOnce();
+#ifdef PINYON_SHIFT_PGO_GENERATE
+  // The SDK's hard exit skips the executable's profile atexit handler.
+  const int profile_result = __llvm_profile_dump();
+  pinyon_shift::diagnostics::RecordEvent(
+      "pgo.profile.dump", {{"result", std::to_string(profile_result)}});
+#endif
   return true;
 }
 
