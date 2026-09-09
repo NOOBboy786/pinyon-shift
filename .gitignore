@@ -23,6 +23,8 @@ private/
 !/docs/BUILDING.md
 !/docs/LEGAL.md
 !/docs/TROUBLESHOOTING.md
+!/docs/NON_RENDERER_OPTIMIZATION_RESEARCH.md
+!/docs/NON_RENDERER_OPTIMIZATION_RESULTS.md
 !/docs/releases/
 !/docs/releases/*.md
 !/docs/native-renderer/
