@@ -276,3 +276,116 @@ game exit. Planned collection covers opening video/title, stationary gameplay,
 driving and town approach. Reserve different routes/events for validation.
 An instrumented run is training evidence, not a performance result. Broad
 coverage, profile-use compilation and qualification remain incomplete.
+
+The collection build reached 362/365 completed steps. The remaining main
+registration translation unit (`pinyon_shift_register.cpp`) is expensive under
+instrumentation: compiler PID 43860 was observed using about 6.12 GB of working
+set while its CPU time continued increasing. `pgo-compile-observation.json`
+contains a partial process observation, not a complete build peak. The build
+remains active and has not been restarted or classified as failed.
+
+Existing scenario contracts were inspected for training selection. Title/video
+runs require `RenderTestIncludeOpeningMovies`; skipping movies can leave an
+unrepresentative flat title background. The race and map scripts have distinct
+scene checks and can provide held-out validation if excluded from training.
+Their comments alone do not prove those scenarios executed in a new run.
+
+## Broader process measurements
+
+The pre-existing discovery wrapper has local extensions for `-BuildDirectory`
+and `-PerformanceOnly`, allowing its existing CPU/private-memory sampling to
+run against isolated packages without enabling renderer corpus discovery.
+It fingerprints both facade DLLs as well as the executable/runtime/renderer.
+PowerShell parsing and the existing recorder self-test passed; a live isolated
+performance-only recording is still required.
+
+The recorder also now samples `GetProcessIoCounters`. Its Windows self-test
+verified readable counters and at least 4096 additional write bytes after a
+4096-byte file write. Failure is represented as unavailable rather than zero.
+These counters account for process I/O operations and transferred bytes, not
+physical-disk latency or critical-path wait time. They supplement but do not
+replace missing WPR scheduling/I/O attribution. See Microsoft's
+[GetProcessIoCounters contract](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getprocessiocounters)
+and [counter definitions](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-io_counters).
+
+These extensions are in pre-existing untracked discovery files. They remain
+uncommitted to avoid silently including the earlier renderer tooling as new
+work in an optimization commit; the starting snapshots distinguish the changes.
+
+## Registration code generation: concrete build-cost candidate
+
+The frozen main registration file is 21,898,245 bytes and contains 419,524
+straight-line `SetFunction` calls, including continuation aliases. During the
+PGO collection build its compiler process accumulated over 841 seconds of CPU
+time and remained active at roughly 6.12 GB working set. This identifies an
+expensive translation unit, not a measured LLVM pass-level root cause.
+
+A private probe replaced only that call sequence with a static array of
+`{uint32_t address, PPCFunc* function}` entries and a loop. An assertion compared
+every address/function pair in order, retaining duplicates and aliases. Using
+the actual main registration compile command, PCH and atomic PGO options, the
+candidate compiled successfully in 6.746 seconds elapsed; its object is
+13,535,116 bytes. The first probe accidentally selected the speech registration
+command by basename and failed; the successful probe selects the exact main
+source path. See `.local/non-renderer-optimization/probe-registration.py`,
+`registration-table-command.txt`, and `registration-table-result.json`.
+
+These are different timing measures under concurrent compilation, so do not
+report their ratio as a controlled speedup. Nevertheless, the candidate
+completed while the original was still compiling. The baseline snapshot and
+active build source were not modified. Runtime implementation inspection shows
+that preserving call order retains dispatcher writes and recording order; both
+forms ignore the boolean return. Linking, startup correctness, final image
+size/relocations and representative timing remain untested. This is a CPU-05
+build-cost candidate, not evidence of higher gameplay FPS. Any emitter change
+must also preserve DLL exports, below-code-base import filtering, empty-module
+behavior and continuation aliases, with the existing registration template
+test updated before proposing it for merge.
+
+Follow-up inspection found that `init_cpp.inja` already emits `PPCFuncMappings`
+with the same filtering and aliases, terminated by `{0, nullptr}`. The probe's
+`--reuse` mode asserts exact equality of all 419,524 entries against that existing
+table, then emits only a loop over it. This smaller candidate compiled with the
+same main PGO command in 2.380 seconds and reduces registration source to 543
+bytes without another table. Prefer this reuse approach if module symbol
+ownership and table immutability checks pass. It is still a private compile
+probe, not a linked or gameplay-qualified change.
+
+### Main registration exclusion and first actual PGO run
+
+Further caller inspection found no consumer of the main executable's generated
+`pinyon_shift_RegisterFunctions`: `Runtime::Setup` already uses the image's
+`PPCFuncMappings`. The smaller project-level candidate excludes only the main
+registration translation unit from CMake. Both facade registration units and
+the main init/table unit remain in the actual compile database. No SDK emitter
+change is needed for this candidate. The original compiler was deliberately
+stopped after confirming its command/source identity, because this work was
+unnecessary, not because an observation timed out. The reconfigured PGO build
+linked successfully; the 326-shard isolation check passed.
+
+The staged `compiler-pgo-generate` package pins runtime and renderer to the saved
+compiler baseline. Driving session `20260909T060018Z-p39664` completed its capture
+and exited with code zero. The exact-session collector passed. This is startup
+and short driving evidence for omitting the unused unit; broad qualification
+and normal-build checks remain required before recommending merge.
+
+Only two raw profiles were emitted, merging to 9,595 functions and 418,904
+blocks. Do not treat this as complete main-plus-facade training. Inspection
+found `ReXApp::OnClosing` calls `std::_Exit(0)`, skipping the executable's atexit
+profile writer. A PGO-GENERATE-only host hook now calls `__llvm_profile_dump`
+at the existing accepted window-close boundary and records its return code.
+This API is documented in the [Clang profiling runtime interface](https://clang.llvm.org/docs/UsersManual.html).
+It takes a training snapshot before title termination; it does not promise a
+globally synchronized final count across still-running guest threads. Counters
+are instrumented atomically. The rebuild and a new run must verify the main
+profile is emitted before collecting broader training. Initial incomplete
+profiles remain separate and are not yet used for optimization.
+
+Verification run `20260909T060316Z-p36708` completed the same driving script and
+exited zero. Its exact-session collection passed, and `pgo.profile.dump`
+reported result zero. Three nonempty raw files now merge successfully to
+87,123 functions and 2,328,110 blocks. Artifacts are in
+`compiler-pgo-dump`, `pgo-driving-smoke-02`, and `pgo-training-driving-02`.
+This verifies the explicit executable dump fixes the observed missing-profile
+problem. It does not establish representative coverage; title/video, town and
+held-out validation still remain. No profile-use build has been qualified.
