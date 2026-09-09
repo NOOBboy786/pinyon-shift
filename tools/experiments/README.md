@@ -13,6 +13,11 @@ the current working tree; do not apply them again there.
 - `non-renderer-io-profile.patch` applies inside `thirdparty/shiftglue-sdk`
   against SDK commit `6db74f6de0230727358d93f8a221f40fbba6a792`. It adds a
   default-off synchronous-read duration diagnostic. It changes no I/O policy.
+- `non-renderer-wait-profile.patch` applies in the SDK at the same revision.
+  It adds default-off, per-thread aggregation of completed guest-object waits.
+  It changes no wait result/timeout policy; pending waits and partial buckets
+  at hard exit are omitted. Profiling overhead still prevents treating its
+  measurements as an uninstrumented performance comparison.
 
 Both passed `git apply --reverse --check` against the tested working files.
 Preserved line endings matter for the tooling patch. Before integrating either,

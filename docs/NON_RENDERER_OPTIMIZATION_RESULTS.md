@@ -778,3 +778,48 @@ deferring an asynchronous/coalescing/cache rewrite; it does not characterize
 cold media or unrelated metadata syscalls. The diagnostic patch was refreshed
 and passed reverse-application validation. Scheduler wait duration remains an
 open attribution requirement; this I/O result does not close it.
+
+### Guest-object wait timing coverage and observer overhead
+
+An opt-in `profile_guest_object_waits` wrapper now times the shared single,
+signal-and-wait, wait-any and wait-all host calls in `XObject`, preserving their
+existing callbacks, timeout conversions, termination checks and return mapping.
+The initial exact helper check verified one callback invocation, scalar/pair
+results and exception propagation with profiling enabled and disabled. The
+isolated runtime built and town session `20260909T065454Z-p25040` completed
+normally with exact-session collection.
+
+All four wait types appeared. However, the initial per-call logger emitted
+696,443 single-wait records alone, making this unsuitable as a low-overhead
+scheduling baseline. Its sums include concurrent waits and long idle waits
+completing at shutdown; they are not CPU time or frame stall duration. Preserve
+`wait-town-01/wait-duration-summary.json` as coverage/observer-cost evidence,
+not a timing recommendation.
+
+The probe now aggregates per thread and call site, reporting after 1,024
+completions or one second observed at a completion. The aggregate version built;
+its updated helper check and gameplay repetition remain pending. Partial
+buckets at hard exit and waits that never return are unreported and must be
+acknowledged in analysis. This is instrumentation, not a scheduler optimization.
+
+The updated exact-helper check passed scalar/pair return, single invocation,
+exception propagation, both flag modes and the 1,024-completion aggregation
+threshold. Town session `20260909T065802Z-p51336` completed normally and passed
+exact-session collection. It reports 938,963 completed calls in 1,608 aggregate
+records rather than roughly one line per call. All four wait types remain
+represented. Artifacts: `wait-town-02/wait-aggregate-summary.json`.
+
+Buckets reported during run seconds 32–42 contain 286,353 single waits with
+163.004 seconds summed duration across threads, 3,766 wait-any calls with
+10.041 seconds, three signal-and-wait calls with 1.166 seconds, and 62 wait-all
+calls totaling 247 microseconds. These are **completion-bucket totals**, not
+wait time confined to the interval: calls can start earlier and many threads
+wait concurrently. Long idle waits complete at shutdown. Do not add these
+durations to CPU time or claim that eliminating them would improve frame time.
+
+This supplies a bounded guest-object wait baseline alongside the thread CPU
+and I/O measurements. It does not replace an OS ready-time/context-switch trace
+or determine which producer a wait depends on. No scheduler change is justified
+from these totals; RT-01 remains explicitly deferred. The profile is archived
+as a separate SDK patch and the recorder patch recognizes its aggregate lines.
+Default-off gameplay verification is running before final review.

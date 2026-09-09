@@ -119,7 +119,7 @@
                      if active_log_session and 'CSV recording size limit reached' in line:
                          warnings.add('CSV cap reached: later markers have no new frame measurements.')
 -                    if active_log_session and ('FH1 ' in line or 'M2_EVENT' in line or 'CSV recording size limit' in line):
-+                    if active_log_session and ('FH1 ' in line or 'M2_EVENT' in line or 'IO_PROFILE ' in line or 'CSV recording size limit' in line):
++                    if active_log_session and ('FH1 ' in line or 'M2_EVENT' in line or 'IO_PROFILE ' in line or 'WAIT_PROFILE ' in line or 'CSV recording size limit' in line):
                          payload = (line + '\n').encode('utf-8')
                          if log_bytes + len(payload) <= 256 * 1024 * 1024:
                              archive.write(payload)
