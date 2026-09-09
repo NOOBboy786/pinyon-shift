@@ -194,3 +194,21 @@ Validation: `python tools/tests/test_recomp_experiment.py` passed;
 .local/non-renderer-optimization/generated --ipo` passed. Candidate compilation
 is recorded in `build-thinlto.log`. Full baseline and candidate runtime
 qualification and matched performance measurements remain pending.
+
+### Session collection and code footprint
+
+`tools/collect-recomp-session.py` now requires a full session ID and verifies
+that the event log names the expected test output, reports completion, and has
+no render-test failure before copying its matching CSV. Its reused-PID regression
+passed and both real tracing smoke sessions were collected successfully.
+
+Baseline PE `.text` virtual sizes are 96,754,310 bytes for the executable,
+9,485,062 for SpeechFacade, and 12,831,910 for XMediaFacade. These are executable
+code-section sizes, not resident RAM or measured hot-code working sets. Details
+are in `compiler-baseline/sections.json`.
+
+ThinLTO reached its final executable link. A partial observation of linker PID
+52464 recorded a peak working set of 1,913,028,608 bytes at that point; this is
+neither the complete build peak nor necessarily the final link peak. The raw
+observation is in `thinlto-link-observation.json`. Link completion and runtime
+results remain pending.
