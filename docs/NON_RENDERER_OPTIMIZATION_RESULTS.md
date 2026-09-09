@@ -755,3 +755,26 @@ weaker than complete scheduling/I/O attribution. The runtime flag experiments
 have measured dispositions; their negative results do not fill these remaining
 measurement gaps or qualify broad animation/audio correctness. No lower
 hardware requirement is claimed.
+
+### Open/create and failed lookup duration
+
+The same default-off I/O flag now also times the shared VFS `OpenFile` call in
+`NtCreateFile_entry` (also used by `NtOpenFile_entry`). The timer includes VFS
+resolution/open work but excludes the later guest handle allocation. Both
+success and failure durations are logged after measurement. The isolated
+runtime rebuilt and town session `20260909T065216Z-p52436` completed normally,
+passed exact-session collection and was archived with the new recorder filter.
+
+- Whole run: 1,203 open/create calls, 108.276 ms summed duration, maximum
+  438 microseconds. Ten failures total 543 microseconds; only one failed path
+  repeats, twice.
+- Run seconds 32–42: 47 calls, 5.496 ms total, maximum 227 microseconds,
+  no failures.
+
+`io-open-town-01/open-duration-summary.json` preserves the counts, longest calls
+and repeated failures. This warm sample does not support repeated VFS misses
+or open latency as a large-stall cause. Together with the read probe it supports
+deferring an asynchronous/coalescing/cache rewrite; it does not characterize
+cold media or unrelated metadata syscalls. The diagnostic patch was refreshed
+and passed reverse-application validation. Scheduler wait duration remains an
+open attribution requirement; this I/O result does not close it.
