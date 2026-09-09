@@ -389,3 +389,82 @@ reported result zero. Three nonempty raw files now merge successfully to
 This verifies the explicit executable dump fixes the observed missing-profile
 problem. It does not establish representative coverage; title/video, town and
 held-out validation still remain. No profile-use build has been qualified.
+
+### Expanded training and profile-use build
+
+Title/video session `20260909T060455Z-p28612` and town-approach session
+`20260909T060624Z-p50240` both completed and exited zero. Exact-session
+collection passed for each. Capture inspection confirmed the Dolby opening
+video and the real Ferrari title background; driving/town captures show the
+car and HUD on the road. The private `town-training.fh1test` ends before the
+original route's map input, preserving map and race as held-out scenarios.
+The town endpoint is close to the roadside barrier, so future comparisons
+must inspect position/state rather than assume an unobstructed route.
+
+Eight raw profiles from driving-02, title-01 and town-01 merge successfully
+into `training-v1.profdata` (87,123 function records, 2,328,110 blocks).
+Function records include unexecuted functions; this is not a claim that every
+function ran. Title loads only two instrumented modules, while driving/town
+produce three profiles. The initial incomplete driving-01 profiles are excluded.
+The profile-use build is configured with IPO still OFF, preserving the isolated
+PGO experiment. Its 326-shard scope check passed; compilation and held-out
+qualification remain pending (`build-pgo-use.log`).
+
+The town run also verified the existing discovery wrapper's isolated
+`-PerformanceOnly` mode in a live run. It produced process CPU/private-memory
+and I/O samples with the staged package fingerprints and settings preserved.
+Final samples can include process teardown (near-zero resident/private memory)
+and must be excluded from steady-state analysis. Instrumented training counters
+are not an uninstrumented CPU/I/O baseline or a PGO speedup measurement.
+
+### Evidence for the next CPU/runtime investigation
+
+`llvm-profdata show --topn=20 training-v1.profdata` identifies frequent block
+execution, not sampled CPU cost. The highest entry is `sub_829F04A8` (maximum
+block count 1,348,070,352). Its frozen generated body contains four iterations
+of eight `db16cyc` instructions emitted as comments, followed by guest state and
+thread-related checks. `sub_82441690`, another frequent function, reads two
+guest words through r13. Register-save/restore helpers also occur frequently.
+This narrows RT-01/CPU-06 investigation to guest delay/polling behavior and
+small cross-shard helpers; it does not justify changing scheduling or declaring
+these functions CPU bottlenecks without timing evidence. Preserve continuation
+entry semantics and guest state when considering any replacement.
+
+The private `summarize-run.py` reports frame and process windows separately
+because cumulative CSV frame time is not exact process-sample alignment.
+In the instrumented town 32–42 second window, nine process samples span
+32.61–41.05 seconds and average 5.28 CPU core equivalents; median private memory
+is 5.01 GB. I/O deltas include 18.43 MB read and 22.20 MB written. The CSV window
+has zero recorded XMA stall/recovery and critical-region-contention counts and
+10.002 seconds of simulation time. These values validate usable measurements;
+they are not baseline requirements, physical disk traffic, proof of no audio
+problem, or a reason to skip uninstrumented paired runs. See the run's
+`measurement-summary.json` for all fields and clock caveat.
+
+The profile-use build completed successfully and is staged as `compiler-pgo-use`
+with the baseline runtime/renderer hashes. Its executable is 99,198,976 bytes
+(SHA256 `1082b56bb21abf396b07d1cbd55e29f37f818a418ab1ea49b994ef44f3440778`).
+Do not attribute the entire size difference to PGO: the old compiler baseline
+still compiled the unused main registration unit. A final matched non-PGO
+rebuild should include its removal too.
+
+The build reports one profile hash mismatch for `OnWindowCloseRequested`, whose
+training-only explicit dump intentionally changes its control flow (up to nine
+counts discarded). No guest-function profile mismatch appeared in the checked
+log. This shutdown-only mismatch is recorded rather than hidden or suppressed.
+Held-out map comparison has started using the performance-only recorder.
+
+Baseline map session `20260909T061152Z-p47992` exited normally and passed
+exact-session collection; the map capture visibly shows the map rather than
+free roam. The script holds it only briefly: the 16.8–18.8 second process
+window contains two samples spanning 1.06 seconds. Treat this as a scene and
+measurement smoke check, not a stable CPU benchmark. `map-summary.json`
+preserves the limited measurements.
+
+The first PGO map launch was refused because a separate regular-preview game
+(PID 14028, original Release path) was running. No second game was started and
+the existing process was left alone. Meanwhile a matched non-PGO build, with
+the unused main registration unit excluded just like the candidate, is running
+with four compiler jobs (`build-matched-baseline.log`). The actual compile
+database passes the 326-shard OFF-mode isolation check. The saved original
+baseline and PGO packages remain available independently of this build tree.
