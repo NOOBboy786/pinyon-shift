@@ -129,11 +129,17 @@ exit code 0. The trace-on image was inspected and shows open-road driving at the
 end of the route. Both produced frame CSVs and captures. Settings-file SHA-256
 was identical: `e267dcac701a0e14a92df00aa059c2fb639d5a0b32b7d3dc279a00a5c974afc7`.
 
-These are not a qualified performance pair. Cumulative CSV durations were 32.01 s
-and 46.68 s despite using the same script; a naive 27–30 s CSV window is therefore
-not sufficient to establish matched gameplay. `tracing-smoke-summary.json`
-records this limitation. Explicit scene/script-clock alignment and repeated runs
-are needed before interpreting differences. No tracing performance gain is claimed.
+These are not a qualified performance pair. Initial CSV selection by PID alone
+incorrectly selected an older run with reused PID 4804, creating an apparent
+46.68 s duration. The incorrect file is retained as `misattributed-perf.csv` and
+excluded. Exact sessions `20260909T051759Z-p27784` and `20260909T051930Z-p4804`
+were verified through their configured output paths in the event logs. Correct
+CSV durations are 32.013 s and 32.005 s. Endpoint positions differ by about 0.12
+world units. Approximate 27–30 s CSV medians are 16.607 ms and 17.107 ms;
+one smoke pair does not establish a tracing benefit or regression.
+`tracing-smoke-summary.json` records corrected session identities and captures.
+Use complete session IDs, never PID alone, for future collection. Explicit
+scene/script-clock alignment and repeated runs remain necessary.
 
 For compiler experiments, all 680 existing generated files were copied into
 `.local/non-renderer-optimization/generated` and hashed in `generated-sha256.json`.
@@ -148,3 +154,17 @@ non-IPO build from that same frozen snapshot is now underway, to establish a
 matched compiler baseline before building the IPO variant. Its log is
 `.local/non-renderer-optimization/build-frozen-baseline.log`. Neither compiler
 variant is qualified yet.
+
+### Corrected baseline configuration
+
+The first full baseline build was stopped after inspection found that reapplying
+the standard preset had reset the generated-source paths to `.local/generated`.
+Frozen mode still prevented codegen writes, but those objects cannot establish
+the intended snapshot baseline. No preview files were replaced.
+
+Reconfiguration now uses `cmake -S . -B out/build/non-renderer-baseline` with
+explicit snapshot paths, frozen mode ON and IPO OFF. Effective-command assertions
+verified all 326 translated shards use the copied tree and no codegen invocation
+exists. The initial assertion also matched the generated target's PCH filename;
+it was corrected to check source basenames. The corrected build is running;
+use `build-frozen-baseline-corrected.log`, not the interrupted build log.
