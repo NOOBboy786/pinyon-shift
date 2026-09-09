@@ -16,6 +16,17 @@ set(PINYON_SHIFT_CAPTURE_PERFORMANCE ON CACHE BOOL
     "Capture lightweight per-frame performance counters in preview builds")
 option(PINYON_SHIFT_TRACE_IMPORTS
     "Record first-use guest import reachability diagnostics" ON)
+option(PINYON_SHIFT_FROZEN_CODEGEN
+    "Use an existing generated snapshot without invoking the code generator" OFF)
+option(PINYON_SHIFT_RECOMP_IPO
+    "Enable interprocedural optimization for generated game code and host" OFF)
+if(PINYON_SHIFT_RECOMP_IPO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _pinyon_ipo_supported OUTPUT _pinyon_ipo_error LANGUAGES CXX)
+    if(NOT _pinyon_ipo_supported)
+        message(FATAL_ERROR "Recomp IPO is unavailable: ${_pinyon_ipo_error}")
+    endif()
+endif()
 
 if(PINYON_SHIFT_CAPTURE_PERFORMANCE)
     # ReXGlue keeps lightweight counters out of Release by default even when
@@ -151,6 +162,7 @@ endfunction()
 # The entrypoint stamp's depfile records the manifest, included analysis TOMLs,
 # all three game binaries, and the SDK version. The generator writes the stamp
 # only after every entrypoint/module output succeeds.
+if(NOT PINYON_SHIFT_FROZEN_CODEGEN)
 add_custom_command(
     OUTPUT "${PINYON_SHIFT_GENERATED_DIR}/codegen.build.stamp"
     BYPRODUCTS
@@ -169,9 +181,19 @@ add_custom_command(
     VERBATIM)
 add_custom_target(pinyon_shift_codegen
     DEPENDS "${PINYON_SHIFT_GENERATED_DIR}/codegen.build.stamp")
+else()
+    if(NOT EXISTS "${PINYON_SHIFT_GENERATED_DIR}/codegen.build.stamp")
+        message(FATAL_ERROR "Frozen codegen requires a complete generated snapshot")
+    endif()
+    add_custom_target(pinyon_shift_codegen)
+endif()
 
 function(pinyon_shift_attach_rexglue target_name)
     add_library(${target_name}_recomp OBJECT ${PINYON_SHIFT_GENERATED_SOURCES})
+    if(PINYON_SHIFT_RECOMP_IPO)
+        set_property(TARGET ${target_name}_recomp ${target_name}
+            PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
     target_include_directories(${target_name}_recomp PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -231,6 +253,9 @@ function(pinyon_shift_add_generated_module target_name generated_directory gener
     set(_generated_dir
         "${PINYON_SHIFT_GENERATED_ROOT}/${generated_directory}")
     add_library(${target_name} SHARED ${generated_sources})
+    if(PINYON_SHIFT_RECOMP_IPO)
+        set_property(TARGET ${target_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
     target_include_directories(${target_name} PRIVATE "${_generated_dir}")
     target_link_libraries(${target_name} PRIVATE rex::runtime)
     pinyon_shift_apply_recomp_settings(${target_name} "${_generated_dir}")

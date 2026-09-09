@@ -120,3 +120,31 @@ quoted argument arrays; the final compiler and execution checks passed.
 This establishes toolchain capability only. It does not validate PPC exception
 semantics, game profile coverage, or performance. CPU-03 and CPU-04 remain pending
 on actual game builds and qualification.
+
+## Gameplay smoke and frozen compiler baseline
+
+The existing preview subsequently exited. Trace-on (PID 27784) and trace-off
+(PID 4804) each completed the existing `driving-clean.fh1test` route and returned
+exit code 0. The trace-on image was inspected and shows open-road driving at the
+end of the route. Both produced frame CSVs and captures. Settings-file SHA-256
+was identical: `e267dcac701a0e14a92df00aa059c2fb639d5a0b32b7d3dc279a00a5c974afc7`.
+
+These are not a qualified performance pair. Cumulative CSV durations were 32.01 s
+and 46.68 s despite using the same script; a naive 27–30 s CSV window is therefore
+not sufficient to establish matched gameplay. `tracing-smoke-summary.json`
+records this limitation. Explicit scene/script-clock alignment and repeated runs
+are needed before interpreting differences. No tracing performance gain is claimed.
+
+For compiler experiments, all 680 existing generated files were copied into
+`.local/non-renderer-optimization/generated` and hashed in `generated-sha256.json`.
+Experimental frozen-codegen mode bypasses generator invocation; normal builds
+retain dependency-tracked generation. Recomp IPO defaults off and applies only
+to the host and generated object/facade targets when explicitly enabled.
+
+CMake IPO capability checking passed. Effective commands confirmed ThinLTO,
+SSE4.1 and asynchronous exceptions on all 333 generated C++ files; all 95 runtime
+commands remained non-LTO. The ThinLTO commands were saved separately. A full
+non-IPO build from that same frozen snapshot is now underway, to establish a
+matched compiler baseline before building the IPO variant. Its log is
+`.local/non-renderer-optimization/build-frozen-baseline.log`. Neither compiler
+variant is qualified yet.
