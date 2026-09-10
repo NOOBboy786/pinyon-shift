@@ -214,6 +214,12 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   Preserve the failed run and investigate resource/producer attribution before
   a fresh qualification protocol. No HUD fix is retained. See
   [stopped comparison](B_EPIC_EXECUTION.md#clean-hud-admission-2x-comparison-stops-on-a-visual-failure).
+
+  Reflection mip tracing now identifies initial list construction and six
+  recurring cached submissions at both scales. A 1x packet audit checks
+  their contents and incoming-state dependencies; native output ownership,
+  lifetime and actual submission bypass remain open. See the
+  [mip producer contract](B_EPIC_EXECUTION.md#reflection-mip-producer-and-cached-packet-contract).
 - [ ] **B4 — Qualify a lower-cost visual profile.** Test individually measured
   AA, shadow/reflection, scene-scale or postprocessing changes; combine only retained
   settings. Mark an effect inapplicable if attribution shows no worthwhile opportunity.

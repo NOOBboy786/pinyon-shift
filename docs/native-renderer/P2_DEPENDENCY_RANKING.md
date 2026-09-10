@@ -4119,3 +4119,16 @@ producer before implementation. This joins the larger depth/transfer priorities;
 no quality policy or native mip replacement is retained. See
 [CPU and mip attribution](B_EPIC_EXECUTION.md#cube-cpu-cost-and-reflection-mip-pass-attribution).
 The retained runtime and complete 1x pack are verified restored, and B1-B4 remain open.
+
+Reflection mip attribution now checks all guest-range links and identifies
+the actual producer `823F69F8`. At both scales it builds 48 blits once and
+then replays six cached face lists. A bounded 1x command capture verifies
+41,664 bytes / 2,352 packets across those six lists, with 48 rendering and
+48 resolve commands. Initial-builder replacement alone cannot remove the
+recurring GPU work; native production must replace cached submissions too.
+Incoming predicates/state, external loads, flush events, cache lifetime and
+all consumers remain required. The full native/filter/lifetime contract and
+actual pre-packet bypass are still open. See
+[producer and packet evidence](B_EPIC_EXECUTION.md#reflection-mip-producer-and-cached-packet-contract).
+This advances the measured mip lead without retaining a speedup or changing
+the broader depth/transfer priorities. All B1-B4 items remain open.

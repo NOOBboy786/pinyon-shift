@@ -2820,3 +2820,104 @@ backups, eleven restored source files and the complete staged 1x pack. EXE
 Main before this checkpoint is `a2a587a`, SDK `202247a`; unrelated SDK dirt and
 saves remain preserved. A6 stays symmetric-1x-only, recycling stays off, and
 B1-B4 remain active. This checkpoint publishes no preview release.
+
+## Reflection mip producer and cached packet contract
+
+The complete frame-1506 resource check now joins all 48 mip destinations and
+all 42 within-face output-to-next-input links. Face order is `0,4,2,1,3,5`;
+cube base is `1C879000`, with unpacked mips at `1C9F9000`. Base faces occupy
+256x256x4 bytes each. Each following level has six face strides of
+`max(32, 256 >> level)^2 * 4` bytes. At 2x, resolve buffer offsets scale by
+four. These are checked bindings and address relationships, not GPU-content
+or allocation-lifetime equivalence.
+
+The mip pair is VS `2C53E1A563484076` / PS `21937679208E59A5`. Sampling uses
+explicit LOD zero, linear minification/magnification, sample exponent +4 and
+BGRA swizzle; resolves use exponent -4 and red/blue swap. The intermediate
+floating target and R10G10B10A2 publication require a quantization contract.
+The draws have 24 indices; their actual vertex coverage is still unproved.
+A generic native mip filter must not be assumed equivalent. The PS's 84-byte
+guest microcode uniquely matches image address `821ABC7C`, near the
+`srcMipLevel` parameter string. The loaded image SHA256 is
+`5CE77D34952A8C65B432D84E5EB9B321F2CBB9F8C0377567DECD77AFBF93927C`.
+
+Static call tracing and live producer probes establish this bounded path:
+
+- Parent `823F40D8` calls `823F69F8` at `823F43D4` with caching enabled.
+  The alternate parent path goes through `82DC92E8` and remains untraced.
+- `823F69F8` builds eight reductions per face through `82C3CE58`, called
+  at `823F6E88`, using the helper at parent+8336. The shared blit reaches
+  `824426B8` at `82C3CFFC`.
+- Finished face lists are published at `823F6EF0` into the six handle slots
+  at parent+7844+face*4. Later calls reuse those handles through `824167F8`
+  at `823F6BA8`; **the 48 blits are generated once in each observed run**.
+- The wrapper can queue work through `82D842F8` or call `82416A00` directly
+  at `82416894`. The latter follows the object's list at +116 to emit
+  indirect-buffer packets; the existing observation hook is at `82416F18`.
+- Successful parent completion sets parent+8252 bit 64. Cache publication,
+  queueing, references and this guest-visible completion state must survive
+  any replacement. Neither cached dispatch nor initial generation is bypassed.
+
+Final producer fixture EXE SHA256 is
+`7EA8294116970A817CA3112E5E5229D5DE1249F124F054FA11E721ACF359D70E`.
+It uses retained GPU `27B486...`, runtime `955BDC...`, disabled local HUD
+admission, explicit complete packs and the existing 25-second route SHA256
+`19A53072C258EDFC2B05F5ECA3F263656A9D335C3EBB272B89B25ECAA00BA3E5`.
+
+| Scale / session | Complete cycles / frames | Initial blits / handles | Later cached dispatches |
+| --- | --- | --- | --- |
+| 1x / `20260910T150838Z-p20084` | 709 / 1202–1910 | 48 / 6 at frame 1202 | 4,248 across 708 cycles |
+| 2x / `20260910T150940Z-p18104` | 730 / 1197–1926 | 48 / 6 at frame 1197 | 4,374 across 729 cycles |
+
+Both runs exit normally, pass ten input and three capture-clock checks, and
+have complete, balanced, single-thread producer records below the cap.
+Every reused face handle matches its earlier publication; all calls return
+success and no regeneration is observed. The same-session native corpus
+still contains 48 mip spans in every sampled world frame, without reported
+overflow/collision. Manual review of each 20-second image shows the stopped
+car by Recaro with visible scene/HUD. Other saved images, motion, NPC/UI
+timing and broader scene/lifetime coverage are not qualified. Trace timings
+include instrumentation and establish no CPU saving.
+
+A separate 1x packet diagnostic, `20260910T151726Z-p21680`, combines that
+EXE with GPU SHA256
+`0A290CD3E96BC70D7807D8E24A98271698667EEBE4DD4F71BA559748210DCFF9`.
+It also exits normally and passes inputs/clocks. Reusing the existing scene
+decoder and its negative checks, the new local checker verifies six snapshots
+of 6,944 bytes / 392 packets each and all 624 observed draw bindings over
+13 sampled frames. Each face list has eight predicated render draws, eight
+resolve draws and eight single-word `CACHE_FLUSH` events. The six templates
+total **41,664 bytes / 2,352 packets**, excluding wrapper work. These are
+observed packet volumes, not measured decoding time or eliminated work.
+
+Each list also includes 303 type-0 writes, 14 padding packets, eight external
+PS loads, nine external constant loads, 17 invalidations and 17 immediate
+shader loads. No scratch writeback is present inside these six snapshots.
+The first render draw inherits mode state, and all render predicates depend
+on incoming bin state. The SDK's single-word event handler writes
+`VGT_EVENT_INITIATOR`; preserve that state and event ordering. Stable observed
+command hashes do not prove lifetime identity or stable external data.
+An exact same-session CPU cached-handle-to-GPU-buffer join remains pending.
+Only 1x packet contents were captured; this run's producer trace is archived
+but has not received the separate full-cycle checker or manual image review.
+
+Evidence remains local under `.local/native-renderer/b2/`:
+`glass-reflection-capture/{mip-cost-check.json,guest-producer/}`,
+`reflection-mip-producer-v3/{producer-check.json,run-1x/,run-2x/}` and
+`reflection-mip-commands/{command-check.json,run-1x/,restoration-check.json}`.
+Runnable checks are `check-reflection-mip-cost.py`, `check-mip-producer.py`
+and `check-mip-commands.py`; all pass. Source/binary manifests and build logs
+identify each local fixture. Preserve the first producer build's musttail
+failure and v2's sampled-frame coverage gap: v2 missed initial generation,
+so zero observed blits there did not mean no producer. The command diagnostic's
+builder omitted its source from automatic restoration; exact source bytes
+were explicitly restored and verified before launching and at checkpoint.
+
+**Resume:** join cached handles to submission buffers, establish filtering,
+external inputs, all consumers and mutation/lifetime behavior, then design
+native mip production and suppression of the six recurring submissions before
+packet emission. Replacing only initial list construction leaves the measured
+recurring GPU work intact. The earlier 0.892928 / 1.073152 ms span medians
+include preparation/resolves and remain diagnostic, not removable savings.
+Keep larger depth/transfer priorities, both stopped comparisons and the full
+B1-B4 scene/timing/retention requirements. No new behavior is retained.

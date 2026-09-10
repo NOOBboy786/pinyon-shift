@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Input failure, 1x GPU evidence and device-loss logging](#latest-handoff-input-failure-1x-gpu-evidence-and-device-loss-logging).
+**Latest handoff:** [Reflection mip producer and cached submissions](#latest-handoff-reflection-mip-producer-and-cached-submissions).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
@@ -1068,3 +1068,43 @@ sources and the complete staged 1x pack. Retained EXE `372161...`, GPU
 this checkpoint is `a2a587a`, SDK `202247a`. Unrelated SDK dirt and saves remain
 preserved. A6 remains symmetric-1x-only, recycling stays off, and the B goal
 stays active. This checkpoint is for remote `dev`; no preview release is made.
+
+## Latest handoff: reflection mip producer and cached submissions
+
+All 48 reflection mip destinations and 42 within-face links now match the
+captured guest layout. Live 1x/2x tracing identifies `823F69F8`: it generates
+48 blits once, publishes six face-list handles and subsequently replays those
+lists through `824167F8`. The runs check 709 / 730 complete cycles and
+4,248 / 4,374 cached dispatches. Replacing only the initial builder would
+leave the recurring GPU work intact.
+
+A separate 1x command capture checks all six lists: 41,664 bytes and 2,352
+packets in total, including 48 render draws, 48 resolves and 48 flush events.
+All 624 sampled draw bindings match the expected face/mip sources. Incoming
+predication/mode state, external loads, register effects and cache/queue
+lifetime remain part of the replacement contract. Command hashes are
+diagnostic identities, not lifetime proofs. No bypass or speedup is retained.
+
+[B execution](B_EPIC_EXECUTION.md#reflection-mip-producer-and-cached-packet-contract)
+records the exact sessions, binaries, guest anchors, checks, limitations and
+earlier failed diagnostics. Reports and runnable checks remain local under
+`b2/glass-reflection-capture/`, `b2/reflection-mip-producer-v3/` and
+`b2/reflection-mip-commands/`. Only the two final producer runs' 20-second
+screenshots received manual review; broader motion/timing remains unqualified.
+
+**Resume:** link cached handles to actual submission buffers, finish the
+filter/input/consumer/lifetime contract, then implement native mip production
+with a safe pre-packet replacement for recurring submissions. Keep the larger
+depth/transfer priorities. The earlier approximately 0.9 / 1.1 ms mip spans
+are diagnostic costs including preparation/resolves, not promised savings.
+Preserve both stopped comparisons and the green windshield/headlight failure.
+All B1-B4 requirements remain open; A6 stays symmetric-1x-only.
+
+Preflight verifies all nine retained runtime files and backups, twelve restored
+sources and the complete staged 1x pack. Retained EXE `372161...`, GPU
+`27B486...`, runtime `955BDC...`; no game/build/replay is active. Main before
+this checkpoint is `ce7ae04`, SDK `202247a`; unrelated SDK dirt and saves
+remain preserved. The checkpoint is for remote `dev`, with no preview release.
+Resource-link, complete-producer-cycle and packet/binding checks pass, along
+with tracked Markdown links, the 509-file repository boundary check and
+`git diff --check`.
