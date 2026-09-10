@@ -36,9 +36,16 @@
     "install_path": ".local/toolchain/extract-xiso-2.7.1",
     "executable": "artifacts/extract-xiso.exe"
   },
+  "python": {
+    "version": "3.13.15",
+    "url": "https://www.python.org/ftp/python/3.13.15/python-3.13.15-embed-amd64.zip",
+    "sha256": "D1F04D990AEE1253D8569E8E5104E30FA9F5FA830899F14843448872D936A2CF",
+    "install_path": ".local/toolchain/python-3.13.15",
+    "executable": "python.exe"
+  },
   "rexglue": {
     "repository": "https://github.com/arcanite24/shiftglue-sdk",
-    "revision": "6db74f6de0230727358d93f8a221f40fbba6a792",
+    "revision": "261dd6a4d8e27dad0cf01f1e288f602bc03e303c",
     "submodule_path": "thirdparty/shiftglue-sdk",
     "fallback_path": ".local/rexglue"
   }

@@ -48,21 +48,21 @@ add_executable(pinyon_shift_fh1_execution_key_tests EXCLUDE_FROM_ALL
     tests/native_renderer/fh1_execution_key_test.cpp
 )
 target_include_directories(pinyon_shift_fh1_execution_key_tests PRIVATE
-    thirdparty/shiftglue-sdk/include)
+    ${REXSDK_DIR}/include)
 
 add_executable(pinyon_shift_fh1_pass_tracker_tests EXCLUDE_FROM_ALL
     tests/native_renderer/fh1_pass_tracker_test.cpp
     src/native_renderer/fh1_pass_tracker.cpp
 )
 target_include_directories(pinyon_shift_fh1_pass_tracker_tests PRIVATE
-    src thirdparty/shiftglue-sdk/include)
+    src ${REXSDK_DIR}/include)
 
 add_executable(pinyon_shift_fh1_shader_pack_tests EXCLUDE_FROM_ALL
     tests/native_renderer/fh1_shader_pack_test.cpp
-    thirdparty/shiftglue-sdk/src/graphics/d3d12/fh1_shader_pack.cpp
+    ${REXSDK_DIR}/src/graphics/d3d12/fh1_shader_pack.cpp
 )
 target_include_directories(pinyon_shift_fh1_shader_pack_tests PRIVATE
-    thirdparty/shiftglue-sdk/include)
+    ${REXSDK_DIR}/include)
 target_link_libraries(pinyon_shift_fh1_shader_pack_tests PRIVATE rex::runtime)
 if(WIN32)
     target_link_libraries(pinyon_shift_fh1_shader_pack_tests PRIVATE bcrypt)
@@ -78,19 +78,19 @@ add_executable(pinyon_shift_fh1_archive_extract EXCLUDE_FROM_ALL
 
 add_executable(pinyon_shift_fh1_texture_import EXCLUDE_FROM_ALL
     tools/fh1_texture_import.cpp
-    thirdparty/shiftglue-sdk/src/graphics/pipeline/texture/util.cpp
-    thirdparty/shiftglue-sdk/src/graphics/pipeline/texture/info_formats.cpp)
+    ${REXSDK_DIR}/src/graphics/pipeline/texture/util.cpp
+    ${REXSDK_DIR}/src/graphics/pipeline/texture/info_formats.cpp)
 target_include_directories(pinyon_shift_fh1_texture_import PRIVATE
-    thirdparty/shiftglue-sdk/include)
+    ${REXSDK_DIR}/include)
 if(WIN32)
     target_sources(pinyon_shift_fh1_texture_import PRIVATE
-        thirdparty/shiftglue-sdk/src/core/math_msvc.cpp)
+        ${REXSDK_DIR}/src/core/math_msvc.cpp)
 else()
     target_sources(pinyon_shift_fh1_texture_import PRIVATE
-        thirdparty/shiftglue-sdk/src/core/math_gcc.cpp)
+        ${REXSDK_DIR}/src/core/math_gcc.cpp)
 endif()
 target_include_directories(pinyon_shift_fh1_archive_extract PRIVATE
-    thirdparty/shiftglue-sdk/include)
+    ${REXSDK_DIR}/include)
 target_link_libraries(pinyon_shift_fh1_archive_extract PRIVATE rex::runtime)
 
 pinyon_shift_attach_rexglue(pinyon_shift)

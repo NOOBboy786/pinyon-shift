@@ -86,6 +86,24 @@ if (-not (Test-Path -LiteralPath $extractExe -PathType Leaf)) {
     Expand-Archive -LiteralPath $archive -DestinationPath $extractRoot -Force
 }
 
+Write-PinyonEvent tools 30 'Preparing the local shader tooling runtime.' -JsonEvents:$JsonEvents
+$pythonRoot = Resolve-PinyonLocalPath -RelativePath $config.python.install_path
+$pythonExe = Join-Path $pythonRoot $config.python.executable
+$pythonCheck = "import hashlib, json, struct, subprocess, tomllib, zipfile; assert hasattr(hashlib, 'file_digest')"
+$pythonReady = $false
+if (Test-Path -LiteralPath $pythonExe -PathType Leaf) {
+    & $pythonExe -I -c $pythonCheck
+    $pythonReady = $LASTEXITCODE -eq 0
+}
+if (-not $pythonReady) {
+    $archive = Join-Path $downloads "python-$($config.python.version)-embed-amd64.zip"
+    Invoke-PinyonDownload -Uri $config.python.url -Destination $archive -Sha256 $config.python.sha256
+    [void](New-Item -ItemType Directory -Force -Path $pythonRoot)
+    Expand-Archive -LiteralPath $archive -DestinationPath $pythonRoot -Force
+}
+& $pythonExe -I -c $pythonCheck
+if ($LASTEXITCODE -ne 0) { throw 'The local Python runtime failed its shader tooling check.' }
+
 $environment = Enter-PinyonBuildEnvironment
 $git = Get-PinyonGit
 foreach ($required in @(
@@ -94,6 +112,7 @@ foreach ($required in @(
     @{ Name = 'CMake'; Path = $environment.CMake },
     @{ Name = 'Ninja'; Path = $environment.Ninja },
     @{ Name = 'LLVM'; Path = $llvmExe },
+    @{ Name = 'Python'; Path = $pythonExe },
     @{ Name = 'extract-xiso'; Path = $extractExe }
 )) {
     if (-not (Test-Path -LiteralPath $required.Path -PathType Leaf)) {
@@ -108,5 +127,6 @@ Write-PinyonEvent tools 32 'Windows build tools are ready.' -JsonEvents:$JsonEve
     cmake = $environment.CMake
     ninja = $environment.Ninja
     llvm = $llvmExe
+    python = $pythonExe
     extract_xiso = $extractExe
 }

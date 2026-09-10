@@ -40,7 +40,7 @@ class ReleaseContractTests(unittest.TestCase):
 
     def test_downloads_are_https_and_sha256_pinned(self):
         data = json.loads((ROOT / "config/release-toolchain.json").read_text())
-        for key in ("git", "xz", "llvm", "extract_xiso"):
+        for key in ("git", "xz", "llvm", "extract_xiso", "python"):
             item = data[key]
             self.assertTrue(item["url"].startswith("https://"))
             self.assertRegex(item["sha256"], r"^[0-9A-F]{64}$")
@@ -170,6 +170,64 @@ class ReleaseContractTests(unittest.TestCase):
         package_script = (ROOT / "tools/package-launcher.ps1").read_text(encoding="utf-8")
         for shipped in ("set-graphics-experiment.ps1", "verify-codegen-log.ps1"):
             self.assertIn(shipped, package_script)
+
+    def test_native_tools_use_the_configured_sdk_and_ship_their_sources(self):
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        package = (ROOT / "tools/package-launcher.ps1").read_text(encoding="utf-8")
+        self.assertNotIn("thirdparty/shiftglue-sdk/", cmake)
+        self.assertIn("${REXSDK_DIR}/src/graphics/d3d12/fh1_shader_pack.cpp", cmake)
+        for source in ("tests/native_renderer", "tools/fh1_archive_extract.cpp",
+                       "tools/fh1_texture_import.cpp", "tools/extract-fh1-shader-corpus.py",
+                       "tools/build-fh1-gpu-prewarm.py", "tools/produce-fh1-artifacts.ps1",
+                       "config/render-tests"):
+            self.assertIn("'" + source + "'", package)
+            self.assertTrue((ROOT / source).exists())
+
+    @unittest.skipUnless(shutil.which("powershell"), "Windows PowerShell is required")
+    def test_python_resolver_uses_local_runtime_without_path_fallback(self):
+        with tempfile.TemporaryDirectory(prefix="pinyon-python-") as directory:
+            root = pathlib.Path(directory)
+            (root / "config").mkdir()
+            shutil.copyfile(ROOT / "config/release-toolchain.json", root / "config/release-toolchain.json")
+            config = json.loads((root / "config/release-toolchain.json").read_text())["python"]
+            executable = root / config["install_path"] / config["executable"]
+            environment = os.environ.copy()
+            environment["PINYON_TEST_ROOT"] = str(root)
+            environment["PATH"] = ""
+            command = (
+                ". ./tools/release-common.ps1; "
+                "function Get-PinyonRepoRoot { $env:PINYON_TEST_ROOT }; "
+                "try { [Console]::Out.Write((Get-PinyonPython)) } catch { exit 2 }"
+            )
+            args = [shutil.which("powershell"), "-NoLogo", "-NoProfile", "-Command", command]
+            missing = subprocess.run(args, cwd=ROOT, env=environment, capture_output=True)
+            self.assertEqual(missing.returncode, 2)
+            executable.parent.mkdir(parents=True)
+            executable.touch()
+            found = subprocess.run(args, cwd=ROOT, env=environment, capture_output=True, text=True)
+            self.assertEqual(found.returncode, 0, found.stderr)
+            self.assertEqual(pathlib.Path(found.stdout), executable)
+
+    @unittest.skipUnless(shutil.which("powershell"), "Windows PowerShell is required")
+    def test_artifact_production_preserves_existing_work_and_rejects_external_paths(self):
+        local = ROOT / ".local"
+        local.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="pinyon-producer-test-", dir=local) as directory:
+            work = pathlib.Path(directory)
+            self.assertTrue(work.resolve().is_relative_to(local.resolve()))
+            marker = work / "preserve.txt"
+            marker.write_text("previous production", encoding="utf-8")
+            for path, error in ((str(work.relative_to(ROOT)), "existing production is never overwritten"),
+                                ("../outside-production", "outside")):
+                result = subprocess.run(
+                    ["powershell", "-NoLogo", "-NoProfile", "-File",
+                     str(ROOT / "tools/produce-fh1-artifacts.ps1"), "-WorkRoot", path,
+                     "-RenderTestScript", "not-needed.fh1test"], cwd=ROOT,
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
+                self.assertEqual(marker.read_text(encoding="utf-8"), "previous production")
 
     def test_launcher_persists_setup_output_in_the_setup_log_directory(self):
         launcher = (ROOT / "launcher/PinyonShift.Launcher/MainWindow.xaml.cs").read_text(
@@ -301,7 +359,7 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn('\\"index_buffer_guest_base\\":{}', (
             ROOT / "src/native_renderer/fh1_gpu_corpus.cpp"
         ).read_text(encoding="utf-8"))
-        self.assertIn("kFh1GpuPassTimingCapacity = 256", (
+        self.assertIn("kFh1GpuPassTimingCapacity = 512", (
             sdk / "include/rex/graphics/d3d12/command_processor.h"
         ).read_text(encoding="utf-8"))
         self.assertIn("std::unordered_set<uint64_t> fh1_execution_allowlist_", (

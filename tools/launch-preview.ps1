@@ -4,6 +4,7 @@ param(
     [string]$Configuration = 'Release',
     [string]$GameRoot,
     [string]$StateRoot,
+    [string]$BuildDirectory,
     [string]$ShaderCaptureDir,
     [string]$DiscShaderCorpusDir,
     [string]$RenderTestScript,
@@ -21,9 +22,15 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'release-common.ps1')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$executable = Join-Path $repoRoot 'out/build/win-amd64-release/pinyon_shift.exe'
+$resolvedBuildDirectory = if ($BuildDirectory) {
+    (Resolve-Path -LiteralPath $BuildDirectory).Path
+} else {
+    Join-Path $repoRoot 'out/build/win-amd64-release'
+}
+$executable = Join-Path $resolvedBuildDirectory 'pinyon_shift.exe'
 $resolvedGameRoot = if ($GameRoot) {
     (Resolve-Path -LiteralPath $GameRoot).Path
 } else {
@@ -58,14 +65,13 @@ $stagedNativeShaderPack = $null
 $stagedNativePipelineCache = $null
 $stagedShaderProducer = $null
 if ($DiscShaderCorpusDir) {
-    $producerSource = Join-Path $repoRoot `
-        'out/build/win-amd64-release/rexglue-artifacts/rexgpu-fh1-producer.dll'
+    $producerSource = Join-Path $resolvedBuildDirectory `
+        'rexglue-artifacts/rexgpu-fh1-producer.dll'
     if (-not (Test-Path -LiteralPath $producerSource -PathType Leaf)) {
         throw 'Build the rexgpu-fh1-producer target before producing FH1 shaders.'
     }
     $stagedShaderProducer = Join-Path (Split-Path $executable -Parent) `
         'rexgpu-fh1-producer.dll'
-    Copy-Item -LiteralPath $producerSource -Destination $stagedShaderProducer -Force
 }
 if (-not ($RenderTestScript -or $ShaderCaptureDir -or $DiscShaderCorpusDir)) {
     $scale = 1
@@ -77,9 +83,10 @@ if (-not ($RenderTestScript -or $ShaderCaptureDir -or $DiscShaderCorpusDir)) {
     }
     $localPack = Join-Path $repoRoot ".local/native-renderer/fh1-disc-aot-complete-${scale}x.pnsp"
     if (Test-Path -LiteralPath $localPack -PathType Leaf) {
-        $pack = & python (Join-Path $PSScriptRoot 'native-shader-pack.py') stage $localPack `
-            --state-root $resolvedStateRoot --scale $scale |
-            ConvertFrom-Json
+        $packJson = & (Get-PinyonPython) (Join-Path $PSScriptRoot 'native-shader-pack.py') stage $localPack `
+            --state-root $resolvedStateRoot --scale $scale
+        if ($LASTEXITCODE -ne 0) { throw 'The native shader pack failed validation or staging.' }
+        $pack = $packJson | ConvertFrom-Json
         $stagedNativeShaderPack = $pack.destination
     }
 
@@ -132,6 +139,9 @@ $savedRenderTestOutput = $env:PINYON_SHIFT_FH1_RENDER_TEST_OUTPUT
 $startedUtc = [DateTime]::UtcNow
 $process = $null
 try {
+    if ($stagedShaderProducer) {
+        Copy-Item -LiteralPath $producerSource -Destination $stagedShaderProducer -Force
+    }
     $env:PINYON_SHIFT_STATE_ROOT = $resolvedStateRoot
     $env:PINYON_SHIFT_GAME_ROOT = $resolvedGameRoot
     $env:REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING = 'false'

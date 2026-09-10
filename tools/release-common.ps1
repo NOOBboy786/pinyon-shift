@@ -38,6 +38,16 @@ function Resolve-PinyonLocalPath {
     $full
 }
 
+function Get-PinyonPython {
+    $config = Get-PinyonReleaseToolchain
+    $pythonRoot = Resolve-PinyonLocalPath -RelativePath $config.python.install_path
+    $pythonExe = Join-Path $pythonRoot $config.python.executable
+    if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
+        throw 'The local Python runtime is missing. Run tools/provision-toolchain.ps1 first.'
+    }
+    $pythonExe
+}
+
 function Resolve-PinyonRexGlueRoot {
     $root = Get-PinyonRepoRoot
     $config = Get-PinyonReleaseToolchain
