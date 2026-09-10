@@ -127,7 +127,8 @@ class NativeRendererTrackConfigTests(unittest.TestCase):
         self.assertIn("$normalizedGameArguments = @($GameArguments)", launch)
         self.assertIn("$start.ArgumentList = $normalizedGameArguments", launch)
         self.assertNotIn("pinyon_shift_fh1_require_precompiled_shaders", launch)
-        self.assertIn("fh1-native-prewarm/cache", launch)
+        self.assertIn("prepare-fh1-shaders.ps1", launch)
+        self.assertNotIn("fh1-native-prewarm/cache", launch)
         self.assertIn("native_pipeline_cache = $stagedNativePipelineCache", launch)
 
 

@@ -98,6 +98,19 @@ class BuildFh1GpuPrewarmTests(unittest.TestCase):
                 b"XEPS" + bytes(8) + first,
             )
 
+    def test_owned_native_pipeline_keeps_draw_without_guest_descriptor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            corpus = root / "corpus.json"
+            corpus.write_text(json.dumps({
+                "schema": "pinyon-shift.fh1-gpu-corpus.v3", "key_version": 2,
+                "entries": [{"kind": 1, "identity": "0000000000000001",
+                             "pipeline_state": "6E456C111D3FA84D"}],
+            }))
+            output = root / "manifest.txt"
+            self.assertEqual(MODULE.build(corpus, output), (0, 1, 0))
+            self.assertIn("D 0000000000000001", output.read_text())
+
     def test_fh1_selection_does_not_mutate_persistent_cache_validation(self):
         source = (
             ROOT

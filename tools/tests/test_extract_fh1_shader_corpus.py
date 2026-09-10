@@ -26,6 +26,17 @@ def container(code: bytes, vertex: bool = True, interpolators: int = 0) -> bytes
 
 
 class ExtractFh1ShaderCorpusTests(unittest.TestCase):
+    def test_specialization_preserves_other_instructions_and_export_bits(self):
+        words = [0xFFFFFFFF] * 12
+        result = MODULE.specialize_vertex_shader(
+            struct.pack(">12I", *words), (2, (1,), ((2, 7),), ((10, 1 << 27),))
+        )
+        expected = words.copy()
+        expected[3:6] = [0xC8000000, 0, 0x02000000]
+        expected[6] = 0xFFFFFFC7
+        expected[10] = 0xF7FFFFFF
+        self.assertEqual(struct.pack(">12I", *expected), result)
+
     def test_patches_fh1_vertex_fetches_from_the_asset_declaration(self):
         code = struct.pack(
             ">6I", 0x05F82000, 0x00000E88, 0,

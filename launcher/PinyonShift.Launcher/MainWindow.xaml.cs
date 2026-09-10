@@ -19,7 +19,7 @@ public partial class MainWindow : Window
         new("VERIFY", "Disc image", "Exact size and SHA-256", "1"),
         new("TOOLS", "Windows toolchain", "Provisioned when missing", "2"),
         new("EXTRACT", "Local game files", "Never uploaded or modified", "3"),
-        new("BUILD", "Native translation", "Generated and compiled here", "4"),
+        new("BUILD", "Local preparation", "Game and graphics prepared here", "4"),
         new("PLAY", "Ready to drive", "Launch from this screen", "5")
     ];
 
@@ -247,8 +247,22 @@ public partial class MainWindow : Window
                 PropertyNameCaseInsensitive = true
             });
             if (message is null) return;
+            var stage = string.Equals(message.Stage, "shaders", StringComparison.OrdinalIgnoreCase)
+                ? "build" : message.Stage;
             var index = Array.FindIndex(RouteStep.StageOrder, x =>
-                string.Equals(x, message.Stage, StringComparison.OrdinalIgnoreCase));
+                string.Equals(x, stage, StringComparison.OrdinalIgnoreCase));
+            if (message.Stage == "shaders")
+            {
+                HeadlineText.Text = "Preparing graphics.";
+                StatusText.Text = "PREPARING GRAPHICS";
+                PrimaryButton.Content = "PREPARING…";
+            }
+            else if (message.Stage == "play" && _gameExecutable is not null)
+            {
+                HeadlineText.Text = "Controller A, Space, or left click.";
+                StatusText.Text = "GAME RUNNING";
+                PrimaryButton.Content = "GAME RUNNING";
+            }
             if (index >= 0)
             {
                 for (var i = 0; i < _steps.Count; i++)
@@ -274,6 +288,14 @@ public partial class MainWindow : Window
         {
             _gameExecutable = candidate;
             SetComplete();
+            if (_stateRoot is not null && !File.Exists(Path.Combine(_stateRoot, "cache", "fh1-artifacts.json")))
+            {
+                _steps[3].SetState(StepState.Waiting, WaitingBrush, ActiveBrush, CompleteBrush, FailedBrush);
+                _steps[4].SetState(StepState.Waiting, WaitingBrush, ActiveBrush, CompleteBrush, FailedBrush);
+                HeadlineText.Text = "Finish preparing your preview.";
+                StatusText.Text = "GRAPHICS PREPARATION NEEDED";
+                PrimaryButton.Content = "PREPARE & PLAY";
+            }
         }
     }
 
@@ -286,17 +308,21 @@ public partial class MainWindow : Window
         ChooseInstallRootButton.IsEnabled = false;
         GraphicsSettingsButton.IsEnabled = false;
         PrimaryButton.IsEnabled = false;
-        PrimaryButton.Content = "GAME RUNNING";
-        EyebrowText.Text = "PREVIEW RUNNING";
-        HeadlineText.Text = "Controller A, Space, or left click.";
-        StatusText.Text = "WATCHING FOR CRASHES";
+        PrimaryButton.Content = "PREPARING…";
+        EyebrowText.Text = "PREPARING TO PLAY";
+        HeadlineText.Text = "Checking graphics.";
+        StatusText.Text = "PREPARING";
+        LogPanel.Visibility = Visibility.Visible;
+        GraphicsPanel.Visibility = Visibility.Collapsed;
         StatusDot.Fill = ActiveBrush;
         ReportProblemButton.IsEnabled = false;
-        AppendLog("Game started. The launcher is watching for an unexpected exit.");
+        AppendLog("Checking graphics for this computer. Missing or outdated shaders are prepared automatically.");
         AppendLog("Controls: use controller A, Space, or left click for the selected Xbox menu item; press Enter for Start.");
 
         try
         {
+            _cancellation?.Dispose();
+            _cancellation = new CancellationTokenSource();
             var launcher = Path.Combine(_repositoryRoot, "tools", "launch-preview.ps1");
             var startInfo = new ProcessStartInfo
             {
@@ -310,18 +336,35 @@ public partial class MainWindow : Window
             foreach (var argument in new[]
             {
                 "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", launcher,
-                "-Configuration", "Release", "-StateRoot", _stateRoot, "-Json"
+                "-Configuration", "Release", "-StateRoot", _stateRoot, "-Json", "-JsonEvents"
             }) startInfo.ArgumentList.Add(argument);
 
-            using var watcher = Process.Start(startInfo) ??
-                throw new InvalidOperationException("Windows could not start the preview watcher.");
-            var outputTask = watcher.StandardOutput.ReadToEndAsync();
-            var errorTask = watcher.StandardError.ReadToEndAsync();
-            await watcher.WaitForExitAsync();
-            var output = await outputTask;
-            var error = await errorTask;
+            using var watcher = new Process { StartInfo = startInfo };
+            var output = new System.Text.StringBuilder();
+            var errors = new System.Text.StringBuilder();
+            watcher.OutputDataReceived += (_, args) => Dispatcher.Invoke(() =>
+            {
+                if (args.Data is null) return;
+                if (args.Data.StartsWith('{')) output.AppendLine(args.Data);
+                else HandleOutput(args.Data);
+            });
+            watcher.ErrorDataReceived += (_, args) => Dispatcher.Invoke(() =>
+            {
+                if (args.Data is null) return;
+                errors.AppendLine(args.Data);
+                AppendLog(args.Data);
+            });
+            if (!watcher.Start()) throw new InvalidOperationException("Windows could not start the preview watcher.");
+            watcher.BeginOutputReadLine();
+            watcher.BeginErrorReadLine();
+            using var registration = _cancellation.Token.Register(() =>
+            {
+                try { if (!watcher.HasExited) watcher.Kill(entireProcessTree: true); } catch { }
+            });
+            await watcher.WaitForExitAsync(_cancellation.Token);
+            var error = errors.ToString();
 
-            var result = ParseLaunchResult(output);
+            var result = ParseLaunchResult(output.ToString());
             if (watcher.ExitCode == 0 && string.Equals(result?.Result, "normal-exit", StringComparison.OrdinalIgnoreCase))
             {
                 AppendLog("The game closed normally.");
@@ -342,6 +385,10 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
                     ? "The game exited unexpectedly, but its diagnostic report could not be prepared."
                     : error.Trim());
+        }
+        catch (OperationCanceledException)
+        {
+            SetFailure("PREPARATION CANCELLED", "Run the launcher again to finish preparing graphics.");
         }
         catch (Exception ex)
         {

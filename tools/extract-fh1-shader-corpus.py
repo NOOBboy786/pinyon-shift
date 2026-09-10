@@ -23,6 +23,34 @@ FORMAT_WORDS = {
     33: 1, 34: 2, 35: 4, 36: 1, 37: 2, 38: 4, 57: 3,
 }
 
+# Retail car-selection materials prune unused interpolator exports at runtime.
+# These recipes operate only on exact, locally extracted asset variants; no
+# shader microcode or developer cache is distributed. Each destination is an
+# ALU export register, and disabled instructions become the Xenos ALU no-op.
+# ponytail: three verified retail recipes; derive general effect linking if a
+# newly supported dump or material needs further runtime specializations.
+CAR_SELECTION_VARIANTS = {
+    "8B5CBFD533EA9788C64B7E7EAC60E7BCE7023592ADD27CD1653961FF2B2EB5AC":
+        (7, (22, 23, 27), ((26, 4), *[(i, 5) for i in range(32, 36)], *[(i, 6) for i in range(36, 40)]), ()),
+    "CBF545E381C4FE7234292B52B9F6B2709C951F8A4810DC2F819A7B66B626A32B":
+        (6, (21, 22, 24), ((23, 3), *[(i, 4) for i in range(29, 33)], *[(i, 5) for i in range(33, 37)]), ()),
+    "F04A96BBC78367A5BFD9CE5253F3EDCF29E76494D2B52103A05FF8A5E21ECE80":
+        (9, (26, 27, 29, 30, 32), (*[(i, 7) for i in range(38, 42)], *[(i, 8) for i in range(42, 46)], (60, 6)),
+         ((21, 1 << 27), (37, 1 << 30))),
+}
+
+
+def specialize_vertex_shader(code: bytes, recipe: tuple) -> bytes:
+    _, disabled, destinations, cleared_bits = recipe
+    words = list(struct.unpack(f">{len(code) // 4}I", code))
+    for instruction in disabled:
+        words[instruction * 3 : instruction * 3 + 3] = (0xC8000000, 0, 0x02000000)
+    for instruction, destination in destinations:
+        words[instruction * 3] = words[instruction * 3] & ~0x3F | destination
+    for word, mask in cleared_bits:
+        words[word] &= ~mask
+    return struct.pack(f">{len(words)}I", *words)
+
 
 def extract_declarations(data: bytes) -> list[tuple[tuple, tuple[int, ...]]]:
     if len(data) < 28 or struct.unpack_from(">I", data)[0] != 0x101:
@@ -254,6 +282,12 @@ def extract(game_root: Path, output: Path, binary_dir: Path | None = None,
             variant = patch_vertex_shader(code, shader_elements, declaration)
             if variant is not None and variant != code:
                 add_shader("vertex", variant, interpolator_count, source, True)
+
+    for digest, recipe in CAR_SELECTION_VARIANTS.items():
+        key = "vertex", digest
+        if key in binaries:
+            add_shader("vertex", specialize_vertex_shader(binaries[key], recipe), recipe[0],
+                       {**entries[key]["sources"][0], "specialization": "car-selection"}, True)
 
     if not entries:
         raise ValueError("no FH1 Xenos shader containers were found")

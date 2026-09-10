@@ -70,6 +70,20 @@ class Check {
         Require(!button.IsEnabled, "Folder can change during build/play");
         typeof(MainWindow).GetField("_busy", flags)!.SetValue(window, false);
         update.Invoke(window, null);
+        var state = Path.Combine(root, "fresh-state");
+        var executable = Path.Combine(root, "out/build/win-amd64-release/pinyon_shift.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        File.WriteAllText(executable, "test executable");
+        typeof(MainWindow).GetField("_repositoryRoot", flags)!.SetValue(window, root);
+        typeof(MainWindow).GetField("_stateRoot", flags)!.SetValue(window, state);
+        typeof(MainWindow).GetMethod("DetectExistingBuild", flags)!.Invoke(window, null);
+        var primary = (Button)window.FindName("PrimaryButton");
+        Require((string)primary.Content == "PREPARE & PLAY", "Existing build skips graphics preparation");
+        var output = typeof(MainWindow).GetMethod("HandleOutput", flags)!;
+        output.Invoke(window, ["::pinyon::{\"stage\":\"shaders\",\"percent\":20,\"message\":\"Preparing graphics\"}"]);
+        Require((string)primary.Content == "PREPARING…", "Shader progress is not shown");
+        output.Invoke(window, ["::pinyon::{\"stage\":\"play\",\"percent\":100,\"message\":\"Starting game\"}"]);
+        Require((string)primary.Content == "GAME RUNNING", "Launch status does not follow preparation");
         var label = (TextBlock)window.FindName("BuildLocationText");
         label.Text = @"D:\Games\A deliberately long installation directory\PinyonShift\source\0.1.0\.local\preview";
         ((FrameworkElement)window.FindName("LogPanel")).Visibility = Visibility.Visible;
@@ -101,7 +115,7 @@ class Check {
         File.WriteAllText(Path.Combine(root, "tools/setup-preview.ps1"), "");
         Require(Path.TrimEndingDirectorySeparator(Resolve(selected)) == Path.TrimEndingDirectorySeparator(root)
             && !CanChoose(), "Checkout relocated");
-        Console.WriteLine("Launcher folder selection, overrides, preservation, recovery and layout passed.");
+        Console.WriteLine("Launcher folder selection, preservation, graphics preparation, progress and layout passed.");
         window.Close();
     }
 }

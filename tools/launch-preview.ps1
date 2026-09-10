@@ -17,6 +17,8 @@ param(
     [string[]]$GameArguments = @(),
     [string]$GameArgumentsJson,
     [switch]$Json,
+    [switch]$JsonEvents,
+    [switch]$Hidden,
     [switch]$CrashSelfTest
 )
 
@@ -73,59 +75,11 @@ if ($DiscShaderCorpusDir) {
     $stagedShaderProducer = Join-Path (Split-Path $executable -Parent) `
         'rexgpu-fh1-producer.dll'
 }
-if (-not ($RenderTestScript -or $ShaderCaptureDir -or $DiscShaderCorpusDir)) {
-    $scale = 1
-    $configPath = Join-Path $resolvedStateRoot 'config/pinyon_shift.toml'
-    if (Test-Path -LiteralPath $configPath -PathType Leaf) {
-        $config = Get-Content -LiteralPath $configPath -Raw
-        $scaleMatch = [regex]::Match($config, '(?m)^\s*draw_resolution_scale_x\s*=\s*([1-3])\s*$')
-        if ($scaleMatch.Success) { $scale = [int]$scaleMatch.Groups[1].Value }
-    }
-    $localPack = Join-Path $repoRoot ".local/native-renderer/fh1-disc-aot-complete-${scale}x.pnsp"
-    if (Test-Path -LiteralPath $localPack -PathType Leaf) {
-        $packJson = & (Get-PinyonPython) (Join-Path $PSScriptRoot 'native-shader-pack.py') stage $localPack `
-            --state-root $resolvedStateRoot --scale $scale
-        if ($LASTEXITCODE -ne 0) { throw 'The native shader pack failed validation or staging.' }
-        $pack = $packJson | ConvertFrom-Json
-        $stagedNativeShaderPack = $pack.destination
-    }
-
-    $prewarmRoot = Join-Path $repoRoot '.local/native-renderer/fh1-native-prewarm/cache'
-    if (Test-Path -LiteralPath $prewarmRoot -PathType Container) {
-        $prewarmFiles = @(
-            'fh1-gpu-prewarm-v3.txt',
-            'fh1-native-shaders-v2.bin',
-            'fh1-native-pipelines-v1.bin'
-        )
-        $missing = @($prewarmFiles | Where-Object {
-            -not (Test-Path -LiteralPath (Join-Path $prewarmRoot $_) -PathType Leaf)
-        })
-        if ($missing.Count -ne 0) {
-            throw "The FH1 native prewarm cache is incomplete: $($missing -join ', ')"
-        }
-        foreach ($relative in $prewarmFiles) {
-            $source = Join-Path $prewarmRoot $relative
-            $destination = Join-Path (Join-Path $resolvedStateRoot 'cache') $relative
-            [void](New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent))
-            $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
-            $destinationExists = Test-Path -LiteralPath $destination -PathType Leaf
-            $copyNeeded = -not $destinationExists
-            if ($destinationExists) {
-                $destinationLength = (Get-Item -LiteralPath $destination).Length
-                $copyNeeded = $relative -eq 'fh1-gpu-prewarm-v3.txt' -or
-                    $destinationLength -lt (Get-Item -LiteralPath $source).Length -or
-                    ($destinationLength -eq (Get-Item -LiteralPath $source).Length -and
-                     (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $sourceHash)
-            }
-            if ($copyNeeded) {
-                Copy-Item -LiteralPath $source -Destination $destination -Force
-                if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $sourceHash) {
-                    throw "Failed to stage the FH1 native prewarm cache: $relative"
-                }
-            }
-        }
-        $stagedNativePipelineCache = $prewarmRoot
-    }
+if (-not ($RenderTestScript -or $ShaderCaptureDir -or $DiscShaderCorpusDir -or $CrashSelfTest)) {
+    & (Join-Path $PSScriptRoot 'prepare-fh1-shaders.ps1') -StateRoot $resolvedStateRoot `
+        -GameRoot $resolvedGameRoot -BuildDirectory $resolvedBuildDirectory -JsonEvents:$JsonEvents
+    $stagedNativeShaderPack = Join-Path $resolvedStateRoot 'cache/fh1-artifacts.json'
+    $stagedNativePipelineCache = Join-Path $resolvedStateRoot 'cache'
 }
 
 $savedStateRoot = $env:PINYON_SHIFT_STATE_ROOT
@@ -136,9 +90,11 @@ $savedShaderCaptureDir = $env:PINYON_SHIFT_NATIVE_SHADER_CAPTURE_DIR
 $savedDiscShaderCorpusDir = $env:PINYON_SHIFT_FH1_DISC_SHADER_CORPUS_DIR
 $savedRenderTestScript = $env:PINYON_SHIFT_FH1_RENDER_TEST_SCRIPT
 $savedRenderTestOutput = $env:PINYON_SHIFT_FH1_RENDER_TEST_OUTPUT
+$savedWindowHidden = $env:REX_WINDOW_HIDDEN
 $startedUtc = [DateTime]::UtcNow
 $process = $null
 try {
+    $env:REX_WINDOW_HIDDEN = if ($Hidden) { '1' } else { $null }
     if ($stagedShaderProducer) {
         Copy-Item -LiteralPath $producerSource -Destination $stagedShaderProducer -Force
     }
@@ -172,6 +128,10 @@ try {
         PassThru = $true
     }
     $normalizedGameArguments = @($GameArguments)
+    if ($Hidden) {
+        $start.WindowStyle = 'Hidden'
+        $normalizedGameArguments += '--audio_mute=true'
+    }
     if ($GameArgumentsJson) {
         foreach ($gameArgument in (ConvertFrom-Json -InputObject $GameArgumentsJson)) {
             $normalizedGameArguments += [string]$gameArgument
@@ -192,6 +152,7 @@ try {
         # Keep capture/debugger child-process hooks on the launching process.
         $start.NoNewWindow = $true
     }
+    if ($JsonEvents) { Write-PinyonEvent play 100 'Starting game.' -JsonEvents }
     $process = Start-Process @start
     if ($DirectChildProcess) {
         # Cache the live handle so ExitCode remains available after exit.
@@ -217,6 +178,7 @@ finally {
     $env:PINYON_SHIFT_FH1_DISC_SHADER_CORPUS_DIR = $savedDiscShaderCorpusDir
     $env:PINYON_SHIFT_FH1_RENDER_TEST_SCRIPT = $savedRenderTestScript
     $env:PINYON_SHIFT_FH1_RENDER_TEST_OUTPUT = $savedRenderTestOutput
+    $env:REX_WINDOW_HIDDEN = $savedWindowHidden
     if ($stagedShaderProducer) {
         Remove-Item -LiteralPath $stagedShaderProducer -Force -ErrorAction SilentlyContinue
     }

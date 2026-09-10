@@ -8,6 +8,9 @@ from pathlib import Path
 
 
 SCHEMA = "pinyon-shift.fh1-gpu-prewarm.v3"
+# The admitted velocity-dilate pass uses an owned native pipeline, not a
+# PipelineCache descriptor. Keep its draw identity but do not request an XPSo.
+NATIVE_PIPELINES = {"6E456C111D3FA84D"}
 
 
 def stage_native_catalog(legacy_cache: Path, manifest: Path, output_root: Path) -> None:
@@ -52,6 +55,8 @@ def build(corpus: Path | list[Path], output: Path) -> tuple[int, int, int]:
                     raise ValueError(
                         "invalid FH1 pipeline prewarm manifest"
                     ) from error
+                if line.startswith("P ") and value in NATIVE_PIPELINES:
+                    continue
                 {"P ": pipelines, "D ": draws, "C ": copies}[line[:2]].add(
                     value
                 )
@@ -66,6 +71,7 @@ def build(corpus: Path | list[Path], output: Path) -> tuple[int, int, int]:
         pipelines.update(
             entry["pipeline_state"].upper() for entry in data["entries"]
             if entry.get("kind") == 1 and entry.get("pipeline_state") != "0000000000000000"
+            and entry.get("pipeline_state", "").upper() not in NATIVE_PIPELINES
         )
         draws.update(entry["identity"].upper() for entry in data["entries"]
                      if entry.get("kind") == 1)

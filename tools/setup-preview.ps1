@@ -70,6 +70,7 @@ try {
     Write-PinyonEvent extract 58 'Local game files are verified and ready.' -JsonEvents:$JsonEvents
 
     & (Join-Path $PSScriptRoot 'build-preview.ps1') -JsonEvents:$JsonEvents | Out-Host
+    & (Join-Path $PSScriptRoot 'prepare-fh1-shaders.ps1') -GameRoot $gameRoot -JsonEvents:$JsonEvents | Out-Host
     $state = [ordered]@{
         schema_version = 1
         completed_utc = [DateTime]::UtcNow.ToString('o')

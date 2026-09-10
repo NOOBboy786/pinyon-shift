@@ -10,14 +10,22 @@ Run:
 .\tools\setup-preview.ps1 -IsoPath C:\path\to\your-disc.iso
 ```
 
-The script performs five reproducible stages:
+The script performs six reproducible stages:
 
 1. verifies the exact ISO size and SHA-256 against `config/supported-dumps.json`;
 2. installs Visual Studio Build Tools when missing and downloads pinned portable
    tools whose hashes are recorded in `config/release-toolchain.json`;
 3. initializes the pinned ShiftGlue submodule, or clones the same revision for a packaged launcher;
-4. extracts the disc and generates translated source under `.local/`; and
-5. configures and compiles `out/build/win-amd64-release/pinyon_shift.exe`.
+4. extracts the disc and generates translated source under `.local/`;
+5. configures and compiles `out/build/win-amd64-release/pinyon_shift.exe`; and
+6. prepares shaders from your local game files and validates them in a hidden,
+   muted startup run before enabling play.
+
+The launcher also checks graphics on every launch, including existing installs.
+Valid artifacts are reused; missing, damaged or outdated artifacts are prepared
+automatically for the selected resolution and graphics driver. Preparation uses
+separate temporary game states and never copies or resets your save. If it is
+interrupted, reopening the launcher retries it. No shader commands are needed.
 
 The original ISO is opened read-only and is never changed. Setup can be safely
 run again after a failure; completed downloads and extraction are reused after

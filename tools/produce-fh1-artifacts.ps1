@@ -3,6 +3,10 @@ param(
     [Parameter(Mandatory)] [string]$WorkRoot,
     [Parameter(Mandatory)] [string]$RenderTestScript,
     [string]$GameRoot,
+    [string]$RuntimeConfig,
+    [string]$BuildDirectory,
+    [switch]$Hidden,
+    [switch]$AllowPipelineDiscovery,
     [ValidateRange(1, 3)] [int]$Scale = 1,
     [switch]$IncludeOpeningMovies,
     [switch]$JsonEvents
@@ -29,7 +33,7 @@ foreach ($entry in $dump.executables) {
     }
 }
 [void](New-Item -ItemType Directory -Path $work)
-$build = Join-Path $root 'out/build/win-amd64-release'
+$build = if ($BuildDirectory) { (Resolve-Path -LiteralPath $BuildDirectory).Path } else { Join-Path $root 'out/build/win-amd64-release' }
 $environment = Enter-PinyonBuildEnvironment
 Write-PinyonEvent shaders 0 'Building the offline shader producer.' -JsonEvents:$JsonEvents
 & $environment.CMake --build $build --config Release --target rexgpu-fh1-producer pinyon_shift_fh1_archive_extract *> (Join-Path $work 'build.log')
@@ -44,12 +48,20 @@ if ($LASTEXITCODE) { throw "Shader extraction failed. See $work/extract.log." }
 # borrow shader caches from a developer installation.
 $arguments = @("--draw_resolution_scale_x=$Scale", "--draw_resolution_scale_y=$Scale")
 $launch = @{
-    GameRoot = $game; RenderTestScript = $script; RenderTestTimeoutSeconds = 600
+    GameRoot = $game; BuildDirectory = $build; RenderTestScript = $script; RenderTestTimeoutSeconds = 600
     RenderTestIncludeOpeningMovies = $IncludeOpeningMovies; CollectFh1PassInventory = $true
     GameArguments = $arguments; Json = $true
+    Hidden = $Hidden
 }
 Write-PinyonEvent shaders 20 'Producing shaders and collecting startup pipelines.' -JsonEvents:$JsonEvents
 $producerState = Join-Path $work 'producer-state'
+if ($RuntimeConfig -and (Test-Path -LiteralPath $RuntimeConfig)) {
+    foreach ($phase in @('producer-state', 'strict-state')) {
+        $configDirectory = Join-Path $work "$phase/config"
+        [void][IO.Directory]::CreateDirectory($configDirectory)
+        Copy-Item -LiteralPath $RuntimeConfig -Destination (Join-Path $configDirectory 'pinyon_shift.toml')
+    }
+}
 $producer = & (Join-Path $PSScriptRoot 'launch-preview.ps1') @launch -StateRoot $producerState `
     -DiscShaderCorpusDir (Join-Path $work 'corpus') -ShaderCaptureDir (Join-Path $work 'translation') `
     -RenderTestOutput (Join-Path $work 'producer-output') | ConvertFrom-Json
@@ -98,11 +110,20 @@ if ($strictLog -match 'FH1 precompiled shader pack miss' -or
     -not ($strictLog -match "Loaded $($pack.entry_count) FH1 precompiled shaders")) {
     throw 'The compiler-free route did not load and use the produced shader pack without misses.'
 }
-foreach ($counter in @('route_runtime_shader_translations', 'route_runtime_sync_pipeline_creations', 'pipeline_not_prewarmed', 'manifest_unavailable')) {
+$requiredZero = @('route_runtime_shader_translations', 'manifest_unavailable')
+if (-not $AllowPipelineDiscovery) {
+    $requiredZero += @('route_runtime_sync_pipeline_creations', 'pipeline_not_prewarmed')
+}
+foreach ($counter in $requiredZero) {
     if ([int64]$summary[0].$counter -ne 0) { throw "Compiler-free qualification failed: $counter." }
 }
 $report = [ordered]@{
-    schema_version = 1; result = 'route-validated'; gameplay_ready = $false
+    schema_version = 1
+    result = if ($AllowPipelineDiscovery) { 'shaders-validated' } else { 'route-validated' }
+    # New D3D12 pipeline states can use prepared bytecode without translating
+    # game shaders. Record this distinction instead of claiming complete PSO coverage.
+    pipeline_discovery_allowed = [bool]$AllowPipelineDiscovery
+    gameplay_ready = $false
     dump_id = $dump.id; render_test_sha256 = (Get-FileHash -LiteralPath $script).Hash
     corpus_sha256 = (Get-FileHash -LiteralPath (Join-Path $work 'corpus.json')).Hash
     pack = $pack; producer_pid = $producer.process_id; strict_pid = $strict.process_id
@@ -112,5 +133,5 @@ $report = [ordered]@{
     execution = $summary[0]
 }
 [IO.File]::WriteAllText((Join-Path $work 'production.json'), ($report | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
-Write-PinyonEvent shaders 100 'Captured route validated. Full gameplay coverage remains unqualified.' -JsonEvents:$JsonEvents
+Write-PinyonEvent shaders 100 'Graphics validation finished.' -JsonEvents:$JsonEvents
 $report | ConvertTo-Json -Depth 6

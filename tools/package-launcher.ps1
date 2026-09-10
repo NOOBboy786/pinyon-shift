@@ -69,7 +69,7 @@ $include = @(
     'config/rexglue', 'src', 'tests/native_renderer',
     'tools/fh1_archive_extract.cpp', 'tools/fh1_texture_import.cpp',
     'tools/extract-fh1-shader-corpus.py', 'tools/build-fh1-gpu-prewarm.py',
-    'tools/produce-fh1-artifacts.ps1', 'config/render-tests',
+    'tools/produce-fh1-artifacts.ps1', 'tools/prepare-fh1-shaders.ps1', 'config/render-tests',
     'tools/build-preview.ps1', 'tools/create-crash-report.ps1', 'tools/install-build-tools.ps1',
     'tools/launch-preview.ps1', 'tools/prepare-rexglue.ps1',
     'tools/native-shader-pack.py',
