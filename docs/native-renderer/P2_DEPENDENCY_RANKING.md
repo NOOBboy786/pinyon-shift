@@ -4132,3 +4132,14 @@ actual pre-packet bypass are still open. See
 [producer and packet evidence](B_EPIC_EXECUTION.md#reflection-mip-producer-and-cached-packet-contract).
 This advances the measured mip lead without retaining a speedup or changing
 the broader depth/transfer priorities. All B1-B4 items remain open.
+
+The cached-handle-to-GPU-buffer join now passes at both scales. A native
+reflection mip kernel also passes a standalone D3D12 content check: the full
+recursive box-filter chain differs from the captured game output by at most
+2/1,023 per RGB channel. Its isolated eight-dispatch median is 0.020480 ms
+on RTX 4080, excluding input/publication, CPU and gameplay costs. This makes
+native mip production a concrete integration candidate, not retained savings.
+Maintain packet ordering and guest/cache side effects; finish resource lifetime,
+changing content, motion and matched qualification. See
+[native kernel evidence](B_EPIC_EXECUTION.md#native-reflection-mip-kernel-bounded-gpu-proof).
+Broader depth/transfer opportunities and all B1-B4 completion gates remain open.

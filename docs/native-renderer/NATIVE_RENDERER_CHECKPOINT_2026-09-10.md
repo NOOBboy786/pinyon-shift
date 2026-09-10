@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Reflection mip producer and cached submissions](#latest-handoff-reflection-mip-producer-and-cached-submissions).
+**Latest handoff:** [Native reflection mip kernel](#latest-handoff-native-reflection-mip-kernel).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
@@ -1108,3 +1108,42 @@ remain preserved. The checkpoint is for remote `dev`, with no preview release.
 Resource-link, complete-producer-cycle and packet/binding checks pass, along
 with tracked Markdown links, the 509-file repository boundary check and
 `git diff --check`.
+
+## Latest handoff: native reflection mip kernel
+
+Same-session 1x/2x diagnostics now join all six published reflection cache
+handles to their submitted GPU buffers. Both runs pass complete producer,
+packet/binding and input/clock checks; the two 20-second screenshots show
+the stopped Recaro view and HUD. The full guest/cache lifetime is still open.
+
+A complete replay checks all 48 mip inputs against the final cube's previous
+levels byte-for-byte. A recursive box-filter candidate differs from the
+captured mip outputs by at most 2/1,023 per RGB channel across 524,280 pixels.
+Its standalone native D3D12 kernel matches the CPU reference exactly, keeps
+input/guard bytes intact and passes an input-mutation control. The eight
+dispatches measure a 0.020480 ms median on the RTX 4080 in isolation, excluding
+in-game input/publication, submission and synchronization costs. This is a
+candidate implementation, not a retained speedup or hardware qualification.
+
+[B execution](B_EPIC_EXECUTION.md#native-reflection-mip-kernel-bounded-gpu-proof)
+records exact sessions, checks, hashes, scope and the corrected nonindexed
+geometry inspector. Local evidence is `b2/reflection-mip-join/`,
+`b2/glass-reflection-capture/mip-geometry-v2/` and `b2/native-mip-kernel/`.
+The HLSL, standalone C++ checker, CPU fixture generator and positive/negative
+GPU results remain in those directories.
+
+**Resume:** connect native cube inputs/publication with the existing resource
+and fence rules, then replace the recurring guest submissions at their correct
+packet-order position. Preserve inherited state, external reads, queue effects
+and cache lifetime. `CallInThread` alone does not preserve ordering relative
+to already queued ring packets. The earlier failed comparisons stay stopped.
+All B1-B4 gates remain open, including broader scenes, changing/streamed
+content, real pre-packet bypass, motion/NPC timing and matched tails/memory.
+No new game behavior is retained; keep A6 restricted to symmetric 1x.
+
+Checkpoint preflight verifies all nine retained runtime files/backups, twelve
+restored sources and the complete staged 1x pack. EXE `372161...`, GPU
+`27B486...`, runtime `955BDC...`; all run/replay/build handles are terminal.
+Markdown links, the 509-file repository boundary check and diff whitespace
+checks pass. Main before this checkpoint is `f3ee41c`, SDK `202247a`;
+unrelated SDK changes and saves are preserved.

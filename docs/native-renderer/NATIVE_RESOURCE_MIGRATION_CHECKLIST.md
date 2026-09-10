@@ -216,15 +216,21 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   [stopped comparison](B_EPIC_EXECUTION.md#clean-hud-admission-2x-comparison-stops-on-a-visual-failure).
 
   Reflection mip tracing now identifies initial list construction and six
-  recurring cached submissions at both scales. A 1x packet audit checks
-  their contents and incoming-state dependencies; native output ownership,
-  lifetime and actual submission bypass remain open. See the
+  recurring cached submissions at both scales. Both scale-specific packet
+  audits now join published handles to submitted buffers and check incoming
+  state dependencies; native output ownership, lifetime and actual submission
+  bypass remain open. See the
   [mip producer contract](B_EPIC_EXECUTION.md#reflection-mip-producer-and-cached-packet-contract).
 - [ ] **B4 — Qualify a lower-cost visual profile.** Test individually measured
   AA, shadow/reflection, scene-scale or postprocessing changes; combine only retained
   settings. Mark an effect inapplicable if attribution shows no worthwhile opportunity.
   **Done:** the profile has documented visual differences and repeatable savings
   in representative motion, including correct NPC/UI timing at supported frame rates.
+  A standalone native reflection-mip kernel now passes GPU content and mutation
+  checks. Its recursive box filter stays within 2/1,023 RGB error in one captured
+  frame; input/publication integration and gameplay qualification remain open.
+  The isolated 0.020480 ms kernel timing is not retained frame-time savings. See
+  [native mip candidate](B_EPIC_EXECUTION.md#native-reflection-mip-kernel-bounded-gpu-proof).
 
 B1 follow-up: the 2x owned-clear optimization failed North Carson tail retention
 (short p99 +24.46%, longer p99 +90.09%). Keep the 1x-only guard until actual
