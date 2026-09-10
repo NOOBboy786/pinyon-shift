@@ -31,6 +31,11 @@ public partial class MainWindow : Window
     private CrashReport? _pendingReport;
     private bool _busy;
     private bool _applyingGraphicsResult;
+    private bool _canChooseInstallRoot;
+
+    private static readonly string InstallRootPreference = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "PinyonShift", "install-root.txt");
 
     private static readonly Brush WaitingBrush = new SolidColorBrush(Color.FromRgb(57, 64, 57));
     private static readonly Brush ActiveBrush = new SolidColorBrush(Color.FromRgb(241, 174, 54));
@@ -52,11 +57,27 @@ public partial class MainWindow : Window
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        => await InitializeSourceAsync();
+
+    private async Task InitializeSourceAsync(string? installRoot = null)
     {
+        _busy = true;
+        IsEnabled = false;
         try
         {
-            _repositoryRoot = await ResolveRepositoryRootAsync();
-            _stateRoot = ResolveStateRoot(_repositoryRoot);
+            var repositoryRoot = await ResolveRepositoryRootAsync(installRoot);
+            var stateRoot = ResolveStateRoot(repositoryRoot);
+            if (installRoot is not null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(InstallRootPreference)!);
+                await File.WriteAllTextAsync(InstallRootPreference, installRoot);
+            }
+            _sessionLog?.Dispose();
+            _sessionLog = null;
+            ResetRoute();
+            SetReadyState();
+            _repositoryRoot = repositoryRoot;
+            _stateRoot = stateRoot;
             StartSessionLog(_repositoryRoot);
             GraphicsSettingsButton.Visibility = Visibility.Visible;
             BuildLocationText.Text = _stateRoot;
@@ -71,6 +92,24 @@ public partial class MainWindow : Window
         {
             SetFailure("SOURCE UNAVAILABLE", ex.Message);
         }
+        finally
+        {
+            _busy = false;
+            IsEnabled = true;
+            UpdatePrimaryButton();
+        }
+    }
+
+    private async void ChooseInstallRootButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || !_canChooseInstallRoot) return;
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Choose installation folder (existing installations and saves stay in place)",
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) == true)
+            await InitializeSourceAsync(dialog.FolderName);
     }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
@@ -110,6 +149,7 @@ public partial class MainWindow : Window
             return;
 
         _busy = true;
+        ChooseInstallRootButton.IsEnabled = false;
         GraphicsSettingsButton.IsEnabled = false;
         _cancellation = new CancellationTokenSource();
         BrowseButton.IsEnabled = false;
@@ -243,6 +283,7 @@ public partial class MainWindow : Window
         if (_busy) return;
 
         _busy = true;
+        ChooseInstallRootButton.IsEnabled = false;
         GraphicsSettingsButton.IsEnabled = false;
         PrimaryButton.IsEnabled = false;
         PrimaryButton.Content = "GAME RUNNING";
@@ -396,7 +437,7 @@ public partial class MainWindow : Window
         PrimaryButton.Content = "OPEN GITHUB AGAIN";
     }
 
-    private async Task<string> ResolveRepositoryRootAsync()
+    private async Task<string> ResolveRepositoryRootAsync(string? selectedInstallRoot = null)
     {
         static bool IsRoot(string path) => File.Exists(Path.Combine(path, "config", "supported-dumps.json"))
             && File.Exists(Path.Combine(path, "tools", "setup-preview.ps1"));
@@ -404,7 +445,11 @@ public partial class MainWindow : Window
         var directory = AppContext.BaseDirectory;
         for (var i = 0; i < 8; i++)
         {
-            if (IsRoot(directory)) return directory;
+            if (IsRoot(directory))
+            {
+                _canChooseInstallRoot = false;
+                return directory;
+            }
             var parent = Directory.GetParent(directory);
             if (parent is null) break;
             directory = parent.FullName;
@@ -416,6 +461,10 @@ public partial class MainWindow : Window
 
         var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "dev";
         var installRoot = Environment.GetEnvironmentVariable("PINYON_SHIFT_INSTALL_ROOT");
+        _canChooseInstallRoot = string.IsNullOrWhiteSpace(installRoot);
+        if (_canChooseInstallRoot)
+            installRoot = selectedInstallRoot ?? (File.Exists(InstallRootPreference)
+                ? (await File.ReadAllTextAsync(InstallRootPreference)).Trim() : null);
         if (string.IsNullOrWhiteSpace(installRoot))
             installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PinyonShift");
         var destination = Path.Combine(Path.GetFullPath(installRoot), "source", version);
@@ -517,6 +566,8 @@ public partial class MainWindow : Window
 
     private void UpdatePrimaryButton()
     {
+        ChooseInstallRootButton.IsEnabled = !_busy && _canChooseInstallRoot &&
+            GraphicsPanel.Visibility != Visibility.Visible;
         PrimaryButton.IsEnabled = !_busy && (_pendingReport is not null || _gameExecutable is not null ||
             (_repositoryRoot is not null && File.Exists(IsoPathTextBox.Text) && OwnershipCheckBox.IsChecked == true));
     }
@@ -590,6 +641,7 @@ public partial class MainWindow : Window
         LogPanel.Visibility = Visibility.Collapsed;
         CrashPanel.Visibility = Visibility.Collapsed;
         GraphicsPanel.Visibility = Visibility.Visible;
+        ChooseInstallRootButton.IsEnabled = false;
         GraphicsStatusText.Text = "Loading current settings…";
         try
         {
@@ -606,6 +658,7 @@ public partial class MainWindow : Window
     {
         GraphicsPanel.Visibility = Visibility.Collapsed;
         LogPanel.Visibility = Visibility.Visible;
+        UpdatePrimaryButton();
     }
 
     private async void SaveGraphicsButton_Click(object sender, RoutedEventArgs e) =>

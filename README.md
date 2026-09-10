@@ -45,8 +45,10 @@ disc locally, generates the translation locally, and compiles the executable
 locally. Administrator permission is requested only if Visual Studio Build
 Tools must be installed.
 
-To build on another drive, start the packaged launcher from PowerShell with an
-installation root (use the same setting on subsequent launches):
+To build on another drive, use **Choose folder** under **Local build** in the
+packaged launcher. The launcher remembers your choice for subsequent launches.
+This selects an installation; it does not move an existing installation or save.
+You can also override the remembered location from PowerShell:
 
 ```powershell
 $env:PINYON_SHIFT_INSTALL_ROOT = 'D:\Games\PinyonShift'
