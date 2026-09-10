@@ -6,6 +6,120 @@ Xenia Canary. The goal is **not complete**.
 
 ## Resume audit — 2026-09-04, 23:25 UTC
 
+### P2 retained video pixel stage (2026-09-07)
+
+31511D native pixel execution is retained for exact VS7156CE/PS31511D,
+both modifications 1, bindless host targets at 2x/2x. Output parity passed
+(83,886,080 attachment bytes), live capture verified native bytecode, and the
+four-run title comparison showed no material regression (median +0.175%,
+p95 -0.540%, GPU -1.933%, CPU +0.062%). This is dependency removal for the
+qualified video/title stage, not a general gameplay speedup. FXC /WX and the
+production admission/alpha checks pass; opening-FMV smoke exited normally.
+Current runtime/artifact DLL SHA-256:
+`68CFD66A5BF3E2788779037EE507A2E3D43EDDEC7BE09FD3CC5DE0EC78E9223A`.
+Retained copy: `.local/native-renderer/p2/video-retained.dll`; prior build:
+`.local/native-renderer/p2/skinned-owned-disabled.dll`.
+Next: qualify direct uploads of the observed linear R8 video planes using
+the existing texture-load watch and CPU-ownership checks. Remaining P2 scene
+ranking, slowdown-town coverage and other resource contracts remain open.
+Continue from [P2 dependency ranking](P2_DEPENDENCY_RANKING.md).
+
+### P2 ownership performance rejection (2026-09-07)
+
+B848 native vertex specialization remains retained; skinned geometry ownership
+is explicitly disabled in the source after failing the performance gate. Input
+parity passed on 625 draws (616 owned), with three sampled vertex and six
+attachment comparisons passing. The refined ownership ABBA nevertheless measured
+median frame +15.32%, p95 +15.77%, GPU +12.95% and CPU +9.09%, with draw workload
++4.56%. One candidate run was notably worse; the cause remains unconfirmed.
+Do not enable ownership based on parity alone. Temporary diagnostics are removed.
+Current runtime/artifact DLL SHA-256:
+`513AD56D1829DF9D0419CA0ABA165D0CC42E6F3F647EAABC81E0252BB18E24C0`.
+The prior retained shader-only DLL is `.local/native-renderer/p2/skinned-candidate.dll`.
+Details and local evidence paths are in [P2 dependency ranking](P2_DEPENDENCY_RANKING.md).
+Next: isolate import/cache costs before retrying ownership, and continue the
+remaining P2 scene/cost ranking and texture/resolve/query dependency work.
+P2 remains incomplete. No commit, push or release was made for this goal.
+
+### P2 retained B848 vertex stage (2026-09-07)
+
+P2 is the current priority; unfinished P0/P1 work is deferred. Continue from
+[P2 dependency ranking](P2_DEPENDENCY_RANKING.md). The B848 native vertex
+specialization is retained for bindless host render targets, modification 0x1F,
+2x/2x only. All 712 captured vertex outputs and six sampled color/depth outputs
+matched; a live capture verified native bytecode on 706 draws. A stationary
+ABBA comparison found no material regression (median frame -0.33%, GPU -0.49%,
+private memory +0.40%); this is dependency removal, not a proven speedup.
+Current runtime/artifact DLL SHA-256:
+`1700386CF40F591702D38FFE0FBFDDA26867D41D6166E1055FB2F5BEB63AE12E`.
+The prior baseline is preserved at `.local/native-renderer/p2/production-baseline.dll`.
+Next: own both B848 input streams, then continue remaining P2 cost/scene ranking,
+shader/pass and resource work. C347/21B70 and the two-UV candidate remain disabled.
+
+### P1 clean-install work (2026-09-07; in progress)
+
+P0 is deferred at the user's request. Continue from
+[P1 artifact production](P1_ARTIFACT_PRODUCTION.md): retained launcher/Python
+and packaged-CMake fixes, one-command empty-cache production plus strict-route
+verification, and two matching NVIDIA 1x packs. Clean startup is qualified only
+for the short recorded route. Three known car-selection vertex variants are
+still missing; setup integration, safe reuse, broader modes/scales and AMD/Intel
+qualification remain open. Runtime renderer source and DLL are unchanged.
+
+### P0 investigation (2026-09-07; unresolved)
+
+- Recovered the actual manual-playtest session `20260907T184243Z-p31792`
+  (43,929 performance rows). Slow windows cluster around 479-516 and 615-642
+  seconds of accumulated frame time. These offsets are approximate, not UTC.
+  Selected ordinary frames average 14.59 ms / 2,634 draws; selected slow frames
+  average 74.56 ms / 4,396 draws. This is a workload comparison, not a benchmark.
+- Geometry cache pressure is a lead: the 32 MiB cache fills, and imports rise
+  from roughly 100-300 to 5,000-10,515 per 262,144 cache-hit interval around the
+  slow periods. Logged GPU time also rises. Command stalls, critical-region
+  contention, memexport fence waits and strict/readback wait times were zero
+  in the selected groups. Cache churn is correlated, not established as causal.
+- User says the town is near the latest save. Automated loads start at Recaro
+  Rush, on the east side of Montano Plains. The short approach run did not
+  reproduce the reported collapse. Direction to the affected town is pending;
+  capture approach, stationary/camera changes and exit once located.
+- A read-only cache diagnostic found overlapping windows: one historic captured
+  resource set occupied 30,408,704 bytes for 18,284,544 unique bytes; 6,750,208
+  bytes came from differently sized windows sharing a base address. Live
+  diagnostic runs showed dirty reimports as well as eventual eviction.
+- Tested a same-base containing-window reuse candidate without increasing the
+  cache budget. The extracted production-code cache check passed (including
+  nested ranges, mutation outside a nested request, in-flight invalidation,
+  allocation failures and eviction). Release DLL built; gameplay PID 33856
+  exited normally with no obvious geometry errors in its inspected screenshot.
+  Allocation still reached 32,505,856 bytes. Route/traffic differed, so no
+  before/after FPS improvement is established.
+- Candidate capture `containment-rdc/frame_frame3034.rdc` mapped 3,888 draws.
+  The existing layered geometry check stopped at event 16720 because cached
+  bytes differed from shared memory. CPU imports may legitimately be newer
+  than shared memory; this comparison neither establishes a candidate bug nor
+  passes parity. Need an authoritative import-time reference for this case.
+  Candidate NOT retained; source and both DLL locations restored to baseline
+  `75521DA21DBAC16D95CA6C6F9E11640A5A601A393E86C6D4192044782A3863E4`.
+- Animation timing remains unresolved. Aggregate title-delta/wall-time ratios
+  were approximately 1.001 in ordinary frames and 0.979 in slow frames, without
+  invalid deltas. `simulation_tick_count` counts application-loop iterations,
+  not physics steps. This does not prove individual NPC/UI timing correct.
+  Six-second NPC clips at requested 30 and 120 FPS caps produced no clear
+  repeatable animation cycle; the higher cap was not achieved. No timing patch.
+- Local evidence is under `.local/native-renderer/p0-playtest/`: archived manual
+  JSONL/CSV and runtime rotations, `initial-analysis.json`,
+  `manual-geometry-cache-deltas.json`, `captured-geometry-ranges.json`,
+  `npc-motion-analysis.json`, containment gameplay/capture reports, and build
+  logs. Rejected candidate source/check are in `containment-source/`; its DLL
+  is `containment-candidate.dll`. Do not stage it as a validated improvement.
+- Both P0 acceptance gates remain open. Next: identify the actual town route,
+  separate eviction from write invalidation in that workload, and measure a
+  complete NPC/UI animation cycle against elapsed time before changing clocks.
+
+### Current work priorities (2026-09-07)
+
+- Follow [the prioritized native renderer backlog](NATIVE_RENDERER_BACKLOG.md): reported slowdown and animation timing, clean preview setup, measured native coverage and resource ownership, full Xenos retirement, then lower-hardware qualification. This supersedes older prioritization that allowed a permanent compatibility renderer.
+
 ### Remote checkpoint and highly experimental preview (2026-09-07)
 
 - Publication update: preview.1 CI stopped on a legacy CP1252 em dash in this document before any release was published. Converted that one invalid UTF-8 byte to its UTF-8 representation, preserving all other text. Publication target is 0.1.2-preview.3; see [release notes](../releases/0.1.2-preview.3.md). Preview.2 was stopped to include the release notes directory excluded by the existing docs ignore rule.
@@ -6346,3 +6460,2183 @@ Preserve unrelated and pre-existing changes. Before editing, inspect both root
 and submodule diffs. The active goal must remain open until native scene
 retirement, visual correctness, matched performance, minimum-hardware evidence,
 and source-rendered uncapped presentation are all satisfied.
+
+### Texture-load classification from existing trace (2026-09-07)
+
+Retained renderer 97F7FC93..., runtime FCE008D...; no renderer changes. One 2x
+AppData driving probe (PID 23960) exited normally. Screenshot at 31 seconds shows
+the expected road/camera at 83 km/h. GPU-category trace was temporarily enabled;
+the original config was restored byte-for-byte. Do not use this trace-heavy run
+as benchmark evidence or equate its wall-time window with earlier CSV windows.
+
+`tools/rank-fh1-texture-loads.py` reuses existing successful-load messages. In
+[26, 30) seconds since the first log timestamp, 19,923 messages cover 98 logged
+signatures; 19,450 (97.626%) are scaled resolves. All use the resident-memory
+backend, with no CPU-loader successes. These are messages, not unique resource
+identities, dirty attempts, transferred bytes, GPU timings or frame counts. The
+existing log signature omits some texture-key fields and does not identify the
+specific dirty subresources. The parser checks window coverage and boundaries;
+its runnable `--self-test` passed.
+
+Repeated signatures include 1280x720 k_2_10_10_10 at 0x1C4E1000 (458 unpacked,
+457 packed), 1280x720 k_8_8_8_8 at 0x1DAC5000 (458), and several smaller scaled
+postprocess surfaces (458 each). Repeated unscaled loads include a 16x16x16 LUT
+at 0x136FB000 (231) and a 32x32 DXT4_5 texture at 0x13721000 (220). Other unscaled
+signatures account for only 22 messages. Shared addresses, different formats and
+packed flags do not prove redundant work: intervening writes and layout matter.
+
+Next prioritize scaled-resolve conversion attribution over generic asset-cache
+changes. D3D12 LoadTextureDataFromResidentMemoryImpl selects a scaled load PSO,
+requests a scratch GPU buffer, makes the scaled range current, dispatches the
+conversion and copies into the texture. Measure that chain, then inspect whether
+a bounded native producer/consumer pair can avoid it while preserving guest writes,
+aliases, formats and synchronization. Counts alone do not attribute the previous
+2.22-2.46 ms CPU request totals or prove a safe conversion bypass.
+
+Evidence: `.local/native-renderer/p2/texture-load-trace/{loads.log,ranking.json,
+launch-valid.json,scene/moving-end.ppm}`. The first launch (PID 27292) rejected an
+already-created output directory before gameplay; rerun used a fresh child path.
+No speedup or additional dependency retirement claimed; P2.1/P2.3 remain open.
+### Base-only packed-tail key experiment: not retained (2026-09-07)
+
+Tested canonicalizing the unused packed-mips bit for base-only, non-array 2D
+textures whose packed tail starts after level zero. Other key fields, layouts,
+write watches and load code remained unchanged. Candidate 2C896A13... then guarded
+revision 6903D7D716FCA90CCA74D21A406261AEBFF888963EDA40750EA6B4962D0DBD7A
+avoid duplicate cached textures; the guarded revision skips already-clear flags.
+Both builds passed (existing TextureKey memcpy/memset warnings). The isolated
+candidate's check links the production util.cpp and info_formats.cpp, compares
+1,344 base layouts for tiled/linear formats, padded pitches and dimension edges,
+and rejects small-base, mipmapped, array and non-2D cases. Watch-race/retry checks
+also pass. This is layout/admission evidence, not full GPU or whole-game parity.
+
+Two stationary 2x ABBA sets completed with normal exits and reviewed screenshots.
+The first set (PIDs 29844/31992/37064/33296) included a broad repository search
+overlapping B1, so it cannot support performance claims. The guarded revision's
+clean set (PIDs 49648/50000/18928/27736) ran without concurrent search/build/replay.
+Frame window: accumulated CSV frame-time seconds 32-44; process window: 34-46.
+
+| Run | Median ms | P95 ms | P99 ms | GPU mean ms | Draws/frame | Dirty attempts/frame |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A1 | 16.536 | 19.464 | 21.086 | 16.470 | 3328.6 | 86.953 |
+| B1 | 17.550 | 22.134 | 23.938 | 18.114 | 3763.0 | 87.751 |
+| B2 | 17.4195 | 21.655 | 23.494 | 17.729 | 3632.5 | 86.936 |
+| A2 | 16.530 | 19.631 | 21.246 | 16.321 | 3270.6 | 87.418 |
+
+Candidate versus mean baseline: median +5.76%, p95 +12.01%, p99 +12.05%, GPU
++9.31%, draws +12.07%, dirty attempts +0.18%, process CPU +2.80%, private memory
++0.38%. Draw-count differences prevent attributing slowdown to normalization;
+there is still no repeatable benefit or non-regression evidence for retention.
+Do not claim private memory measures texture allocation/VRAM. Screenshots show
+the same stopped car/camera with varying NPC poses and traffic, not matched GPU
+work. No speedup or dependency removal claimed.
+
+Restored original cache.cpp byte-for-byte and both renderer DLLs to retained SHA
+97F7FC93C27C2A8BA228BD2EEB4775A8BC1DC96BFDFB15CB74D9B1C049C158AA. Runtime remains
+FCE008D.... Candidate source/DLL and both ABBA sets remain isolated under
+`.local/native-renderer/p2/packed-key*`. Reproduce the check with:
+`python tools/check-fh1-packed-tail.py --source .local/native-renderer/p2/packed-key-guard-candidate.cpp --compiler .local/toolchain/llvm-20.1.8/bin/clang++.exe`.
+
+Next measure the actual scaled conversion chain (CPU and GPU) and map a bounded
+producer/consumer pair; do not assume canonicalizing an unused flag removes a
+material number of conversions. P2.1/P2.3 and full P2 remain open.
+### Direct scaled texture GPU timestamps (2026-09-07)
+
+Reused the existing query heap, per-frame record slots and completed-submission
+retirement for base-only, non-array scaled 2D texture loads. With corpus enabled,
+every 60th source frame records a start after scaled-range selection, an endpoint
+before the destination-copy barriers, and an endpoint after scratch-to-texture
+copies. No new wait or readback allocation. Queries share the existing 256-record
+capacity with pass spans; capacity/interrupted samples are dropped. Every query
+is initialized before potential interruption. Full identity is retained internally;
+logged groups expose base/dimensions/format/pitch/packed/endian/signed fields and
+are not a universal texture-key identity (tiling is not logged).
+
+The conversion interval includes source transitions, setup commands and dispatch;
+the copy interval includes destination/scratch barriers and CopyTextureRegion.
+CPU setup before GPU command execution, scaled-range selection/residency, other
+texture shapes and render-target resolves themselves are outside this scope.
+Texture intervals overlap the broader pass spans: never add the two rankings.
+These instrumented frames do not establish a speedup or full-frame cost percentage.
+
+Both retained-behavior 2x driving runs exited normally: A PID 49328, B PID 47172.
+Images reviewed: expected road/camera, 84/83 km/h, traffic varies. Selected source
+frames 2880/2940/3000 correspond to timed CSV row + 1 in the 26-30-second window.
+
+| Run/frame | Loads measured | Conversion ms | Copy ms |
+| --- | ---: | ---: | ---: |
+| A/2880 | 82 | 0.687456 | 0.441984 |
+| A/2940 | 83 | 0.681984 | 0.446656 |
+| A/3000 | 82 | 0.678272 | 0.443680 |
+| B/2880 | 83 | 0.700096 | 0.504672 |
+| B/2940 | 82 | 0.659808 | 0.434464 |
+| B/3000 | 82 | 0.674496 | 0.449344 |
+
+Mean measured conversion+copy is 1.126677/1.140960 ms per sampled frame. Largest
+logged groups: 1280x720 format 7 at 0x1C4E1000, unpacked/endian 2 (0.135819/
+0.128128 ms/frame); format 6 at 0x1DAC5000 (0.112640/0.111616); format 6 at
+0x1CE2D000 (0.096256/0.106133). Counts/costs divide by all three selected sampled
+frames, including absences. Maximum observed shared-record indices were 238/240;
+this is not proof that all possible samples retired successfully.
+
+The legacy run collector merges rotated runtime logs, so B contains A too. The
+first exploratory B sum doubled counts and was discarded. New tool
+`tools/rank-fh1-texture-samples.py` requires an explicit session and source frames,
+tracks logging.ready boundaries, deduplicates identical records, rejects conflicts
+and malformed times, and uses the supplied frame denominator. Session IDs:
+`20260908T012634Z-p49328`, `20260908T012716Z-p47172`. Do not rank a merged runtime
+file without filtering its session. Earlier pass-ranking evidence using merged
+logs needs session revalidation before using it for a new optimization decision;
+per-session CSV measurements are unaffected.
+
+`check-fh1-texture-timing.py` compiles the production allocation/advance methods
+against a fake query sink and passes disabled/sampling/capacity/pending-slot/
+interrupted-submission guards. GPU ranking self-tests pass session isolation,
+deduplication/conflicts, negative samples and absent-frame denominator cases.
+Renderer build passes. RenderDoc EventGPUDuration was independently retried on
+frame3758: counter advertised, zero results and no debug messages; no timing
+claim comes from that replay.
+
+Evidence: `p2/scene-scale-2x-texture-gpu-{a,b}/texture-gpu-ranking.json`, per-session
+CSVs, merged runtime logs, corrected window records, images; `texture-gpu-timing-build.log`;
+`conversion-counter-audit/report.json`. Built/staged renderer SHA
+8BD8EE1F881EA1DACC3D4756D5EAC49EE82B0824D2B84398B8CFFEE8FDE9540A; runtime remains
+FCE008D847CD0832BD021B2231BFF7EDDAED7E8DFBECA0A6D780D63E16403BA0.
+No admission or texture invalidation changes; packed-tail candidate stays isolated.
+Next trace the 0x1C4E1000 producer/consumer chain in a capture and qualify a native
+path that avoids the measured conversion while preserving required guest writes,
+aliasing, formats and synchronization. P2.1/P2.3 and full P2 remain open.
+### Captured 0x1C4E1000 producer/consumer chain (2026-09-07)
+
+Inspected existing `p2/production-rdc/frame_frame3758.rdc` to explain the surface
+identified by direct timing. This is a separate captured workload, not the exact
+2880/2940/3000 timing frames; revalidate on a fresh capture before admission.
+Replay completed without errors. No renderer/source/binary change in this step.
+
+The scaled source descriptor uses buffer ResourceId::1922, offset 1,899,511,808
+(0x1C4E1000 * 4), extent 15,073,280 (0x398000 * 4). Conversion PSO 397 has DXBC SHA
+9ef595f68696b7686f110da36cb56197a15458cab95b34274e9da431611090b4 and writes scratch
+buffer ResourceId::1902, followed by CopyTextureRegion into R10G10B10A2 textures.
+
+| Load dispatch | Copy | Destination | Next draw (not automatically a proven consumer) |
+| ---: | ---: | --- | --- |
+| 15860 | 15862 | ResourceId::9994 | 15871: VS 972F0220C6D5A9A2 / PS 129FCB5D371AE0FC |
+| 20099 | 20101 | ResourceId::9994 | 20110: same VS/PS |
+| 38847 | 38849 | ResourceId::2727 | 38866: VS 2C53E1A563484076 / PS E17BECBE8BE65806 |
+
+Three Resolve Copy Full 32bpp dispatches write consecutive portions of the range:
+19898 writes offset 1,899,511,808 length 5,242,880; 34315 writes offset 1,904,754,688
+length 5,242,880; 38706 writes offset 1,909,997,568 length 4,587,520. Assertions
+verified these cover the loaded extent exactly with no gaps. These are descriptor
+ranges, including padding; they do not by themselves prove every byte was written.
+Each immediately preceding RT Dump (19891/34308/38699) reads ResourceId::2886:
+`RT @ 0t, <32t>, 4xMSAA, k_2_10_10_10_FLOAT`, RGBA16F, allocation 2560x1024.
+The same native target is reused. Allocation dimensions are not active rectangles.
+
+Crucially, the first texture load precedes all three captured writes, the second
+occurs after the first write but before the other two, and the last follows all
+three. An alias to the latest native render target cannot preserve this assembled
+surface's earlier and partially updated contents. A native replacement must track
+resolved regions and their lifetimes, handle the captured 4xMSAA and format
+conversion, and preserve guest-visible writes and invalidation. Dropping the
+intermediate/history state is not an acceptable visual approximation.
+
+Resource usage lists showed copies/barriers but no sampled-resource uses; their
+absence is insufficient evidence of an unused texture in this bindless capture.
+Explicit pixel binding inspection proves ResourceId::2727 is sampled at draw
+38866. It does not prove ResourceId::9994 is used at the two immediately following
+draws (15871 listed other resources; 20110 returned none). Do not skip those loads
+based on this incomplete usage evidence.
+
+PS E17BECBE8BE65806 has 16 spatial taps (32 sample_d instructions implement paired
+signed/unsigned handling), squares/sums RGB, multiplies by captured 1/16, then
+sqrt(abs(...)); alpha is averaged. Offsets span approximately -1.498535 through
+1.501465. This is a concrete RMS-downsample consumer for a native pass, not a plain
+texture blit. Its individual GPU cost is not yet measured, and a cheaper kernel
+has no visual/performance qualification yet.
+
+Evidence: `p2/resolve-chain-audit/{inventory,pipelines,chain,overlaps}.json` and
+`p2/resolve-chain-consumers/` bindings, constants and disassembly; local replay
+scripts `resolve-chain-*.py`. Next design the smallest native resolve-region output
+that can preserve partial-update/history behavior, and measure/qualify the
+E17 consumer if combining conversion with that pass is cheaper. A direct view
+alias is ruled out for this captured chain. P2.1/P2.3/P2.4/P2.5 remain open.
+### Native E17 RMS downsample retained at 2x (2026-09-08)
+
+Implemented `fh1_rms_downsample.ps.hlsl` for VS 2C53E1A563484076 (modification 1)
+with PS E17BECBE8BE65806 (modification 0x0000400000000001). Admission requires
+bindless host render targets and symmetric 2x. Other variants retain existing
+behavior; failed native PSO creation uses the established fallback. No native
+vertex replacement or resolve/texture-transfer bypass is claimed.
+
+This retains all 16 offsets, signed/unsigned fetch handling, scale-aware sampling,
+fetch exponent, original RGB/alpha accumulation order, zero multiplication rule,
+and output exponent bias. RGB remains sqrt(abs(weight * sum(sample^2))); alpha
+remains weighted sum. This is a faithful native reference, not a reduced-tap effect.
+
+FXC /O3 /WX compilation passes. Native DXBC SHA
+98F115605849974C77F19C6ED93C972012E535FCCDC92CC250F98FE457A3A5AC differs from original
+702ADD76157BAD64458FD2DB4E8BB69F229A0639FF6D0E7787800BC946248161. Replacement replay
+at both matching draws in frame3758 (38866/38901) produced byte-identical complete
+RGBA16F attachments: 167,772,160 bytes total, plus 1,536 unchanged post-VS bytes.
+This proves that captured workload, not every live input configuration.
+
+Live 2x race capture PID 44052 exited normally. Frame4343 contains two matching
+draws, and the bound pixel bytecode matches native SHA 98F11560... (audit event
+39980). Corpus diagnostics were disabled for capture. Exact modification gates
+are therefore exercised by a real runtime pipeline, not merely inferred.
+
+Clean stationary 2x ABBA completed normally (PIDs 4804/31628/51860/51000). Analyze
+CSV frame-time seconds 32-44, process samples 34-46; no concurrent build/replay.
+All four end images reviewed: same stopped car/camera, with traffic/NPC variation.
+
+| Run | Median ms | P95 ms | P99 ms | GPU mean ms | Draws/frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A1 | 16.6145 | 20.625 | 22.849 | 16.667 | 3395.9 |
+| B1 | 16.6275 | 20.561 | 23.085 | 16.777 | 3268.6 |
+| B2 | 16.2405 | 19.532 | 21.640 | 16.274 | 3301.9 |
+| A2 | 16.1650 | 19.359 | 22.517 | 16.097 | 3231.2 |
+
+Mean candidate change: median +0.27%, p95 +0.27%, p99 -1.41%, GPU +0.88%, draws
+-0.86%. Process CPU -8.39%, private memory -0.20%, working set -1.05%; do not
+attribute these process changes to this pixel shader or claim repeatable CPU/FPS
+improvement. Retain as native shader coverage with no material frame-time regression
+in this probe. It does not lower the published requirements or retire the full
+renderer, texture conversion or shared-memory dependencies.
+
+`tools/check-fh1-rms-downsample.py` passes exact-hash/modification bit-flip,
+backend/bindless/scale exclusions and fallback guard checks. Final build passes;
+built/staged renderer SHA is identical to the qualified candidate:
+7C336D32E78B25DC0357A84DB0D6DF89B93BC5A4063E9C47F1F7E3B8E232AA70. Runtime stays
+FCE008D847CD0832BD021B2231BFF7EDDAED7E8DFBECA0A6D780D63E16403BA0.
+
+Evidence: `p2/rms-reference-parity/report.json`, `rms-native-rdc/frame_frame4343.rdc`,
+`rms-bound-audit/report.json`, `rms-abba-{a1,b1,b2,a2}/`, `rms-abba-summary.json`,
+`rms-candidate-build.log`, `rms-retained-build.log`. Native RMS at 1x, lower-tap
+visual/performance qualification, native region/history resolve output and remaining
+P2 coverage are still open. P2 is not complete.
+### Session-isolated pass ranking revalidation (2026-09-08)
+
+Fixed the pass-ranking tool to require --session, using the same session boundary
+selector as texture ranking (`tools/fh1_runtime_log.py`). This prevents rotated-log
+merges from mixing different runs even when their submission/record IDs do not
+collide. Both tools reject a missing session start. Checks cover cross-session
+records, duplicate/conflicting records and timing denominators; both self-tests
+pass with the bundled Windows Python. No renderer/binary change.
+
+Re-ranked source frames 2880-3000 in texture-GPU sessions A
+20260908T012634Z-p49328 and B 20260908T012716Z-p47172. Corrected files are
+`p2/scene-scale-2x-texture-gpu-{a,b}/pass-ranking-{isolated,mapped}.json`.
+466/470 observed pass records cover the same three sampled frames. First-draw
+identities map to the per-session corpus, not an inferred shader name.
+
+| Span family | First VS / PS | A ms/frame | B ms/frame |
+| --- | --- | ---: | ---: |
+| 8F17E2B502A6BF62 | A3B9ED5D5C87230E / 93626E75D17576C5 | 0.961195 | 0.975872 |
+| ED7F805DBDC5C236 | 1E6883FCCDE1F688 / no PS | 0.775168 | 0.771755 |
+| 7C6A3248DE68D142 | 984DBF6AF14DBEBD / 6FDA0F1CDE67D12F | 0.659456 | 0.628053 |
+
+C34795A841E7DEFF / 21B70A5E4C9CFD11 also starts several large spans: A's two
+largest such families measure 0.683349/0.657408 ms, while B's largest measures
+0.664576 ms. These family populations differ; do not compare their sums as an
+isolated shader benchmark. Spans beginning with E17 RMS total 0.130389/0.130731
+ms/frame in these pre-native-RMS runs. Texture conversion and other work overlap
+these intervals. Existing native shadow/clear paths already cover some leading
+first-draw pairs; their whole spans are not costs of those shaders alone.
+
+Earlier clean-CPU sessions were re-ranked independently too. CPU preparation
+per sampled frame remains exactly A 2.8722/2.9666/7.2271 ms and B
+3.2318/2.9310/5.1102 ms. Family 738B37134E7F4A0C remains 1.452333/0.878567 ms per
+sampled frame. Those published preparation figures survive session revalidation;
+this does not automatically validate every older merged-log report. Per-session
+CSV benchmarks are unaffected by this logging fix.
+
+Next prioritize the larger scene/transfer spans and remaining C347 native
+coverage before spending effort on a reduced-tap RMS filter. Individual shader
+cost and the complete frame ranking remain unproven. Use, for example:
+`python tools/rank-fh1-pass-samples.py LOG --session SESSION --first-frame 2880 --last-frame 3000`.
+P2 remains open; retained renderer is still 7C336D32... with native RMS at 2x.
+## Manual discovery tooling (2026-09-08)
+
+Implemented tools/start-fh1-discovery.ps1 and record-fh1-discovery.py; usage and
+limits are in DISCOVERY_PLAYTEST.md. Launches through launch-preview with the
+installed save, captures per-frame CSV and process samples, preserves session
+sample logs, writes rolling reports, and registers Ctrl+Shift+F8/F9 markers with
+optional game-window screenshots. No automated inputs in the manual launch.
+Periodic corpus checkpoints preserve the active pass and keep observation enabled;
+draw/pass maps are capped. CSV supports live Windows readers and a 512 MiB cap.
+
+Full-observation discovery was rejected after a single off/on pilot: median
++26.34%, p95 +28.93%, p99 +26.03%, draws +1.40%. The manual launcher now uses
+fh1_discovery_sampling=true: one complete source frame in 60, aligned with existing
+GPU pass timing samples. Native admission and guest operations are unchanged.
+Sampled follow-up: median +3.18%, p95 +8.37%, p99 +7.70%, GPU +3.35%, draws +0.73%.
+This is a discovery-mode overhead pilot, not repeated optimization qualification.
+Evidence: .local/native-renderer/discovery-overhead-summary.json, off PID42516,
+full PID49432, sampled PID25764; all normal exits, CSV window32-44 seconds.
+
+Build passed. Production CSV function harness checks read sharing, cap stopping,
+unlimited default, and the production sampling predicate. Python checks cover
+partial lines, rotation identity, window statistics and report serialization.
+Smoke PID53228 exited normally, produced 10 corpus checkpoint events including
+final shutdown, and saved a verified gameplay marker screenshot. Corpus pass
+collisions are explicitly reported as incomplete pass coverage, not hidden.
+Manual discovery is ready; P2 is not complete and remains paused.
+## Independent discovery-family inventory (2026-09-09)
+
+Added a bounded 4,096-pair shader family map in the shared RecordKeyLocked path,
+before detailed-key lookup/admission, so all draw recording callers keep discovering
+families after the 65,536 detailed-key cap. Copies do not enter family coverage.
+Known families continue counting even at the independent family cap; rejected new
+family observations increment a separate overflow counter. Snapshots serialize
+counts and first/last observed source frames. Sampling cadence is unchanged.
+
+Strict detailed-key rank() remains unchanged. rank_families() and --families use
+independent coverage and expose family completeness; old overflowing snapshots
+remain rejected. The recorder reports detailed and family status separately and
+replaces an invalid latest ranking with an unavailable status. It remembers the
+processed snapshot timestamp on failure, avoiding repeated reparsing of a capped
+legacy snapshot every second. The previous manual session report was corrected;
+its prior valid ranking was preserved separately, and no lost observations inferred.
+
+Checks: production family recorder saturation harness passed through both actual
+caps, continued counts and copy exclusion; ranking tests and recorder self-test
+passed; release pinyon_shift build passed. Live discovery-family-smoke exited
+normally with repeated independent family checkpoints; final family draw totals
+matched detailed draw totals with no overflow/collisions. Helper CPU was 1.266 s
+in the first30.515 wall seconds with five-second test checkpoints (normal300).
+This functional smoke is not a repeated performance qualification. No change to
+native admission, rendering, guest writes, or the one-in-60 sampling cadence.
+## P2 manual-session cost triage (2026-09-09)
+
+See DISCOVERY_FINDINGS_2026-09-08.md, section P2 cost triage, for session-isolated
+pass/texture rankings of all six marker windows and exact source-frame ranges.
+Observed texture conversion/copy averages remain1.01-1.22ms/sampleframe. The
+Outpost and highway pass averages are dominated by one22.590ms753-draw span and
+one19.170ms single-draw span respectively. Session-wide medians for those families
+are0.590ms(15occurrences) and0.111ms(752occurrences), with second largest1.493/.200ms.
+Do not attribute these isolated delays to steady shader cost or lower quality on
+that basis. Next trace should correlate CPU submission, GPU scheduling/residency
+and precise span contents. Evidence is under the original manual session folder;
+no renderer behavior changed and no P2 item marked complete. P0/P1 remain deferred.
+## P2 submission-span diagnostics (2026-09-09)
+
+WPR GPU tracing was attempted after confirming no existing WPR session. Windows
+refused profiling privilege (0xc5585011); no ETL was produced, and WPR status was
+verified idle afterward. This does not block other P2 work.
+
+Added recording_wall_ns, begin_submission and end_submission to existing sampled
+GPU pass records. The clocks bracket host recording of the existing timestamp
+span; no queries, waits or rendering admission were added. Wall time includes
+waiting/preemption and is neither CPU utilization nor calibrated GPU busy time.
+The pass ranker validates complete interval triplets and monotonic submission
+order, and reports recording wall totals/maxima and cross-submission span counts.
+Old records remain supported. Parser self-tests and the release build passed.
+
+The first recorder run encountered a reused Windows PID. Fixed CSV selection by
+snapshotting pre-existing CSV filenames before launch; a regression check rejects
+ambiguous new files and excludes the old same-PID file. A following capture used
+the previously staged GPU DLL; it is not validation of the new fields. Explicitly
+staged/hash-verified rexgpu-fh1.dll EE28210F27F2052B9270FAC83770E9225A5C8F8797131590FC37355DC9CDA380
+and reran. Successful evidence: .local/native-renderer/p2/submission-trace/discovery-3,
+session20260909T003612Z-p19164, normal exit. All live pass records had valid interval
+fields. CSV32-44seconds selected sourceframes3300..3900 step60:1847 pass records,
+22 crossed submissions. Largest observed GPU span1.381376ms; largest host recording
+interval4.6966ms. Example cross-submission span0508147AE577D6CE frame3300 ran from
+submission12011 to12012, with0.353280ms GPU interval and1.6169ms host recording wall.
+
+This verifies cross-submission intervals exist, not that they caused the manual
+session's19-22ms outliers. The short run did not reproduce those outliers. Next
+marked-area capture can distinguish same-submission from crossing intervals;
+GPU residency/preemption still requires further evidence. No performance gain or
+renderer dependency retirement claimed; P2 remains active and incomplete.
+## RMS downsample retained at 1x (2026-09-09)
+
+Expanded the existing exact RMS admission predicate to symmetric1x/2x, retaining
+VS2C53E1A563484076/mod1, PSE17BECBE8BE65806/mod0000400000000001, bindless and host
+render-target requirements. Shader code is unchanged; this remains faithful16-tap
+RMS, not a cheaper filtering approximation. Unsupported/asymmetric scales and
+other shader modifications remain excluded; pipeline creation fallback is intact.
+
+Offline1x parity reused skinned-1x-clean-rdc/frame_frame4052.rdc (original capture
+launched at1x), events36859/36894. All41,943,040 attachment bytes and1,536 post-VS
+bytes compared exactly; originalPS6706EE6039FBE9A8B83307BE6D1C35941674CBAE3750ACA2AE1660D2E41BD79C
+was replaced by nativePS98F115605849974C77F19C6ED93C972012E535FCCDC92CC250F98FE457A3A5AC.
+Artifacts: rms-1x-reference-parity.py and report directory under.local/native-renderer/p2.
+
+Live1x race capture PID1144 exited normally with corpusOFF. rms-1x-native-rdc and
+rms-1x-bound-audit/report.json confirm2 matching draws at43271/43306, one PSO, with
+the native98F11560 pixel bytecode bound (VS stride32,24indices). RMS gate checker
+passes bit flips, shader modifications, backend/bindless exclusions, symmetric1x/2x
+and all other1..3 scale combinations, and existing fallback presence.
+
+Stationary1x ABBA completed with corpusOFF and no capture/replay/build during the
+measurement windows. Timings32-44sec, process34-46sec; end screenshots reviewed,
+same location at night with natural NPC/traffic variation. New per-run session
+filenames were recorded explicitly to avoid Windows PID reuse ambiguity. Capture
+metadata confirms1280x720 guest outputs and matching vehicle positions. logging.ready
+scale strings are empty here and were not used as proof of actual scale.
+
+Label/session PID | median ms | p95 ms | p99 ms | GPU ms | draws/frame
+A1/p26020 |15.6210|18.251|20.262|15.0506|3137.81
+B1/p51444 |15.6700|18.524|19.928|15.3279|3209.52
+B2/p32404 |16.6070|20.626|22.068|16.5801|3528.94
+A2/p4792  |16.7115|20.644|22.216|16.8867|3576.03
+Candidate deltas: median-0.172%,p95+0.656%,p99-1.135%,GPU-0.092%,draws+0.367%,
+CPU+0.482%,private+0.165%,working+0.826%. No material regression; no repeatable
+speedup or reduced hardware requirement claimed. Retain for native coverage.
+
+Scripts/evidence: rms-1x-abba.ps1, summarize-rms-1x-abba.py, rms-1x-abba-summary.json
+and four run directories. BaselineEE28210F... is saved as rms-1x-baseline.dll.
+Retained candidate963D7DBB1361F31E67784126D57F2CAFD2493F9DB037BD158CD6DF1F6366656B
+is staged at both root and rexglue-artifacts/rexgpu-fh1.dll. All runs exited normally.
+P2.1/P2.3/P2.4/P2.5 still have remaining work; B8481x and video CPU upload1x remain
+unqualified. Renderer-wide resource ownership and Xenos retirement are not complete.
+## Video CPU upload at 1x retained (2026-09-08)
+
+Expanded only the existing video upload admission from symmetric 2x to symmetric
+1x/2x for VS 7156CE05C6365E51 / PS 31511D87CC0C94B9. The upload implementation,
+CPU ownership check, texture watch and unsupported-layout fallback are unchanged.
+The production-body checker passes layout, allocation, ownership, shader-hash and
+scale exclusions. Release rexgpu-fh1 build passed (video-upload-1x-build.log).
+
+Three live 1x RenderDoc frames (8129, 8659, 9192), captured with corpus OFF, contain
+changing movie content. Every R8 plane matches its preceding placed-footprint
+upload buffer: 4,147,200 active bytes total, including padded chroma rows. Source
+resource creation confirms D3D12 upload heaps. All three saved movie outputs and
+four ABBA title screenshots were inspected. These are sampled visual checks, not
+a complete movie playback/timing qualification. Evidence lives under
+.local/native-renderer/p2/video-upload-1x-rdc and video-upload-1x-audit-frame_*.
+
+Clean ABBA used the opening-movie/title script at 1x, corpus OFF, with no concurrent
+build/capture/replay. CSV window 44-56 seconds excludes scheduled screenshots;
+process samples use 46-58 seconds. Each run has 1,440 measured frames, 47 draws and
+33 dirty texture loads per frame. All runs exited normally; guest output is
+1280x720. Movie position varies slightly between screenshots.
+
+| Run / session PID | Median ms | p95 ms | p99 ms | Mean GPU ms |
+| --- | ---: | ---: | ---: | ---: |
+| A1 / 45508 | 8.5060 | 10.519 | 11.111 | 5.4801 |
+| B1 / 45276 | 8.3260 | 10.526 | 11.130 | 5.6576 |
+| B2 / 3832 | 8.3415 | 10.591 | 11.432 | 5.3443 |
+| A2 / 51996 | 8.5070 | 10.526 | 11.111 | 5.3106 |
+
+Candidate deltas: median -2.031%, p95 +0.342%, p99 +1.530%, GPU +1.957%,
+CPU +1.367%, private memory -0.696%, working set +0.536%. No material regression
+in this bounded comparison; retain for upload coverage, with no general gameplay
+speedup or lower hardware requirement claim. This does not fix the marked stalls.
+Scripts: video-upload-1x-abba.ps1, summarize-video-upload-1x-abba.py; full results:
+video-upload-1x-abba-summary.json and four run directories, with exact session names.
+
+Baseline 963D7DBB1361F31E67784126D57F2CAFD2493F9DB037BD158CD6DF1F6366656B
+is preserved as video-upload-1x-baseline.dll. Retained candidate
+E601F4868EB2B434380CC3E40AA918A38C2DB2E471C354C8BD2E7EB584E029B2
+is video-upload-1x-candidate.dll, staged at root and rexglue-artifacts/rexgpu-fh1.dll.
+This supersedes the earlier statement that video CPU upload at 1x is unqualified.
+Other layouts/scales, B848 at 1x, broader resource ownership, marked-stall attribution
+and remaining P2 coverage are unfinished. Full Xenos renderer retirement remains P3.
+## Single-range upload preparation experiment (2026-09-08, not retained)
+
+Traced RequestTextures through PrepareTextureLoad/CommitPreparedTextureLoad and
+SharedMemory::RequestRanges. Single-range callers include vertex/index requests,
+memexport preservation and resolve destinations. The retained implementation uses
+a temporary vector even for one range. A candidate used a stack pair and span for
+count == 1, preserving validation and the shared residency/page/upload body;
+multiple-range merging was unchanged. This tests CPU preparation overhead, not
+native resource ownership or removal of transfers.
+
+New tools/check-fh1-shared-ranges.py compiles the actual production function and
+checks it against an independent requested-page oracle. Candidate and baseline
+pass 10,000 randomized cases plus empty, invalid, boundary, overlap and allocation/
+upload failure cases. An initial assertion that uploads never duplicate pages was
+invalid for both implementations: distinct byte ranges can cover the same page.
+The check verifies page coverage without imposing that unsupported invariant.
+No change to this separate behavior is proposed here. Release build passed.
+
+Clean 1x stationary gameplay ABBA used CSV seconds 32-44 and process seconds 34-46,
+corpus OFF, with screenshots outside the measurement window. All runs exited
+normally. Capture metadata shows 1280x720 at effectively the same car location;
+this experiment does not claim screenshot parity or motion qualification.
+
+| Run / session PID | Median ms | p95 ms | p99 ms | GPU ms | Draws/frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A1 / 48340 | 16.4650 | 19.649 | 21.936 | 16.1859 | 3416.19 |
+| B1 / 38964 | 16.1390 | 19.551 | 22.377 | 15.9128 | 3386.35 |
+| B2 / 45532 | 15.9575 | 18.912 | 22.689 | 15.5982 | 3325.46 |
+| A2 / 35240 | 15.8380 | 19.137 | 21.561 | 15.5213 | 3240.40 |
+
+Candidate delta: median -0.639%, p95 -0.833%, p99 +3.607%, GPU -0.618%,
+CPU -0.750%, draws +0.829%, private memory +0.833%, working set +0.328%.
+No repeatable benefit established; final baseline was fastest and workload drift
+is present. Do not retain a performance-only change on this evidence. Restore
+shared_memory.cpp byte-for-byte from the pre-experiment snapshot and keep renderer
+E601F4868EB2B434380CC3E40AA918A38C2DB2E471C354C8BD2E7EB584E029B2 staged at both paths.
+Candidate B35A7EFC9FBE191C71E4DA1A36C1CBE89935E03793A1DD3043C37865D19F4B0D and source
+remain isolated as single-range-candidate.dll/.cpp under .local/native-renderer/p2.
+Scripts/results: single-range-abba.ps1, summarize-single-range-abba.py,
+single-range-abba-summary.json and four run directories. The reusable range checker
+remains. No speedup or dependency retirement claimed. Next prioritize measured
+scaled-resolve conversion/region ownership, not another allocation micro-optimization.
+## Scaled 32-bit conversion reference and offline shader (2026-09-08)
+
+Returned to measured scaled-resolve work after the allocation experiment. Existing
+isolated texture samples split roughly 1.13 ms/frame into 0.68 ms conversion and
+0.44 ms copy; these overlap pass spans and are not additive with pass rankings.
+The 0x1C4E1000 surface contributes roughly 0.076 ms conversion plus 0.060 ms copy
+per sampled frame in that probe. No new runtime timing measurement here.
+
+Exported the source and final texture at production-rdc/frame_frame3758.rdc loads
+15860/20099/38847 (copies 15862/20101/38849). Each source view is 15,073,280 bytes;
+each destination is 2560x1440 R10G10B10A2_TYPELESS, 14,745,600 active bytes.
+Constants: flags 297 (tiled 2D, endian 8-in-32, symmetric 2x), guest offset 0,
+pitch 1280, size 2560x1440x1, host offset 0 and host pitch 10240.
+
+A CPU reference using the SDK's actual GetTiledOffset2D reproduces all 44,236,800
+active destination bytes exactly. For host group = x/4, source byte address is
+4*TiledOffset2D((group/2)*4,y/2,1280,2) + ((group%2)*2+y%2)*16 + (x%4)*4,
+followed by 32-bit byte reversal. Maximum exclusive source address is 15,065,088,
+inside the captured view. This validates both pre-existing and partially updated
+contents; it does not permit aliasing the current render target or deleting history.
+
+Added offline fh1_scaled_32bpp_2x.cs.hlsl. It uses the existing buffer source and
+scratch destination contract, with fixed 2x addressing and endian conversion.
+No runtime admission, PSO registration or build integration exists yet. Captured
+GPU shader replacement produces exact destination bytes at all three copies AND
+identical source-buffer hashes at all three loads, so prior-history preservation
+is checked through the replay. Candidate DXBC SHA256:
+1E25FDB2D989BFA93C77B210F9352E7D15F75C498B75B14F6DC999F464E4A7B9.
+FXC cs_5_1 /O3 reports about 60 instruction slots versus 126 for the generic shader;
+this is not performance evidence. tools/check-fh1-scaled-32bpp.py compiles actual
+candidate address/endian expressions, compares against SDK addressing over four
+pitches and 1,440 rows, and checks 100,000 byte-swap inputs. It passes.
+
+Local evidence: scaled-region-reference.py, check-scaled-region-reference.py,
+scaled-region-shader-parity.py; scaled-region-reference/{report,byte-parity,
+shader-parity}.json and exported buffers. The helper uses a bounded captured
+contract; it is not a verifier for arbitrary texture layouts or other scales.
+Next add exact live admission (2x, tiled 2D, base-only/no mips, 32-bit load type,
+endian 2, no forced 3D tiling, valid aligned footprint), verify bound shader and
+run clean comparisons before retention. Broader buffer/texture resource ownership
+and removal of the scratch copy remain unfinished. Renderer DLL E601F486... is
+unchanged and staged at both locations. No gameplay speedup or retirement claimed.
+
+## Scaled 32-bit conversion live qualification and retention (2026-09-08)
+
+Integrated an optional native compute PSO and generated FXC header. Admission is
+limited to base-only, no mips/packed tail, tiled 2D single-layer unsigned format 7,
+endian 2, 1280x720 with pitch 40 (1280 texels), symmetric 2x, 32bpb load shader,
+and no forced 3D tiling. Other cases and optional PSO failure use the generic load.
+The existing residency, watches, source history, scratch buffer, copy and barriers
+are unchanged. The production address/endian/admission checker passes; release
+rexgpu-fh1 build passed (scaled-32-build.log). This supersedes offline-only status.
+
+Live race capture PID 52176 exited normally with corpus OFF. In
+scaled-32-native-rdc/frame_frame4386.rdc, dispatches 21843/41732 bind native DXBC
+1E25FDB2D989BFA93C77B210F9352E7D15F75C498B75B14F6DC999F464E4A7B9.
+Both produce 14,745,600-byte textures. Generic replacement is exact on the second
+copy but differs on the first. Further inspection establishes differing source
+history on that first replay; repeating native also changes it. Therefore the
+first naive replacement comparison is invalid as matched-input parity evidence.
+An independent CPU address/byte-swap oracle instead matches each native and each
+generic output against its OWN captured input: four comparisons, 58,982,400 bytes,
+zero mismatches. The earlier three-load reference remains exact matched-source
+GPU parity. No claim that fresh-capture history replay is stable. Evidence:
+scaled-32-bound-audit/{inventory,cpu-oracle}.json and exported inputs/outputs.
+
+Two clean stationary 2x comparisons ran ABBA then BAAB, with corpus OFF, no
+capture/replay/build during measurement, CSV 32-44 seconds, process 34-46 seconds.
+All eight runs exited normally. Eight end screenshots reviewed: same Recaro Rush
+location, intact rendering, natural NPC/traffic variation. These are sampled scene
+checks; broad motion/hardware/other-layout qualification remains unclaimed.
+
+| Run / PID | Median ms | p95 ms | p99 ms | GPU ms | Draws/frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| a1 / 45712 | 17.3630 | 22.124 | 24.991 | 17.9302 | 3401.16 |
+| b1 / 50144 | 17.0760 | 21.696 | 24.876 | 17.4406 | 3478.17 |
+| b2 / 51300 | 16.7340 | 20.917 | 22.575 | 16.8225 | 3190.48 |
+| a2 / 50316 | 16.1465 | 19.361 | 20.803 | 16.1151 | 3160.69 |
+| b3 / 37548 | 16.6360 | 20.555 | 22.190 | 16.8376 | 3506.22 |
+| a3 / 28280 | 17.1710 | 22.017 | 23.782 | 17.7225 | 3584.03 |
+| a4 / 46356 | 17.0690 | 21.677 | 24.922 | 17.6814 | 3616.91 |
+| b4 / 47796 | 16.7100 | 20.651 | 23.905 | 17.1782 | 3622.50 |
+
+ABBA deltas: median +0.897%, p95 +2.719%, p99 +3.618%, GPU +0.640%, draws +1.628%.
+BAAB deltas: median -2.611%, p95 -5.694%, p99 -5.357%, GPU -3.921%, draws -1.003%.
+Combined descriptive deltas (not a speedup proof):
+median_frame_ms -0.876%, p95_frame_ms -1.597%, p99_frame_ms -1.007%, mean_gpu_ms -1.685%, mean_draws +0.251%, mean_dirty_loads -0.508%, cpu_seconds_per_wall_second +0.982%, mean_private_mib -0.649%, mean_working_mib -0.257%.
+
+No consistent material regression and no repeatable gain established. Retain this
+faithful native conversion for its demonstrated narrow coverage, not for an FPS
+claim. Generic conversion remains available for other contracts; the Xenos buffer,
+resolve assembly and scratch-copy dependencies are NOT retired by this change.
+Broader direct texture output/resource ownership and P2 remain incomplete.
+
+Scripts/results: scaled-32-abba.ps1, scaled-32-baab.ps1, corresponding summaries,
+scaled-32-combined-summary.json and eight scaled-32-abba-* directories. Retained DLL
+1BCD7340A46FBE2A60CDA6C2A1216CD5B5377C2D1F16DC08D4C97C46F549A982
+is saved as scaled-32-candidate.dll and staged at root and rexglue-artifacts.
+Baseline E601F486... is saved as scaled-32-baseline.dll. Next target the separate
+scratch copy/native texture output while preserving this proven source mapping.
+
+
+## Direct texture output experiment rejected (2026-09-08)
+
+Tested a direct UAV texture output variant of the qualified 2x 32-bit conversion.
+Candidate capability-checks R10G10B10A2_UINT typed UAV stores, allocates an optional
+UAV-capable typeless texture (ordinary allocation fallback), and writes packed
+channels directly, retaining residency/history/watches and the normal UAV-to-SRV
+transition. The candidate bypassed scratch allocation and CopyTextureRegion for
+the same narrow contract. No guest-visible write or resolve-history bypass.
+
+Build passed. Live race PID 5984 exited normally; capture
+ direct-texture-native-rdc/frame_frame3988.rdc dispatches 19056/38294 bind shader
+39BF1D4F7436A20A5400E4FAD9396A6592D39286F55328B7F80988565BD7AD8E
+with R10G10B10A2_UINT UAV output. Both 14,745,600-byte results match the independent
+source-address/endian oracle exactly (29,491,200 bytes). There are no copies into
+the target texture in that capture. direct-texture-bound-audit/byte-parity.json
+records the byte evidence. This proves removal of that copy in the candidate,
+not a performance win or full resource ownership retirement.
+
+The production-expression checker was expanded to verify direct pixel packing;
+candidate eligibility/capability exclusions passed before restoration. Release
+build passed. Clean 2x ABBA, corpus OFF, CSV 32-44 seconds, process 34-46 seconds,
+all four normal exits:
+
+| Run / PID | Median ms | p95 ms | p99 ms | GPU ms | Draws/frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| a1 / 51424 | 16.6555 | 20.612 | 23.317 | 16.8868 | 3477.74 |
+| b1 / 50272 | 16.7570 | 20.514 | 27.075 | 17.0416 | 3444.18 |
+| b2 / 46644 | 16.7510 | 20.931 | 24.386 | 16.9051 | 3365.85 |
+| a2 / 45232 | 16.5290 | 19.265 | 21.382 | 16.4897 | 3369.85 |
+
+Deltas: median +0.975%, p95 +3.932%, p99 +15.128%, GPU +1.708%, CPU +3.238%,
+draws -0.548%, dirty loads -1.272%, private +0.007%, working set +0.020%.
+Both candidate p99 values exceed both baseline values. Do not retain: byte
+correctness and fewer copies do not excuse frame-time-tail regression. No broad
+motion or screenshot qualification is claimed for this rejected candidate.
+
+Restored texture_cache.cpp byte-for-byte and removed the direct PSO member.
+Retained 1BCD7340A46FBE2A60CDA6C2A1216CD5B5377C2D1F16DC08D4C97C46F549A982 DLL
+is staged at both root and rexglue-artifacts. Candidate
+641774F1A3ED037DE5A05DCB7E30B6E0B4EABAAE6E90C186D30E120AA88E1986
+and implementation are isolated as direct-texture-candidate.dll/.cpp; benchmark
+scripts and summary are direct-texture-abba.ps1 and direct-texture-abba-summary.json.
+The HLSL direct-output macro and unused generated header remain as an unbound
+prototype. An automatic policy block rejected the cleanup command, so restoration
+was completed without file deletion. Default buffer HLSL recompiles to the exact
+retained 1E25FDB2... DXBC. The packed-channel checker remains runnable.
+
+P2 resource coverage and transfer reduction remain unfinished. Diagnose actual
+direct-write/sampling cost before revisiting this variant; do not infer that a
+copy-removal design necessarily reduces GPU time. The prior buffer specialization
+remains qualified; this direct-output path is absent from runtime admission.
+
+## Direct-output GPU cost diagnosis (2026-09-08)
+
+Ran four sampled diagnostic probes against retained 1BCD7340... and rejected
+641774F1... binaries, in ABBA order. All exited normally; final cleanup restored
+retained DLL hashes at root and rexglue-artifacts. No production source changes.
+The probes enable existing pass inventory and fh1_discovery_sampling (one frame
+in 60). These are attribution runs, not substitutes for clean performance tests.
+Sessions: A1 20260909T015101Z-p36648, B1 20260909T015204Z-p17632,
+B2 20260909T015306Z-p32716, A2 20260909T015409Z-p53244.
+
+Filtered to 0x1C4E1000, 1280x720, format 7, pitch 1280, unpacked, endian 2,
+unsigned. CSV 32-44 seconds supplies approximate source-frame bounds via cumulative
+source counts, with boundary rows trimmed. Median conversion per observed load:
+A1 0.027648 ms, A2 0.028160 ms; B1/B2 0.047104 ms. Median retained copy intervals:
+0.022528/0.021504 ms; direct intervals are zero (adjacent timestamps, no copy).
+Observed combined mean per load: A1 0.047443, B1 0.046604, B2 0.047488,
+A2 0.047224 ms. Direct writes largely consume the time saved by removing the copy.
+
+Recorded load counts differ: 36/27/24/34 over 12/12/11/12 sampled frames. Do not
+credit lower recorded loads as an optimization. Maximum reported dropped timing
+samples across these sessions are 21/212/237/171; selected-window loss has not been
+fully localized. Consequently the entire per-frame sampled sum is incomplete and
+not a total-work performance metric. Ranking scope already excludes lost samples.
+
+Only frames 3780 and 3840 have three recorded target loads in all four runs:
+
+| Run | Conversion ms/frame | Copy interval ms/frame | Combined ms/frame |
+| --- | ---: | ---: | ---: |
+| A1 | 0.076256 | 0.065024 | 0.141280 |
+| B1 | 0.135072 | 0 | 0.135072 |
+| B2 | 0.141312 | 0 | 0.141312 |
+| A2 | 0.075760 | 0.064512 | 0.140272 |
+
+These are a limited, count-matched subset, not proof of a repeatable benefit or
+complete sample coverage. Texture-request CPU totals remain about 2.09-2.15 ms per
+sampled CSV row. No diagnosis of the full-frame p99 regression or of subsequent
+texture sampling/compression cost is established by these timings.
+
+Evidence under .local/native-renderer/p2: direct-texture-timing.ps1,
+summarize-direct-texture-timing.py, direct-texture-timing-summary.json,
+direct-texture-timing-matched.json and four direct-texture-timing-* directories
+with exact session references and archived runtime logs. The previous clean ABBA
+retention rejection stands. Further direct-output work needs cheaper typed writes
+or evidence of a larger downstream benefit; deleting a copy alone is insufficient.
+Continue P2's broader shader/resource coverage and cost attribution. No performance
+or dependency-retirement change is claimed by this diagnostic step.
+## Terrain material contract audit and queue correction
+
+Audited retained-renderer capture `p2/scaled-32-native-rdc/frame_frame4386.rdc`
+using `p2/terrain-material-contract.py`. All 45 C34795A841E7DEFF /
+21B70A5E4C9CFD11 draws use pixel DXBC SHA256
+`a7ef74a90c10e1891ac1f7ec72b12ff5620a54c364b665bc5367e2066e490899`.
+Every captured draw has b130 false, unsigned fetches 1/2/13, scaled mask 8194,
+and identical fetch constants per slot. This exercises cube fetch 1, not the
+alternate cube-fetch-2 branch. Bound resources include a 2560x1440 RGBA8 texture
+and a 512x512 six-slice RGB10A2 cube resource. The audit's dimension field
+reports the underlying resource type, not the shader descriptor view type.
+Evidence: `p2/terrain-material-contract/{report,fetch-summary}.json`.
+
+Queue correction: `fh1_terrain_material.ps.hlsl` already implements this pixel
+stage. The historical checkpoint records full-pair parity, failed 2x/1x
+stationary retention tests, and later paired-draw diagnostics. It is incorrect
+to treat the material stage as an unimplemented next replacement. This input
+audit supplies no new performance evidence and does not justify re-enabling
+it or repeating the unchanged pair benchmark. Revisit only with a materially
+changed candidate or newly measured workload. Coverage of the alternate branch
+and other resource modes cannot be inferred from these 45 draws.
+
+Production remains disabled for this pair. Both staged renderer DLLs still
+hash `1BCD7340A46FBE2A60CDA6C2A1216CD5B5377C2D1F16DC08D4C97C46F549A982`.
+No renderer source or binary changed in this audit. P2 remains incomplete.
+## RGBA8 scaled-conversion extension: offline proof, live qualification pending
+
+Previous goal turn corrected the terrain queue; this turn tested new resource
+coverage. Audited all 129 generic scaled-32 dispatches in retained-renderer
+capture `scaled-32-native-rdc/frame_frame4386.rdc`. Four full-resolution RGBA8
+loads at events 12430, 16016, 42674 and 43452 use the same flags 297, 1280-pixel
+guest pitch and 2560x1440 output contract as the retained RGB10A2 kernel.
+The census also includes mip/array/offset and other-endian contracts: it does
+not justify enabling the specialization for all 129 dispatches.
+
+Reused the existing kernel without HLSL changes. Offline replacement matches
+all four sources and outputs exactly (58,982,400 output bytes). Independent CPU
+address/endian checks validate both implementations against their own captured
+inputs: eight checks, 117,964,800 output bytes, zero mismatches. Global replay
+replacement can affect other dispatches; matching selected input hashes and
+independent checks are essential to this bounded claim. Evidence/scripts:
+`p2/scaled-32-coverage{.py,/report.json}` and
+`p2/scaled-32-rgba-parity{.py,/report.json,/cpu-oracle.json}`.
+
+Candidate only broadens the existing exact admission predicate from format 7
+to formats 6/7; dimensions, endian, 2x, base-only, unpacked, unsigned and optional
+PSO fallback remain unchanged. DLL SHA256
+`07123E1FF515C600EE187DBC9EE2D22C1E13D2891443A7620AA7574E4D897FE6`.
+Candidate source/binary/check snapshot: `p2/scaled-rgba-candidate.*` and
+`p2/scaled-rgba-candidate-check.py` (archived tools script, root resolution must
+be adjusted if executing from its archive location). Build and admission/address
+checker passed before testing.
+
+Live race capture PID11548 failed at capture trigger with device loss and
+exit -1073740791; no RDC was produced. Crash id
+`pscrash-v1-b2810c7ffe5a180ec91b`. No attribution to the candidate versus capture
+instrumentation is established. This supplies no live-binding proof. Do not
+claim the format extension is qualified from the offline replay alone.
+
+Clean stationary 2x ABBA completed normally: A1 PID50264, B1 PID27660,
+B2 PID24028, A2 PID11160. Candidate changes: median -1.0687%, p95 +0.7219%,
+p99 +1.2990%, mean GPU -1.2145%, CPU +4.3637%, draws -2.2200%, dirty loads
+-2.3895%, private memory -0.2772%, working memory -0.1564%. No repeatable speedup
+established; traffic/workload differs. All four end screenshots inspected:
+stationary Recaro event approach, intact scene/UI, differing traffic/NPC poses.
+No motion or broad-scene qualification claimed. Evidence: `scaled-rgba-abba-*`,
+`scaled-rgba-abba-summary.json`; helper `summarize-scaled-rgba-abba.py`.
+
+Extension remains unqualified and disabled. Production texture_cache.cpp restored
+bytewise, production checker restored and passed, release renderer rebuilt.
+Both renderer paths restored to retained
+`1BCD7340A46FBE2A60CDA6C2A1216CD5B5377C2D1F16DC08D4C97C46F549A982`.
+Next resolve live-binding/capture qualification for this existing candidate;
+do not reimplement the kernel or interpret this batch as a speedup. P2 remains
+active and incomplete.
+## RGBA8 live qualification and retention decision
+
+Earlier stationary capture succeeds: candidate PID36164 exited normally and
+produced `p2/scaled-rgba-stationary-rdc/frame_frame3055.rdc`. This avoids the
+failed later race capture; it does not diagnose or fix that capture failure.
+`scaled-rgba-live-audit.py` verifies the native shader bytecode on all eight
+specialized dispatches, including four RGBA8 loads (6877,10496,29303,30119).
+All four RGBA8 loads have matching native/reference input and output hashes
+and stable native replays: 58,982,400 exact output bytes. Two RGB10A2 history
+states vary on replay, as in earlier audits. Independent CPU checks validate
+all eight loads against each implementation's own source: 16 checks,
+235,929,600 bytes, zero mismatches. Reports under `p2/scaled-rgba-live-audit/`.
+This completes the previously missing captured live-binding check for RGBA8.
+
+Reversed BAAB completed normally: B3 PID30336, A3 PID46448, A4 PID51448,
+B4 PID36828. Changes: median -0.2395%, p95 -0.5005%, p99 +6.5930%, GPU
+-0.5079%, CPU +0.8046%, draws -2.8381%, dirty loads +1.3717%, private memory
++0.0383%, working memory +1.0284%. All four end screenshots inspected; scene
+and UI intact, traffic and NPC poses differ. No motion qualification claimed.
+
+Across eight runs (equal weighting of per-run metrics): median -0.6533%,
+p95 +0.1048%, p99 +3.9489%, GPU -0.8595%, CPU +2.5739%, draws -2.5355%.
+Frame tails increase in both orderings despite fewer draws. This does not
+isolate shader causation, but supplies insufficient evidence of no material
+regression; the extension is NOT retained. Do not repeat the unchanged batch
+or enable it solely from exact bytes. A matched per-dispatch measurement or
+a materially cheaper conversion is needed before reconsidering it.
+Evidence: `scaled-rgba-baab-summary.json`, `scaled-rgba-combined-summary.json`,
+`scaled-rgba-abba-{b3,a3,a4,b4}/`, scripts `scaled-rgba-baab.ps1` and
+`summarize-scaled-rgba-baab.py`.
+
+Production source remains restored to format-7-only admission. Both renderer
+DLLs remain `1BCD7340A46FBE2A60CDA6C2A1216CD5B5377C2D1F16DC08D4C97C46F549A982`.
+No game/replay remains running. Candidate and exact live evidence are preserved.
+P2.1 still needs stronger matched cost attribution; P2 remains incomplete.
+## Timing-loss attribution and bounded capacity fix
+
+Previous turn completed RGBA8 live qualification and rejected retention. This
+turn fixes a measurement limitation before another conversion experiment.
+The existing total conflated busy slots, capacity exhaustion, interrupted
+texture endpoints and invalid texture records; invalid pass records were
+silently skipped. Added four cumulative reason counters to the existing log
+cadence and now count invalid pass records. These are loss EVENTS, not unique
+samples: interruption and subsequent invalid retirement can count twice.
+No query waits or rendering-path changes were introduced.
+
+Compiled production-method checks now exercise capacity versus busy slots,
+interrupted frame/submission guards and missing-family/reversed-timestamp pass
+rejection. `tools/check-fh1-texture-timing.py --compiler
+.local/toolchain/llvm-20.1.8/bin/clang++.exe` passes. Texture ranking exposes the
+latest session-wide reason report, with null for older/missing reports, rejects
+invalid/decreasing counts, and explicitly does not localize cumulative losses
+to requested frames. `tools/rank-fh1-texture-samples.py --self-test` passes.
+
+At original capacity256, diagnostic PID31792 exited normally and logged 83
+capacity losses, zero busy/interrupted/invalid events. Evidence:
+`p2/timing-loss-probe/`. This identifies actual exhaustion rather than assuming
+it from the old aggregate. Raised the existing bounded capacity to512; no
+unbounded allocation or new scheduling/wait mechanism. Diagnostic PID46124,
+session `20260909T023706Z-p46124`, exited normally. All observed reason reports
+are zero; maximum emitted slot-record index267 proves the old bound was
+insufficient. 8,329 unique pass/texture records were recovered across the session.
+This one probe does not prove512 sufficient for every scene; overflow remains
+explicit. Evidence `p2/timing-capacity-probe/` and associated probe/summarizer.
+
+Sampled gameplay source frames3240..3840 step60 (11 frames, approximate mapping
+from 32-44 CSV seconds, excludes screenshot intervals): retained RGB10A2
+0x1C4E1000 has33 loads, mean conversion0.075782ms/frame plus copy0.064791ms/frame;
+median conversion0.027648ms/load. Full-resolution RGBA8 addresses1DAC5000 and
+1CE2D000 each have22 loads and total conversion+copy0.112640 and0.093172ms/frame.
+They total0.205812ms/frame in this probe, not an established optimization gain.
+Texture request CPU averages2.1783ms per sampled CSV row. These spans overlap
+pass spans and exclude preparation before conversion; do not sum them with pass
+cost or treat them as all texture activity. Ranking/report:
+`timing-capacity-probe/texture-ranking.json`, `timing-capacity-summary.json`.
+
+NEW retained renderer DLL (both staged paths) SHA256:
+`2FD4B204410C644AA12466EA9A7B79C76777C0E31E8AB74F64F098BF422EA1AF`.
+Release build and normal diagnostic run pass. RGBA8 extension and direct-output
+candidate remain disabled; format7 specialization remains intact. This retains
+measurement correctness/coverage, not an FPS improvement. Next use the improved
+sample coverage for matched cost attribution; P2 remains incomplete.
+## Resolution-sensitive pass cost with complete observed timing reports
+
+Previous turn retained the timing-capacity fix. New 1x diagnostic run PID7172,
+session20260909T024055Z-p7172, exits normally with zero reported timing losses.
+Compared against preceding 2x PID46124 using the same retained2FD4B204 renderer,
+stationary AppData location and32-44s CSV window. Both end images inspected:
+same Recaro approach, correct1280x720/2560x1440 output; NPC/traffic differs.
+This is one diagnostic run per scale, not a repeated clean performance A/B.
+
+| Metric | 1x | 2x |
+| --- | ---: | ---: |
+| Median / p95 / p99 frame ms | 16.373 /20.730 /22.672 |16.807 /21.214 /24.133 |
+| Mean guest GPU ms |15.595 |17.197 |
+| CPU seconds/wall second |3.112 |3.240 |
+| Mean draws |3634.22 |3668.88 |
+| Private MiB |2555.19 |4748.06 |
+| Working MiB |1992.88 |1991.82 |
+
+Pass-ranking windows contain12 sampled1x frames and11 sampled2x frames, matched
+by approximate elapsed gameplay window rather than equal source frame numbers.
+All expected sampled frames are present, with1921/1889 unique pass records and
+zero reported loss reasons. `compare-resolution-costs.py` joins shared families
+and records draw/occurrence counts; existing ranker self-test passes.
+
+| Pass family | GPU ms/frame1x | GPU ms/frame2x | Draws/frame1x /2x |
+| --- | ---: | ---: | ---: |
+|53B2C36308FCD219 |1.1481 |1.2762 |811.08 /811.18 |
+|8F17E2B502A6BF62 |0.5429 |0.9658 |3 /3 |
+|ED7F805DBDC5C236 |0.1956 |0.7766 |2 /2 |
+|4C3611D703B31EDE |0.4782 |0.4800 |26 /26 |
+|57294A9E0311F163 |0.0969 |0.3975 |1 /1 |
+
+The largest geometry span's CPU preparation is0.7012/0.6796ms per sampled frame;
+its811 draws barely change with resolution. Single-clear spans ED7F/5729 scale
+about4x, but are NOT isolated clear API costs. Revalidated current source:
+D3D12RenderTargetCache::Update calls PerformTransfersAndResolveClears before the
+new draw's pass observation; preparation transfers can land inside the previous
+pass's timestamp interval. Historical transfer-cutout audit already identified
+this boundary problem and only8% geometric overlap for full-component clears.
+Do not infer that reducing clear quality or cutting scene effects would recover
+these whole spans; geometry overlap alone is not GPU-cost attribution.
+
+NEXT concrete P2.1 step: isolate GPU time for actual render-target ownership
+transfers/resolve clears at PerformTransfersAndResolveClears (both Update and
+resolve-clear callers), preserving bounded sampling, initialization, retirement
+and explicit losses. Reuse existing query machinery; do not change transfer
+scheduling or omit preserved depth/stencil components on this evidence. This
+should distinguish transfer work from the already-native clear operation before
+any cutout/simplification experiment. P2.4 remains conditional on that attribution.
+Evidence: `p2/timing-1x-probe/`, both `pass-ranking.json` files,
+`p2/resolution-cost-comparison.json`, `p2/compare-resolution-costs.py`.
+No renderer source/binary changed; retained2FD4B204 remains staged. P2 incomplete.
+## Direct render-target transfer timing retained
+
+Previous turn provided1x/2x pass comparison and identified ambiguous pass
+boundaries. Added timing inside PerformTransfersAndResolveClears, covering both
+Update and resolve-clear callers. The existing bounded query token is now named
+Fh1GpuWorkTiming and shared with texture loads; existing texture endpoints are
+unchanged. Only sampled frames scan transfer lists; empty/no-clear calls are
+skipped. Normal and early exits close the interval. Submission interruption
+invalidates the sample through existing guards, without waiting or changing
+transfer scheduling, bindings, barriers, writes or fallback behavior.
+
+Records identify requested transfer descriptor count and whether resolve-clear
+arguments are present. Counts are not actual GPU draws, rectangles or transferred
+bytes. The GPU interval includes host-depth stores, ownership transfers, barriers
+and any resolve clears performed by this function; it is not just a clear API
+cost or a GPU busy-time measurement. These intervals overlap the old pass spans.
+
+Release build passes. Production-method checker now covers empty calls,
+transfer-only and clear-only allocation, successful completion and interrupted
+submission retirement, in addition to previous bounds/loss tests. Texture/pass
+ranking self-tests also pass. Normal sampled gameplay runs:2x PID53088/session
+20260909T024854Z-p53088,1x PID2512/session20260909T025038Z-p2512. Both report zero
+busy/capacity/interrupted/invalid losses. No RenderDoc required for this timing.
+
+32-44s CSV gameplay windows,11 sampled source frames each:
+
+| Function-call category | 1x calls / mean GPU ms per sampled frame | 2x calls / mean GPU ms per sampled frame |
+| --- | ---: | ---: |
+| No resolve-clear arguments |420 /1.435183 |421 /5.683200 |
+| Resolve-clear arguments present |937 /0.202007 |939 /0.280204 |
+| All selected calls |1357 /1.637190 |1360 /5.963404 |
+
+This near4x increase in ordinary transfer intervals, with nearly equal call
+counts, is stronger attribution than the prior single-clear pass association.
+It identifies substantial resolution-sensitive transfer work; it does not prove
+all that time is removable or isolate every destination/source/transfer shader.
+One diagnostic run per scale, same stationary fixture, not an FPS benchmark or
+an exact matched-input comparison. Keep effects simplification conditional;
+prioritize ownership transfer analysis before quality reductions or another
+~0.2ms texture conversion experiment.
+
+Evidence and reproducer: `p2/transfer-timing-probe/`,
+`p2/transfer-timing-1x-probe/`, `p2/summarize-transfer-timing.py`,
+`p2/transfer-timing-summary.json`; per-run `transfer-ranking.json` includes
+largest calls and frame totals. Next map dominant calls to actual source/target
+contracts and overlap before attempting a narrower transfer/cutout replacement;
+preserve uncleared pixels and independent depth/stencil components.
+
+NEW retained renderer hash (both staged paths):
+`87B79AABEC3F06326DF616DC02CCC3588E1CFFEFEE3A4E2B3590A17655EA23B5`.
+Instrumentation retained, no performance improvement or dependency removal
+claimed. RGBA8 extension/direct output remain disabled. P2 stays incomplete.
+## Dominant transfer source/destination contract audit
+
+Previous turn retained direct GPU transfer timing. Temporary audit tags each
+call by the complete ordered source/destination/host-depth-source/tile-range
+list, plus target keys and call kind. Metadata logging precedes the interval.
+Resolve-clear signatures are excluded from this contract ranking because clear
+values/rectangle were not hashed. The parser rejects differing entries under
+one signature/index and requires every timed ordinary-transfer descriptor to
+have matching metadata. No first-entry attribution for mixed lists.
+
+2x PID1376, normal exit, zero reported losses.11 sampled gameplay frames from
+32-44s CSV window;35 distinct ordinary transfer lists. Their audit intervals sum
+5.663648ms/frame, consistent in scale with earlier5.6832ms ordinary intervals,
+but verbose logging can perturb timings. This is contract discovery, not a
+new controlled performance result. `p2/transfer-contract-probe/contracts.json`
+contains every list and decoded key. `summarize-transfer-contracts.py` reproduces
+it from the archived session and CSV. Diagnostic source snapshots are
+`transfer-contract-audit-{rt,cp}.cpp` and `transfer-contract-audit-cp.h`.
+
+Largest list E2950943A57676F6:44calls/11frames,1.572119ms/frame. Two ranges
+[720,2048) and[0,720), source00206AD0 -> destination00306AD0. Both are D24S8,
+base tile720, pitch13 tiles at32bpp; source1xMSAA, destination4xMSAA. No separate
+host-depth preservation source. This covers all2048 EDRAM tiles via wraparound.
+Reverse list44DCDDC7E394EE36:22calls,0.408483ms/frame, ranges[1552,2048) and
+[0,720), same keys reversed. Equal format does NOT imply identical memory or
+MSAA sample layout, and neither depth nor stencil may be dropped.
+
+Next largest1AE36768E7E8D89C:11calls,0.406342ms/frame, four sources (RGB10 float
+and floating depth with differing base/pitch) to D24S8 key00308000. This mixed
+conversion must not be mistaken for a same-format copy. Other lists retain
+independent host-depth sources and require preservation of both representations.
+
+NEXT inspect the dominant D24S8 1x->4x transfer's actual bound shader and sample
+mapping, including native stencil-reference-output availability; the source
+already has an optional native stencil-output path, so do not reimplement it
+without checking live selection. Prioritize this measured contract over the
+rejected RGBA8 conversion. No transfer skipping or MSAA quality change admitted.
+
+All three verbose-audit source files restored bytewise to retained backups;
+rebuilt normal renderer. Both DLLs remain87B79AABEC3F06326DF616DC02CCC3588E1CFFEFEE3A4E2B3590A17655EA23B5.
+No game remains running. No new performance gain/dependency retirement claimed;
+P2 active/incomplete.
+Restored-source rebuild produced BF0F9A799577294B56844B779ABE74DF20B924D6CDF5D53F5730E4069022A84E despite byte-identical restoration of the three audit files; no binary reproducibility claim. Saved as transfer-contract-restored-rebuild.dll. Both staged paths explicitly restaged from the validated87B79AAB binary and hashes verified.
+
+## D24S8 depth/stencil addressing experiment (2026-09-09 UTC)
+
+Captured `scaled-rgba-stationary-rdc/frame_frame3055.rdc` (earlier RGBA
+candidate; unchanged RT transfer implementation) establishes the dominant
+1xMSAA -> 4xMSAA copy: event711 depth plus events718,721,724,727,730,733,736,739
+stencil masks1,2,4,8,16,32,64,128. Source16324 is2080x5056 single-sampled
+D24S8, destination16433 is1040x2528 four-sampled D24S8. Every draw has address
+constant13325 (source/destination pitch13, base delta0). Depth shader SHA256
+d1649a246e53361978acfcbbb194dc575c2b984d8a569ecc9248ebfe4f2b9c57;
+stencil76574cb4f3631908a0fa04fe701585bc9dfe20e73499f02594a9a91211c5cbdc.
+Audits `depth-transfer-{shader,stencil,constants}-audit.py` retain reports/DXBC.
+
+Native stencil-reference output already defaults on in source. Standalone
+D3D12 feature query on the NVIDIA10de:2704 adapter returns S_OK and
+PSSpecifiedStencilRefSupported=0. WARP returns1. This explains why the existing
+hardware-feature-gated path cannot replace the eight stencil-bit passes on
+this adapter; do not force unsupported SV_StencilRef. Evidence:
+`query-stencil-feature.cpp`, `stencil-feature.txt` under `.local/native-renderer/p2`.
+
+Tested a bounded 2x shader address shortcut: for constant13325 and valid
+unwrapped destination tiles, sourceXY=2*destinationXY+sampleXY. Generic mapping
+remains for other addresses, coordinates beyond pitch, and the padded final
+row's EDRAM wrap. Both depth and stencil preserve original loads and writes.
+`check-depth-transfer-fast.cpp` checks11,411,780 coordinates including padded
+boundaries;10,485,760 fast-path samples match. FXC ps_5_1/O3 shaders compile
+without warnings. Replay replacement compares all four samples after each of
+nine draws:378,593,280 bytes identical; repeated original readback stable.
+`depth-transfer-fast-parity/report.json` preserves hashes. This is one captured
+transfer group, not broad scene/motion qualification. Replay FetchCounters
+returned no matching timing records; no zero-cost inference or replay speedup.
+
+Temporary runtime candidate restricted to D24S8 depth-to-depth/depth-to-stencil,
+1xMSAA->4xMSAA,2x resolution, native stencil reference unavailable. Eight clean
+stationary runs, orderABBA thenBAAB, all normal exit. Candidate
+BD00A54C5147C31CDC7062A9B7568FC332AD3E60A99B7B8F28B4B7ADD7196E3C;
+baseline87B79AABEC3F06326DF616DC02CCC3588E1CFFEFEE3A4E2B3590A17655EA23B5.
+32-44s frame window,34-46s process window. Candidate changes:
+
+| Order | Median frame | p95 | p99 | Mean GPU | Draw count |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ABBA | +0.797% | +3.576% | +13.468% | +1.946% | +0.119% |
+| BAAB | +1.325% | +2.780% | +5.599% | +2.561% | +3.491% |
+| Combined | +1.060% | +3.178% | +9.607% | +2.253% | +1.802% |
+
+Combined CPU utilization -5.264%; memory effectively unchanged. Traffic/draw
+counts differ, so these results do not prove isolated shader causality. They
+provide no qualifying performance gain and fail retention. All eight end
+screens inspected: consistent scene/geometry, varying traffic. No motion
+qualification claimed. `summarize-depth-transfer-fast.py` reproduces the report;
+`depth-transfer-fast-abba-*` retain session/CSV/process evidence. Candidate
+HLSL/DXBC/source/DLL remain local experimental artifacts only.
+
+REJECTED retention. Production RT source restored bytewise. Found stale
+command_processor object from the previous temporary signature audit: linking
+the new candidate exposed an undefined two-argument transfer timing function.
+Refreshing restored header/source timestamps and rebuilding fixes it; a new
+baseline rebuild exactly reproduces87B79AAB..., resolving the earlier BF0F9A...
+binary discrepancy. Both staged DLL paths verified87B79AAB...; no game/replay
+left running. No performance improvement or dependency retirement claimed.
+
+NEXT: investigate reducing actual transfer/stencil work with proven ownership
+and data requirements, or rank the next transfer contract. Do not repeat this
+unchanged address-only candidate or enable unsupported stencil-reference output.
+Original user-marked area slowdown remains unresolved; P2 goal stays active.
+
+## Stencil-content and writer audit (2026-09-09 UTC)
+
+Follow-up to the rejected address-only shortcut: all source stencil bytes are
+zero at the four dominant D24S8 transfer depth draws711,2012,2991,3299 in the
+same captured frame. Destination stencil remains zero through the first copy's
+nine depth/stencil draws. Readback includes the full resource/padding and four
+destination samples. `transfer-stencil-content-audit.py` and its report retain
+per-byte histograms and hashes; no production shader changed.
+
+Validated readback interpretation with an intentionally inverted stencil-bit
+shader in replay only. At event718 it writes bit0 to2,621,440 pixels per sample
+(10,485,760 total);7,680 padded pixels/sample remain0. The high byte changes
+from0 to1, confirming D24S8 readback includes stencil and the original zero
+histogram is meaningful. `stencil-readback-probe.{hlsl,dxbc,py}` and report
+preserve this positive control. No game renderer uses this diagnostic shader.
+
+Audited441 distinct graphics PSOs:227 guest variants;174 stencil-enabled guest
+variants account for2,916 draws. Representative dynamic references include
+21,6,15 and0 with replacement operations/write mask255. Dynamic references
+are sampled at the representative draw, not proven invariant per PSO. These
+states contradict any global claim that FH1 does not use stencil. Evidence:
+`stencil-writer-state.py`, `stencil-writer-state/{report,summary}.json`.
+
+Source trace: ChangeOwnership is already shared by draw and resolve-clear
+paths. It merges ranges and preserves separate host-depth ownership but does
+not track stencil values. Color/depth reinterpretation and partial clear
+cutouts can preserve old bytes. A format/base whitelist or capture-zero
+assumption is insufficient for removing stencil draws.
+
+NEXT: attribute the zero-valued transfer ranges to their clears/writers and
+measure whether conservative per-range known-value tracking admits these
+copies. If tracked, invalidate on uncertain writes/color aliasing and preserve
+partial tile contents; zero must be proven at runtime. GPU-side detection is
+an alternative only if tracking cannot admit the measured case economically.
+No stencil copies skipped, no performance gain claimed, original slowdown
+unresolved. Production remains validated87B79AAB; goal active. This turn adds
+content/positive-control/writer evidence, not another unchanged benchmark.
+
+## Dominant stencil transfer provenance (2026-09-09 UTC)
+
+Audited draws through event3400 whose actual depth attachment is16324 or16433:
+518 draws total,374 guest draws, all374 with stencil disabled. The remaining
+144 are transfer draws. This narrows the prior whole-frame174 stencil-enabled
+PSOs: those are not proof of writes to these particular two resources during
+this interval. `stencil-transfer-provenance.py` and report/summary retain actual
+per-draw attachment and dynamic stencil state; no representative-PSO assumption.
+
+31 clear actions also decoded. Source16324 event530 clears stencil0 over ten
+rectangles covering the2048-tile domain; destination16433 event704 covers the
+same domain in five4xMSAA rectangles. Later full destination stencil clears at
+2005,2984,3292; source partial clears at1958,3244 join previous covered regions.
+Depth-only clears carry arbitrary stencil argument21 or0 but MUST NOT mark
+stencil known: their ClearFlags is1. ClearFlags2 actually clears stencil.
+Repeated structured array child names are preserved as a list (initial decoder
+collapsed these names; independently reread clears repair the final report and
+assert every multi-rectangle count). Float depth values intentionally omitted.
+
+Crucial limitation: subsequent transfer draws repopulate cleared stencil, and
+source16324 receives both depth-source and color-source conversions before711.
+Therefore clear coverage plus disabled guest stencil is not sufficient to prove
+zero after incoming transfers. Resource creation explicitly uses zeroed
+D3D12_HEAP_FLAG_NONE, but cross-format writes still invalidate a simple
+per-resource zero flag. No safe runtime bypass established yet.
+
+Next experiment: GPU-side source-stencil detection for the measured transfer
+contract, keeping all original draws when any required bit is present. Reuse
+existing transfer descriptors and preserve barriers; evaluate reduction cost
+before retention. Deferred command list currently has no predication or
+ExecuteIndirect wrapper, so account for the small command plumbing required.
+Do not install a format whitelist or skip based on this capture's zero values.
+Source/destination bounds, sample mapping and wrapped tiles remain mandatory.
+No production edits/performance gain claimed; retained87B79AAB unchanged.
+
+## Disabled stencil-predication experiment (2026-09-09 UTC)
+
+Implemented `fh1_stencil_predication=false` experiment. Reuses existing stencil
+transfer shader/root descriptors/rectangles/sample mapping with mask255 and a
+read-only PSO (ninth cached stencil pipeline; depth/stencil writes disabled).
+One binary occlusion query counts samples surviving the shader's discard.
+Resolve to an8-byte GPU predicate; COPY_DEST/PREDICATION transitions; original
+eight stencil draws execute only if nonzero. Explicitly clear predication
+before later work. No compute shader, CPU readback or capture-based whitelist.
+Current admission is depth-to-stencil D24S8,1xMSAA->4xMSAA, with existing native
+stencil-reference path unavailable. Both supported resolution scales follow
+existing generated addressing, but only2x tested so far. Creation failure
+falls back to original copies. Query/predicate resources released with cache.
+
+Added deferred SetPredication command and public active-host-query guard.
+If either legacy guest query or modern ZPD segment is active, do not run this
+experiment: extra query draw or skipped draws could affect guest counts.
+Current cvar checked at invocation too, so disabling it stops predication even
+if the optional pipeline was already created. Nontrivial command serialization,
+64-bit offset, enable/disable and both query guard cases compile/run via
+`tools/check-fh1-stencil-predication.py --compiler <clang++>`; passed. Renderer
+build passes. No changes to guest query values or synchronization intended;
+broader active-query gameplay qualification remains outstanding.
+
+Captured enabled2x PID39504, normal exit. Candidate DLL
+ADE06550F0F6989BBE94857072D89E3B6D090306F71627999410B6FEB736FEC8;
+`stencil-predicate-rdc/frame_frame3047.rdc`. Four query draws683,1323,2028,2145
+use address13325/mask255. All source stencil bytes zero (42,065,920 bytes read
+per source occurrence); each resolved predicate0. Eight subsequent draws per
+query use skipIfZero=true and predication is explicitly cleared afterward.
+Read-only query state asserted. `stencil-predicate-{audit,results}.py` and reports
+retain captured bindings/predicate bytes. End screenshot inspected: expected
+stationary scene; this is not broad screenshot/motion or performance qualification.
+
+Replay positive control replaces shared query/copy shader with a test shader
+that passes every valid MSAA sample. Predicate becomes1, all eight copies
+execute and stencil becomes255 over2,621,440 pixels/sample, while7,680 padded
+pixels/sample remain0. Four samples checked. `stencil-predicate-positive` files
+and report retain this synthetic control; it validates nonzero predicate/copy
+execution, not production nonzero-input fidelity across arbitrary scenes.
+
+After adding the invocation-time cvar check, current built candidate is
+B709E04BF7B66A9A3AE2F8E9445C5A72AC4A9E6CB3371ECDC73395D824F0DAA4,
+saved as `stencil-predicate-candidate-current.dll`; compiled checker rerun passed.
+The captured ADE... build differs only by that guard. Current source contains
+the disabled experiment. Both staged game/artifact DLLs explicitly restored
+to validated87B79AAB...; no game/replay running. Prior source snapshots under
+`stencil-predicate-before-*` allow reverting just this experiment.
+
+NEXT: matched enabled/disabled gameplay cost tests, zero/nonzero source output
+qualification and1x/motion coverage before retention. The extra query and GPU
+predicate dependency may cost more than the eight copies it removes; no FPS
+improvement, completed slowdown fix, or dependency retirement claimed yet.
+Do not enable by default without the backlog's complete acceptance evidence.
+
+## Stencil-predication retention test: not retained (2026-09-09 UTC)
+
+Eight clean2x runs ABBA thenBAAB; A validated87B79AAB, B candidateB709E04B with
+`--fh1_stencil_predication=true`. All normal exit. Existing stationary fixture,
+32-44s frame window/34-46s process window; no capture/build/profiling workload
+during benchmark. `stencil-predicate-abba.ps1`, per-run session/CSV/process files
+and `summarize-stencil-predicate.py` retain reproducible evidence.
+
+| Order | Median frame | p95 | p99 | Mean GPU | Draw count |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ABBA | +2.180% | +6.913% | +14.868% | +4.126% | +2.902% |
+| BAAB | -3.272% | -6.181% | -6.738% | -4.422% | -2.697% |
+| Combined | -0.553% | +0.353% | +3.829% | -0.173% | +0.096% |
+
+Combined CPU -1.145%, private memory -0.138%, working memory -0.215%. Opposing
+orders and draw-count drift prevent attributing changes cleanly to predication.
+There is no repeatable qualifying GPU/frame-tail benefit; this is a failure
+to establish retention evidence, not proof the query intrinsically regresses.
+Do not repeat the same unchanged stationary benchmark and call it new evidence.
+
+All eight end screenshots inspected. Traffic and NPC poses vary. Baseline a3
+has a conspicuous red region across the rear window, absent in the other end
+screens; record as a baseline artifact, not a candidate-caused regression or a
+broad visual pass. P0/P1 investigation remains deferred. Contact sheet:
+`stencil-predicate-ends.png`. Candidate1x, broad motion, and production nonzero
+source fidelity were not completed because the performance gate failed.
+
+Removed the disabled experiment from runtime source: restored five files
+bytewise from `stencil-predicate-before-*`, archived candidate versions as
+`stencil-predicate-rejected-*`. Removed its tools checker after archiving it as
+`check-fh1-stencil-predication-rejected.py` (its repo-root discovery needs
+adjustment if run from the archive). The checker passed before restoration;
+it should not be run against the restored renderer that lacks those methods.
+No unused predication wrapper, query objects, extra pipeline slot or cvar left
+in production. Restored-source build succeeds and exactly reproduces87B79AAB.
+Both staged DLL paths verified87B79AAB; no game/replay remains running.
+
+NEXT: strengthen isolated transfer-cost measurement or qualify a different
+measured resource/scene contract. Query-based zero detection and address-only
+shortcut are both unretained; do not mistake byte/readback correctness for a
+performance benefit. P2 remains incomplete and original area slowdown unresolved.
+
+## Replay counter failure diagnosed (2026-09-09 UTC)
+
+Investigated empty FetchCounters results rather than repeating shader or live
+benchmarks. `replay-counter-diagnostic.py` confirms EventGPUDuration is advertised
+(counter1), yet entire-frame collection returns zero records both initially
+and after selecting draw711. This is not an event-filter mismatch.
+
+`replay-counter-log.py` archives the actual diagnostic log. RenderDoc1.45
+`d3d12_counters.cpp:662` reports D3D12 counters require Windows Developer Mode;
+replay_controller then reports a fatal device-lost state with that same reason.
+Therefore subsequent results from that controller cannot be treated as usable
+measurements. This was not a renderer crash, measured zero cost, missing event,
+or evidence of transfer performance. The separate missing Nsight Perf SDK
+notice does not establish the cause of generic duration failure; the explicit
+Developer Mode diagnostic does. Registry read confirms
+HKLM/SOFTWARE/Microsoft/Windows/CurrentVersion/AppModelUnlock/
+AllowDevelopmentWithoutDevLicense=0.
+
+Added local `replay-counter-preflight.py`: read-only Developer Mode check before
+opening a replay device, and fail collection on empty records. Executed here:
+reports developer_mode_enabled=false and stops before device creation. No OS
+settings changed or SDK installed. Asked user whether they want to enable
+Developer Mode; answer pending at this checkpoint. Existing native GPU timing
+still works, so this capability limitation does not block the whole P2 goal.
+
+NEXT if enabled: reopen a fresh controller, verify complete nonempty duration
+records, then use the same captured workload for isolated transfer-cost
+screening. Capture replay GPU timing does not replace end-to-end CPU, memory,
+1x/2x or gameplay/motion qualification. If left off, continue native per-transfer
+timestamps with explicit workload/contract matching. No unchanged benchmark
+repetition. Production remains validated87B79AAB, no game/replay running.
+
+## Reusable native transfer-contract ranking (2026-09-09 UTC)
+
+Added `tools/rank-fh1-transfer-contracts.py`, reusing the existing session-log
+reader. Explicit session and source frames required. Rejects missing sampled
+frames, conflicting duplicates, missing/extra contract entries, invalid tile
+ranges and decreasing loss counters. Deduplicates identical records and ranks
+full ordered transfer lists, never attributing a whole interval to its first
+source. Resolve-clear calls are excluded because the older audit signatures
+omit clear rectangle/value data. Exposes latest session-wide timing losses and
+marks reported completeness false if unavailable/nonzero; no unsampled coverage
+or clean performance claim from verbose logs.
+
+Runnable --self-test covers those failures, whole-list denominator, clear
+exclusion and session isolation; passed. Applied to archived PID1376 session
+20260909T025710Z-p1376, frames3240..3840 step60:35 groups,418 ordinary records,
+11 frames, zero reported losses. Every signature/call-count/nanosecond total
+matches the previous one-off ranking. Result archived at
+`transfer-contract-probe/qualified-contract-ranking.json`; qualification here
+is audit structure/sample completeness, not performance retention.
+
+This makes existing native evidence reproducible without Windows Developer
+Mode. Current runtime logs without verbose contract signatures are explicitly
+rejected rather than grouped by mere descriptor count. No renderer or system
+settings changed. Developer Mode question remains pending; existing active
+P2 work is not globally blocked by that replay-counter capability. Next use
+complete contracts for paired native measurements or fresh replay counters if
+the user enables Developer Mode. Do not repeat unchanged unqualified candidates.
+
+## A1/A2: full-frame D24S8 resource-use closure (2026-09-09 UTC)
+
+Retained runtime hash verified87B79AAB; no game was running. Reused captured
+scaled-rgba-stationary-rdc/frame_frame3055.rdc (earlier RGBA8 candidate, unchanged
+transfer implementation). Read-only RenderDoc resource usage plus actual bound
+consumer reflection/descriptors now covers the full frame, beyond the earlier
+provenance cutoff at event3400. No counters requested or OS settings changed.
+
+Resource16324, D24S8 base720/pitch13/1xMSAA:495 depth-target draws, including387
+named guest draws;45 pixel-read events and4 unique compute-read dispatches.
+Resource16433, same base/pitch D24S8/4xMSAA:36 depth-target draws, all verified
+transfer helpers by shader reflection, no guest geometry draws;77 pixel-read
+events and2 unique compute-read dispatches. GetUsage lists each depth/stencil
+compute SRV separately, so raw8/4 CS usage records are not8/4 dispatches.
+
+Four forward depth+eight-stencil groups at711,2012,2991,3299 populate16433.
+Its eight clear events pair transfer stencil initialization with partial
+DEPTH-only clears744,2045,3024,3332. The latter preserve stencil (ClearFlags1),
+with captured rectangles560,512..960,1024;0,0..960,1024; and0,0..480,512 twice.
+Source16324 receives seven reverse groups. Later consumers3490..3573 transfer
+to14642 (D24FS8 base0/pitch16/4xMSAA), with separate floating-depth sources.
+Compute dumps3233/3469 read16433 depth and stencil into EDRAM buffer319;
+16324 dumps1947/2925/3228/3464 do likewise. Thus no direct guest geometry use
+of16433 does NOT make its contents dead or authorize dropping its consumers.
+
+Source trace: IssueDraw calls render_target_cache_->Update around3030, before
+native FH1 rectangle-clear admission around3609 and ClearFh1Rectangles around3659.
+Update derives a new key including sample count and claims ranges through
+ChangeOwnership. Existing native clear replaces rasterization but explicitly
+preserves earlier ownership/transfer preparation. This identifies a concrete
+next seam: qualify a depth clear directly against the existing native owner,
+with correct guest-address/sample mapping, before forcing a4x representation.
+This could eliminate the intermediate and round trips instead of optimizing
+stencil-copy arithmetic. Need exact clear producer attribution, mapped partial
+regions, ownership accounting, subsequent mixed-depth consumers, query guards,
+1x/2x parity and matched live cost before implementation/retention. Do not infer
+that a different physical representation can be cleared with unchanged coordinates.
+
+Reproducer .local/native-renderer/p2/native-chain-usage.py runs via qrenderdoc
+--python; native-chain-usage-check.py validates read bindings, consumer joins,
+usage counts and all36 transfer-only writes; executed successfully. Artifacts:
+native-chain-usage/report.json and summary.json. Both replay processes exited.
+A1 matched-chain timing and A2 game-side lifetime remain incomplete. No renderer
+changes, speedup, native ownership completion or slowdown fix claimed.
+## A2: native clear producer confirmed (2026-09-09 UTC)
+
+Read-only replay native-clear-producer.py completed (PID41736 exited).
+All four partial depth clears744,2045,3024,3332 have the direct enclosing
+PinyonShift native FH1 rectangle clear marker and write ResourceId::16433.
+This closes producer attribution: these are IssueDraw native rectangle clears,
+not Resolve clear operations. Script asserts all four markers and saves
+.local/native-renderer/p2/native-clear-producer.json; no GPU counters used.
+
+Source inspection confirms an early-clear implementation cannot simply move
+ClearFh1Rectangles: that method chooses last_update_accumulated_render_targets,
+while IsFh1ClearPipeline depends on the configured pipeline description after
+Update. Preserve its shader modification, raster, depth/stencil and color gates.
+Viewport calculation itself uses registers, scale, normalized depth and target
+conversion policy; reuse GetHostViewportInfo and GetScissor for early preparation.
+UpdateSystemConstantValues and fixed-function stencil reference currently run
+later, so an early path must derive the equivalent inputs rather than read stale
+system constants or ff_stencil_ref_. Existing CopyCpuSnapshot authority and query
+exclusions remain mandatory. First derive and check the exact clear-address
+mapping against the existing 1x owner; then expose ownership admission before
+Update. Do not use the last bound target as proof of current tile ownership.
+
+Retained runtime SHA25687B79AABEC3F06326DF616DC02CCC3588E1CFFEFEE3A4E2B3590A17655EA23B5
+verified unchanged. No production renderer edits or performance claim. A1/A2
+remain incomplete; this evidence narrows the implementation seam for A3.
+## A2/A3: partial-clear address mapping checked (2026-09-09 UTC)
+
+Added and ran local check-native-clear-mapping.cpp (clang++ C++20 -O2).
+PASS:7,204,228 sample coordinates, at symmetric resolution scales1 and2.
+Reference follows CreateTransferPixelShader tile division, horizontal/vertical
+sample-bit insertion, modulo2048 tile adjustment and source pitch division.
+For same-base/same-pitch D24S8, 4xMSAA clear rectangles map to doubled 1xMSAA
+bounds provided the entire rectangle lies in the unique2048-tile domain.
+Checks cover recorded rectangles and an unaligned rectangle, each with a
+one-pixel exterior guard, plus last valid partial tile row and rejection of
+padding, wrapping, over-pitch, empty and invalid-scale inputs.
+
+This is CPU addressing evidence, not GPU depth/stencil equivalence or ownership
+proof. No production helper added yet. Next ownership admission must inspect
+ownership_ranges_ for each touched tile row (including absolute base wrapping),
+not last_update_accumulated_render_targets. Existing IsOwnedBy/ChangeOwnership
+also account for separate host depth history; preserve that contract rather
+than inventing an independent lifetime map. A rectangular clear may touch only
+part of a tile: unchanged pixels and stencil must remain on the same valid owner.
+A1/A2 and live A3-A6 qualification remain open; no measured speedup claimed.
+## A2/A3: live pre-clear ownership established (2026-09-09 UTC)
+
+Temporary bounded logging inside common RenderTargetCache::Update records
+ownership before any changes for VS1E6883,4xMSAA,depth-write,no-color and base720.
+First broad probe PID25604 exhausted its240 records in title-screen base0 clears;
+it is not gameplay ownership evidence. Targeted probe PID28960/session
+20260909T042910Z-p28960 exits normally with240 complete base720 snapshots.
+Audit binary8B91FE07006F2C4544C79AF45E279A55DF04FFCC680AB3C52C54C5F108783897.
+
+All240 snapshots have the same seven ranges, covering absolute tiles0..2048
+without gaps. Every current owner is00206AD0 (base720,pitch13,1x,D24S8).
+Unorm history keys are empty. Floating-depth history remains:
+0..4:00608000;4..8:00600804;8..128:00608000;128..256:00682080;
+256..720:00608000;720..1440:006082D0;1440..2048:00710400.
+This supports direct mutation of the already-authoritative1x resource, while
+keeping separate floating-depth history references unchanged. It does not
+prove arbitrary scenes or admission of all logged draws as native clears.
+
+Do not reuse !WouldOwnershipChangeRequireTransfers as an ownership predicate:
+it also returns false for empty tiles. The early-clear gate needs explicit
+current-owner equality for every affected tile, plus matching D24S8/base/pitch,
+validated rectangles and all existing shader/raster/query/CPU-authority checks.
+Do not reject the whole candidate merely because float history exists; the
+existing later transfer path already reconciles that history against guest bits.
+
+Reproducer local native-clear-owner-targeted-probe.ps1 and archived temporary
+native-clear-owner-targeted-audit.cpp. summarize-native-clear-owners.py selects
+the exact runtime session, validates expected range counts and contiguous full
+coverage, sorts by tile start (merged logs sort equal timestamps lexically),
+and writes native-clear-owner-targeted-probe/owner-summary.json. Check passed.
+Verbose diagnostic run is not performance evidence. Source restored bytewise
+and rebuilt; both staged/artifact DLLs reproduce87B79AABEC3F06326DF616DC02CCC3588E1CFFEFEE3A4E2B3590A17655EA23B5.
+A1-A6 remain open; next implement bounded early clear against existing ownership.
+## A3: opt-in early owned-depth clear candidate (2026-09-09 UTC)
+
+Implemented fh1_owned_depth_clear (defaultfalse). Before Update, a bounded
+VS1E6883/no-PS/4x D24S8 depth-only rectangle draw reuses ConfigurePipeline and
+IsFh1ClearPipeline, query/memexport/index/CPU-authority gates, GetHostViewportInfo,
+GetScissor, UpdateSystemConstantValues and existing vertex/rectangle decoding.
+The D3D12 clear validates the mapped bounds before touching any resource. Common
+GetFullyOwnedRenderTarget requires explicit current-owner equality across the
+whole ownership map; empty or mixed owners fall back. It retains separate float
+history and clears only depth in the existing1x resource. No4x ownership claim,
+transfer preparation, color writes or stencil writes on admitted draws.
+Current gate deliberately covers the measured whole-EDRAM owner contract;
+per-row mixed-owner admission remains deferred until a measured need.
+
+New tools/check-fh1-owned-depth-clear.cpp compiles against the actual fh1_clear.h
+mapping helper:7,204,228 sample mappings at1x/2x, exterior guards and wrapped/padded
+rejection pass, as do negative/NaN/infinite/out-of-range depth and preserved-value
+checks. Command: clang++ -std=c++20 -O2 -Ithirdparty/shiftglue-sdk/include
+ tools/check-fh1-owned-depth-clear.cpp -o .local/native-renderer/p2/check-owned-depth-clear.exe
+then run that executable. rexgpu-fh1 Release target build passes.
+
+Candidate SHA256C6596D51136B41390EBD2247F30B78A1AC1DE7D004D7D53FFB9E269168AE5936
+archived as early-clear-candidate.dll. Opt-in2x smoke PID51072/session
+20260909T043541Z-p51072 exits normally; logs show at least3072 admitted clears.
+Open-world-end screenshot inspected: no obvious scene/geometry failure, but
+this is not pixel equivalence, nonzero-stencil or motion qualification.
+
+Existing timing-summary logic reused for32..44s window,11 sampled frames:
+308 ordinary intervals,3.105699ms/frame;943 clear intervals,.245574ms/frame;
+total3.351273ms/frame, all busy/capacity/interrupted/invalid losses zero.
+Earlier2x diagnostic probe had421 ordinary intervals,5.683200ms/frame.
+This suggests removed work but is NOT matched clean A/B performance or complete
+contract attribution. Do not infer a retained speedup from this single run.
+Artifacts early-clear-probe, early-clear-timing-summary.json and scripts local.
+
+Source candidate remains opt-in and unqualified. Probe restores staged and
+rexglue-artifacts DLLs to87B79AAB; future builds contain the new defaultfalse
+candidate. Need capture proof of removed transfers and downstream depth/stencil
+history equivalence,1x smoke, matched repeated1x/2x performance/memory and motion
+including difficult areas. A1-A6 remain unchecked; no completion claimed.
+## A3/A5: 1x smoke and captured owned-clear boundaries (2026-09-09 UTC)
+
+Unchanged opt-in candidate C6596D51 passes1x open-world smoke PID46908/session
+20260909T043826Z-p46908, normal exit, at least5120 admitted clears. End screenshot
+inspected with no obvious rendering failure. Sampled32..44s timing window:
+336 ordinary intervals at.803067ms/frame;1023 clear intervals at.183125ms/frame;
+total.986192ms/frame, zero busy/capacity/interrupted/invalid losses. These are
+single-run diagnostic observations, not matched repeated performance retention.
+
+Fresh2x RenderDoc capture PID51592 completed normally: early-clear-rdc/
+frame_frame3081.rdc. Four owned-depth clears677,1318,1889,1913 target resource16437
+(D24S8 base720,pitch13,1xMSAA,2080x5056). No base720/pitch13/4x D24S8 texture exists
+in this capture. An unrelated base720/pitch5/4x texture exists with no frame uses.
+Owner resource has9 barriers,11 clears,243 depth-target draws,14 pixel reads,
+8 compute-read usage entries. Do not compare whole-frame counts directly to the
+older capture: these are separate live inputs, not a matched replay comparison.
+
+Readback before/after each owned clear checks42,065,920 bytes per texture:
+all four pass exact stencil preservation, all pixels outside the rectangle
+unchanged, and depth bytes equal1.0 within the rectangle. Bounds are0,0..960,1024;
+0,0..1920,2048;0,0..960,1024 twice. Total168,263,680 output bytes checked against
+corresponding pre-clear contents and expected writes. All captured stencil bytes
+were zero: this does NOT establish nonzero-stencil coverage or full downstream
+history equivalence. No counter collection or OS changes needed.
+
+Reproducer early-clear-capture-audit.py uses structured clear commands and
+GetTextureData; actual SDObject float accessor is AsFloat. Final replay PID4100
+exited, report early-clear-capture-audit.json contains4 successful readbacks and
+no error. Prior accessor discovery attempts are not validation results.
+Both staged/artifact runtimes remain qualified87B79AAB. Candidate source remains
+opt-in. Next: nonzero/history correctness and matched repeated performance at
+both scales, then motion/difficult-area qualification. A1-A6 remain unchecked.
+## A6 screening: eight clean 2x toggle runs (2026-09-09 UTC)
+
+Completed early-clear-abba.ps1 in ABBA/BAAB order, all8 normal exits.
+Both A and B use identical C6596D51 binary, with explicit
+fh1_owned_depth_clear=false/true respectively. Same stationary route/settings;
+no corpus/discovery sampling, builds or replay during measurement. Qualified87
+restored afterward. Runs a1:44984,b1:4100,b2:53020,a2:51660,b3:52616,a3:28028,
+a4:46116,b4:43696. Each output archives session/perf and process samples.
+
+Means of per-run metrics, off -> on:
+median16.582625 ->16.635750ms (+.320%);
+p95 20.314000 ->20.274250ms (-.196%);
+p99 22.845000 ->22.581000ms (-1.156%);
+GPU16.666853 ->16.785012ms (+.709%);
+CPU3.322039 ->3.170535 process-seconds/wall-second (-4.561%);
+private4735.654 ->4685.329MiB (-50.325MiB,-1.063%);
+working set-.787%. Draws per row+4.208%; dirty loads+.174%.
+
+Ordering-block checks: ABBA median/p95/p99+2.078/+3.966/+5.927%,
+BAAB-1.416/-4.164/-7.574%. GPU+3.276/-1.796% respectively.
+Thus no repeatable end-to-end FPS or frame-tail gain established. CPU reduction
+is consistent:ABBA-4.881%,BAAB-4.239%; private memory-1.071/-1.054%.
+Workload varies despite same scripted inputs:draws/source-frame span3340..3790;
+normalizing source_frame_count does not eliminate the variation. Do not call
+this deterministic matched-workload evidence or use it to close A1 wholesale.
+
+Summary .local/native-renderer/p2/early-clear-abba-summary.json includes raw
+run metrics and both ordering blocks; summarize-early-clear-abba.py reproduces
+combined metrics. Candidate remains opt-in: dependency removal plus consistent
+CPU/memory savings justify continued qualification, not automatic rejection
+for lack of FPS gain and not retention yet. Need1x repeated runs, nonzero stencil,
+downstream history equivalence, motion and relevant difficult-area evidence.
+A1-A6 remain incomplete.
+## A4: nonzero-stencil GPU preservation check (2026-09-09 UTC)
+
+Temporary diagnostic fixture initializes the existing depth resource stencil to
+0xA5 immediately before each actual owned-depth clear; the production clear body
+is unchanged. Fixture build8EFB7700AD0B36781C51C2DB62D8D21E187BB3EB9E53DAD9ABCB2E28FFA112F8.
+2x capture PID41104 exits normally, early-clear-nonzero-rdc/frame_frame3087.rdc.
+This intentionally modified scene is correctness stress evidence, not gameplay
+fidelity or performance evidence. No save files manipulated.
+
+Replay PID48912 exits with4 passing before/after checks at648,1340,1913,1940.
+Each before image must contain exactly0xA5 at all10,516,480 stencil positions;
+all values remain identical afterward. Entire42,065,920-byte images are checked
+for unchanged pixels outside the rectangle and exact depth1.0 inside. Rectangles:
+0,1024..960,2048;0,0..1920,2048;0,0..960,1024 twice.
+All168,263,680 output bytes pass corresponding checks. This extends earlier zero
+stencil evidence to an explicitly verified nonzero pattern and offset rectangle.
+It does not prove all downstream mixed-format depth history or1x stress coverage.
+
+Reproducer early-clear-nonzero-capture-audit.py requires the sentinel before each
+clear and writes early-clear-nonzero-capture-audit.json. Fixture and pre-fixture
+source archived locally as early-clear-nonzero-fixture.cpp / -before.cpp.
+Source restored bytewise and rebuilt: candidate reproducesC6596D51 exactly;
+both staged/artifact DLLs then restored to qualified87B79AAB. Production source
+contains no stencil seed; the early-clear feature remains defaultfalse.
+Next: downstream history equivalence,1x repeated performance and motion/area
+coverage. A1-A6 remain incomplete; no retention claimed from this stress test.
+## A6 screening: eight clean 1x toggle runs (2026-09-09 UTC)
+
+Completed early-clear-1x-abba.ps1, all8 normal exits in ABBA/BAAB order.
+Identical C6596D51 binary and explicit false/true flag in both arms; same route,
+1x scale, no profiling/replay/build workload during measurement. PIDs in order:
+a1:45668,b1:51656,b2:31016,a2:42172,b3:2476,a3:49192,a4:33268,b4:1580.
+Qualified87 runtime restored by benchmark finally block.
+
+Means of per-run metrics, off -> on:
+median16.611625 ->16.263625ms (-2.095%);
+p95 20.411000 ->19.513500ms (-4.397%);
+p99 22.974750 ->21.772250ms (-5.234%);
+GPU16.185013 ->15.709681ms (-2.937%);
+CPU3.190098 ->3.164223 process-seconds/wall-second (-.811%);
+private2541.266 ->2528.883MiB (-12.383MiB,-.487%);
+working set-.192%. Draws/row-2.687%; dirty loads+.700%.
+
+Both ordering blocks improve frame-time tails: ABBA median/p95/p99
+-3.085/-6.503/-5.906%; BAAB-1.097/-2.291/-4.591%.
+GPU-4.964/-.875%, CPU-.484/-1.139%, private-.863/-.109%.
+Workload is not deterministic: draw counts differ-7.202% in ABBA,+2.077% BAAB.
+Thus route-level screening is encouraging at1x, but these numbers do not prove
+an exact matched-input speedup or hardware requirement reduction. Together with
+2x consistent CPU/private-memory savings and captured intermediate removal,
+continue candidate qualification rather than revert based on inconclusive2x FPS.
+
+Artifacts early-clear-1x-abba-{label} archive session/perf/process samples;
+early-clear-1x-abba-summary.json records run metrics and ordering blocks.
+summarize-early-clear-1x-abba.py reproduces the combined metrics. No source edits
+this turn. Still needed: downstream mixed-depth history equivalence and motion/
+difficult-area coverage; no default enable or A1-A6 completion claimed.
+## A2/A4: downstream floating-depth output checked (2026-09-09 UTC)
+
+Replayed unchanged early-clear-rdc/frame_frame3081.rdc. Full current-owner
+consumer inventory closes18 unique reads:4 compute dumps,8 stencil transfers,
+6 depth transfers. Depth consumers2139,2143,2147,2151,2156,2161 all bind
+xe_transfer_depth AND xe_transfer_host_depth; history sources cover base0/pitch16,
+base4/pitch1,base720/pitch16 at1x,base128/pitch4 at2x andbase1024/pitch32 at4x.
+Exported exact bound source/history resources and all4 samples of final D24FS8
+base0/pitch16 target14711 after2161. No GPU counters requested.
+
+Local check-early-clear-history.py independently computes addresses from EDRAM
+tiles,base,pitch and sample bits, including native2x vertical sample reversal.
+Uses observed seven history partitions and mathematical20e4-to-float conversion,
+then checks the final full1280x2048x4 target against preserved history where
+its quantized bits match current guest bits, otherwise current-value conversion.
+All10,485,760 depth samples and stencil values match exactly, zero mismatches.
+Both paths exercised:4,327,159 history matches and6,158,601 guest conversions.
+This is whole downstream target evidence, not merely verifying history bindings.
+It proves this captured2x state, not unseen scenes,1x history or every resolve dump.
+
+Artifacts early-clear-consumers/report.json records18 consumers,address constants,
+7 exported textures and per-sample files; six shader disassemblies archived.
+early-clear-consumers/history-check.json records the exact comparison counts.
+Reproducer early-clear-consumers.py via qrenderdoc --python, then
+C:/Users/neri/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
+.local/native-renderer/p2/check-early-clear-history.py. Final replay exited.
+No production changes this turn. Candidate remains opt-in C6596D51 and staged
+runtime87. Remaining qualification includes1x downstream/history, resolve dump
+side effects, motion/difficult-area coverage and final evidence audit; goal open.
+## A4: depth dump contents and nonzero downstream history (2026-09-09 UTC)
+
+Exported the1x owner texture plus EDRAM buffer immediately before/after each
+2x-frame dump1303,1873,1899,2089. Independent NumPy check decodes actual dispatch
+sizes/constants, computes source tile addressing, depth half-column swap and
+24-bit-depth/high-bits plus stencil/low-byte packing. Reconstructs the entire
+41,943,040-byte EDRAM buffer from its previous contents plus expected writes.
+All4 buffers match exactly with zero inside/outside mismatches. Written samples
+respectively1,146,880;4,259,840;1,182,720;1,182,720. The source stencil here iszero.
+This verifies dump buffer side effects; it does not by itself validate every
+subsequent resolve-copy output or guest synchronization case.
+
+Artifacts early-clear-dumps/report.json, per-event source/before/after binaries,
+shader disassembly and check.json. Reproducers early-clear-dumps.py and
+check-early-clear-dumps.py; replay PID51756 exited normally.
+
+Also repeated full downstream history model on diagnostic nonzero-stencil
+capture frame3087. All10,485,760 final depth/stencil samples match, with
+10,485,760 nonzero final stencil values. History matches4,327,227 samples;
+current-value conversions6,158,533. Thus nonzero preservation extends through
+the later D24FS8 transfer, not just the immediate clear. This is diagnostic
+content stress, not visual/performance qualification of the modified scene.
+
+Artifacts early-clear-nonzero-consumers/{report,history-check}.json and exported
+textures; early-clear-nonzero-consumers.py / check-early-clear-nonzero-history.py.
+Replay PID52428 exited; all checks passed. No production source/binary changes.
+Next:1x resource-chain correctness and motion/difficult-area qualification;
+complete-chain attribution/final audit remain open before retaining by default.
+## A4: captured 1x resource-chain checks (2026-09-09 UTC)
+
+Unchanged opt-in C6596D51,1x RenderDoc capture PID53164 exits normally;
+early-clear-1x-rdc/frame_frame3070.rdc. Staged runtime restored87 afterward.
+Reused actual-resource exporters and address checks with tile dimensions derived
+from captured scale, rather than treating2x byte evidence as1x qualification.
+
+All4 owned-clear readbacks562,1249,2141,2313 pass expected depth, stencil and
+outside-rectangle preservation over10,516,480-byte images each. Bounds:
+0,512..480,1024;0,0..960,1024;0,0..480,512 twice. Captured stencil iszero.
+Full downstream D24FS8 target passes all2,621,440 depth/stencil samples;
+history-preservation1,081,246 and current-value-conversion1,540,194 samples,
+zero mismatches. All4 EDRAM dumps1234,2125,2297,2410 pass entire10,485,760-byte
+buffer comparisons, including unmodified regions. Written sample counts:
+286,720;1,064,960;295,680;295,680 respectively.
+
+Artifacts early-clear-1x-consumers/{report,history-check}.json,
+early-clear-1x-capture-audit.json and early-clear-1x-dumps/{report,check}.json.
+Reproducers use corresponding1x consumer/clear/dump exporter and history/dump
+checker scripts in.local/native-renderer/p2. Replay PIDs1920,39004,3544 exited.
+No production changes. This closes these captured1x content checks, not all
+unseen scenes,resolve-copy/synchronization paths or motion coverage.
+
+Next motion route already exists: config/render-tests/fh1-race.fh1test exercises
+Recaro Rush from the current AppData fixture, with race HUD, distinct presentation
+and simulation-time gates. Use it for candidate/baseline motion qualification;
+recorded downtown/outpost/plaza/canyon discovery areas still need relevant
+coverage and must not be silently replaced by this stationary/race fixture.
+A1-A6 completion and default retention remain unproven.
+## A6: 2x Recaro Rush motion probe (2026-09-09 UTC)
+
+Opt-in C6596D51 runs existing config/render-tests/fh1-race.fh1test via authorized
+AppData launch, PID41080/session20260909T051619Z-p41080. Normal exit, scenario
+completion event present, no checked renderer/device/pipeline failure patterns.
+At least8192 owned-depth clears logged. Six expected screenshots produced;
+race-moving inspected: actual race HUD, car85km/h, geometry/crowds/shadows visible
+without obvious scene failure. This is6seconds scripted acceleration, not a
+complete race or proof of smooth motion everywhere.
+
+Applied existing parse_scenario,MAE,race-HUD and performance-summary helpers to
+recorded output (launch-preview alone does not evaluate Python-runner assertions).
+Capture difference78.911MAE exceeds20 minimum. Race HUD check passes.
+Median11,197us; presentation and distinct-presentation62.321Hz; simulation
+cadence102.161Hz. Simulation-time71.207104s / active wall70.907495s =1.004225,
+invalid deltas2: both within existing scenario bounds. These whole-run metrics
+include menus/loading, so are not clean race-only optimization benchmarks.
+
+Overall qualification.json remains passed=false because all16 required named
+native-family counters were absent from this session. Do not silently remove
+those scenario requirements or report the whole scenario as passing. The
+motion/timing checks pass individually; missing counters require separate
+coverage investigation/baseline comparison. check-early-clear-race.py reuses
+runner helpers and records every check, including the failures. Runtime/session,
+perf,process samples and screenshots archived under early-clear-race-probe.
+
+Qualified87 staged/artifact runtime restored. No production source changes.
+Next: baseline motion comparison, current native coverage evidence,1x motion
+and relevant previously marked difficult-area coverage. Goal/default retention
+remain open; do not replace difficult-area work with this race-start fixture.
+## A6: current clear coverage gate; baseline race crash (2026-09-09 UTC)
+
+Source search finds no producers for the16 legacy named native-family counters
+required by fh1-race. Preserved that scenario unchanged. Added
+config/render-tests/fh1-owned-depth-race.fh1test with identical inputs,captures,
+HUD,MAE,performance,simulation and distinct-presentation requirements, and the
+current owned-depth-clear counter as this resource-chain coverage gate. This is
+a scoped goal test, not a claim that legacy renderer-wide coverage now passes.
+
+Runner NATIVE_COUNTER now also accepts non-V5 native clear records, preserving
+legacy draw/vertex-draw parsing.16 existing/added unit tests pass; added tests
+verify both counter forms, reject unrelated messages and prove the new scenario
+has identical actions and non-coverage requirements. Applied to existing candidate
+PID41080 output: all scoped checks pass including8192 owned depth clears.
+early-clear-race-probe/owned-qualification.json records this result; original
+qualification.json retains the legacy coverage failures.
+
+Feature-off comparison (same C6596D51 binary,flagfalse), PID17708/session
+20260909T052128Z-p17708, crashes before race-ready with0xC0000005 read at target
+0x100000004. Fault module pinyon_shift.exe offset0x48AA082. Crash ID
+pscrash-v1-ee6551b0ab9ec370e1af. Crash snapshot/report archived under
+.local/native-renderer/p2/early-clear-race-off-probe; original diagnostic ZIP
+remains in AppData reports. No external issue submitted. This run is NOT a valid
+baseline and does not identify cause or establish an early-clear regression.
+llvm-symbolizer returned no symbol for this executable/offset; no top-level PDB
+present. Do not conceal this failed attempt or claim a successful comparison.
+
+Qualified87 runtime restored; no game running. Next obtain a valid qualified
+baseline race comparison and investigate/reproduce the access violation if it
+recurs.1x motion and recorded difficult-area coverage remain necessary. New
+runner/scenario changes do not complete A1-A6 or justify default enable.
+## A6: qualified baseline and 1x race motion checks (2026-09-09 UTC)
+
+Qualified runtime 87B79AAB completed the 2x race control normally in session
+20260909T052501Z-p50484. All six captures, HUD, image-change, cadence and
+simulation-time checks passed, with zero owned-depth-clear admissions as expected.
+Median frame time 10.623 ms; presentation/distinct cadence 52.735 Hz; simulation
+95.184 Hz, simulation/active-wall ratio 0.995726, four invalid deltas. The moving
+capture shows the car at 80 km/h. Evidence: early-clear-race-qualified-probe and
+check-early-clear-race-qualified.py under .local/native-renderer/p2.
+This establishes a successful qualified control; it does not explain or erase
+the earlier C659 feature-off access violation.
+
+Opt-in C6596D51 completed the 1x scoped race scenario normally in session
+20260909T052738Z-p49704. All scoped assertions pass: six captures, race HUD,
+76.621 MAE versus the pre-race capture, median 12.488 ms, presentation/distinct
+cadence 61.125 Hz, simulation 96.857 Hz, simulation/active-wall ratio 1.003705,
+two invalid deltas, at least 7168 owned clears, completion and no checked renderer
+error patterns. The moving screenshot was inspected: car at 77 km/h, race HUD,
+track, crowd and shadows visible without obvious scene failure. Evidence:
+early-clear-race-1x-probe/owned-qualification.json, process-samples.json, runtime
+log and captures; checker check-early-owned-race-1x.py.
+
+These are short scripted race-start motion checks, not full races, NPC animation
+qualification or matched race-only performance measurements. Candidate 2x also
+passed its scoped checks previously; different race timing/poses prevent a
+pixel-equivalence or FPS-gain claim between these single runs. Legacy broad
+native-family requirements remain separate and unchanged. Recorded difficult-area
+coverage, remaining chain boundary accounting and final retention remain open.
+Qualified 87B79AAB staged runtime restored and verified; no game remains running.
+## A2/A6: source lifetime audit and declaration cleanup (2026-09-09 UTC)
+
+Added OWNED_DEPTH_CHAIN_CONTRACT.md to record the actual ownership boundary,
+creation/clear/history/alias/resolve/eviction/destruction behavior and remaining
+compatibility work. Source confirms cache eviction retains current and both
+history owners, and destruction invalidates ownership before deleting targets.
+Resolve still dumps authoritative contents, dispatches the copy, orders UAV
+writes, invalidates texture ranges and reports the written extent. Captured dump
+checks do not yet independently prove final resolve destination bytes. Runtime
+reset/recreation and the pre-packet game producer remain unproven.
+
+Removed two accidental unused GetFullyOwnedRenderTarget declarations from the
+nested RenderTarget and Transfer types. The sole intended protected cache helper
+remains. Build rexgpu-fh1 passes; 16 runner tests pass; existing mapping executable
+passes 7,204,228 checks. Build log: p2/owned-clear-declaration-build.log.
+New build hash 2B9CED2AEB9270BCECA5FC981BE8539D72A3101AC0B8F42CFF89AE3119F60F10
+archived as p2/owned-clear-declaration-candidate.dll. Earlier runtime evidence is
+for C6596D51 and is not relabeled as a run of this new binary. Both staged runtime
+DLLs restored to qualified87. A1-A6 remain open, candidate default remains false.
+## A2/A4: final resolve publication readbacks (2026-09-09 UTC)
+
+Replayed the existing candidate captures to trace each of the four checked depth
+dumps to its first subsequent compute read of EDRAM. At 2x these are dump/copy
+1303/1310,1873/1880,1899/1906,2089/2096. Each uses Resolve Copy Fast 32bpp
+1x/2xMSAA, with only a barrier between dump and read. Archived actual dispatch,
+resource views, constants, shader disassembly, full EDRAM source and before/after
+destination view bytes in p2/early-clear-publication. Replay PID52372 terminated
+normally without a report error. Destination ranges are 8,126,464;16,777,216;
+8,667,136;8,667,136 bytes. All four have zero changed bytes in this stationary
+capture, despite varied contents. This is NOT a publication-correctness pass.
+
+The 1x replay exposes the whole 512 MiB shared-memory UAV; the initial bounded
+export guard correctly rejected that allocation. Updated the local 1x exporter
+to read the destination texture extent from captured destination base and pitch/
+height constants instead, retaining original descriptor metadata separately.
+Successful replay PID44284 terminated normally, no report error. Dump/copy pairs
+1234/1241,2125/2132,2297/2304,2410/2417 change 112180,254102,401344,345642 bytes.
+This provides changing-output evidence for the next independent value/address
+check. Metadata and binary readbacks: p2/early-clear-1x-publication; scripts
+p2/early-clear-publication.py and p2/early-clear-1x-publication.py.
+
+Next compare actual destination values and untouched regions against an
+independent resolve addressing/endianness model. Capture disassembly prints
+integer constants as floats; the SDK generated bytecode header contains readable
+integer assembly for resolve_fast_32bpp_1x2xmsaa[_scaled]_cs.h. No production
+source or runtime changed this turn. Qualified87 remains staged; A1-A6 active.
+## A4: exact final resolve publication checks pass (2026-09-09 UTC)
+
+Added tools/check-fh1-owned-resolve.py. It evaluates each captured output pixel
+using independent EDRAM tile/half-row addressing, 32bpp 2D tiled destination
+addressing, byte reversal, symmetric resolution scaling and half-pixel gap fill.
+It starts expected destination contents from the before buffer, writes only
+predicted pixels and compares the complete exported range with the after buffer.
+Assertions reject unsupported format/layout/sample/scale state and overlapping
+or out-of-range destination addresses. This is a bounded depth-resolve checker,
+not a generic shader emulator.
+
+Both commands pass using the installed NumPy runtime:
+  python tools/check-fh1-owned-resolve.py .local/native-renderer/p2/early-clear-1x-publication
+  python tools/check-fh1-owned-resolve.py .local/native-renderer/p2/early-clear-publication
+
+1x events1241,2132,2304,2417: respectively262144,1048576,270400,270400
+predicted pixels; each full4,194,304-byte exported texture range matches exactly.
+These runs include changing destination data. 2x events1310,1880,1906,2096:
+1048576,4194304,1081600,1081600 pixels; entire8,126,464;16,777,216;8,667,136;
+8,667,136-byte destination views match exactly. No mismatches across all eight
+copies. Results saved in each export directory/value-check.json.
+
+The 2x stationary copies had no changed bytes, but now their values are checked
+against independently addressed source data rather than accepting no change as
+proof. Outside-write pixels within the exported ranges are checked; writes
+outside those ranges and other resolve formats are not claimed. Updated the
+chain contract accordingly. Source producer boundary, matched chain attribution,
+runtime reset/recreation, difficult-area coverage and final retention remain open.
+No game or production build changed; the qualified runtime stays staged.
+## A4/A6: live cache eviction passes at 1x/2x (2026-09-09 UTC)
+
+Traced supported cache eviction: D3D12 ClearCaches requests clearing; frame close
+waits for all GPU queue operations before clearing caches. Current render-target
+and independent history owners survive common ClearCache. Full target destruction
+occurs in shutdown; no supported in-game full reset command was found.
+
+Temporary diagnostic fixture requested real ClearCaches after owned-clear counts
+1024 and2048 and logged completion after shared-memory cache clearing. Build hash
+FE0A1194504F03DEE7B68D1AB1F10FB3160A3569B74C7F5E07849B50EA951F60,
+archived p2/owned-clear-eviction-fixture.dll. Both modified source files were
+restored byte-for-byte before running; no fixture instrumentation remains.
+
+2x PID36540/session20260909T054612Z-p36540: normal exit, cache completions at
+frames1957/2213, owned clears continue to8192. All scoped race checks plus exact
+request/completion ordering and later native admission pass. Median11.834ms,
+present/distinct63.524Hz, simulation100.541Hz, simulation/active-wall0.993618,
+invalid deltas4, capture MAE77.502. 1x PID46688/session20260909T054814Z-p46688:
+normal exit, completions1959/2215, owned clears9216, same checks pass. Median
+11.0815ms, present/distinct67.142Hz, simulation100.673Hz, time ratio0.994541,
+invalid deltas4, MAE76.560. Both moving captures visually inspected at84km/h;
+track, crowd, shadows and HUD present without obvious scene failure. These
+forced-eviction runs are correctness probes, not clean performance comparisons.
+
+Evidence p2/owned-clear-eviction[-1x]-probe, process/session logs, captures and
+owned-qualification.json. Local checker check-owned-eviction-race[-1x].py reuses
+existing race helpers and adds ordered eviction completion/continued-admission
+checks. Production-source rebuild initially did no work because restoring backup
+files preserved old timestamps. Touched the two restored source timestamps and
+rebuilt: exact expected2B9CED2AEB9270BCECA5FC981BE8539D72A3101AC0B8F42CFF89AE3119F60F10.
+Both staged/artifact DLLs restored to qualified87 afterward.
+
+This proves the supported live eviction path in the scripted scene at both
+scales, not arbitrary device loss or a forced destructive in-game reset. Final
+retention, matched complete-chain attribution and difficult-area coverage remain
+open. No saves were copied/reset; launch used the authorized AppData state root.
+## A1/A5: same-binary complete transfer-contract comparison (2026-09-09 UTC)
+
+Reapplied the prior audited transfer-signature metadata to current source in a
+temporary diagnostic build, hash259D5F876067BF6C8DDCA9B2BC3C3C8FEFB388A9C5BE7BAE15B04A83F0F05739
+(p2/owned-contract-fixture.dll). All three source files restored byte-for-byte.
+Four authorized open-world diagnostic runs used identical binary/scenario and
+feature off/on at each scale. All exited normally: 2x off PID26476/session
+20260909T055522Z-p26476, on PID33260/session20260909T055626Z-p33260; 1x off
+PID51972/session20260909T055743Z-p51972, on PID47392/session20260909T055847Z-p47392.
+A pre-launch script argument error created no game/session; corrected before runs.
+
+summarize-owned-contract.py reuses tools/rank-fh1-transfer-contracts.py, validates
+all sampled source frames in the32-44s interval and archives session/perf data.
+All four report zero busy/capacity/interrupted/invalid timing losses. 2x has10 off
+and11 on sampled frames; 1x11 off and10 on. These are diagnostic live scenes with
+logging overhead and different source frames, not identical-workload clean FPS
+benchmarks. Full ordered transfer signatures are retained in contracts.json.
+
+compare-owned-contracts.py accounts for every ordinary interval involving the
+selected owner/intermediate. On runs contain no source/destination/history use
+of the eliminated0x306AD0 4x target. Pure round trips comprise six signatures:
+E2950943A57676F6,9042BE20F80E9496,44DCDDC7E394EE36,7B6753D432012633,
+CF245FD27E54D493,88769272D80676F6. Their removed cost is2.577818ms and10.6
+intervals per sampled frame at2x;0.619241ms and9.363636 intervals at1x.
+Dominant forward E295 runs exactly4 times per sampled off frame, costing1.565184ms
+at2x and0.387258ms at1x; it is absent in both on runs.
+
+Retained initialization and mixed floating-depth consumer each execute once per
+sampled frame in all runs. Full destination/current-source/history mappings match
+per tile after substituting the native owner for the eliminated intermediate.
+At1x two off consumer signatures split the same mapping differently; the initial
+per-signature count comparison rejected them. Combining only identical full
+per-tile maps yields the same one-call-per-frame boundary. This is not first-entry
+or descriptor-count grouping. Independent captured GPU history checks remain the
+value-correctness evidence. Initialization cost off/on:2x0.321331/0.313065ms,
+1x0.084992/0.080794ms. Mixed-depth consumer:2x0.421581/0.440134ms,
+1x0.108358/0.107622ms. Total ordinary intervals off/on:2x5.667533/3.093411ms;
+1x1.424477/0.799846ms. Do not claim these differences as measured frame-time gains.
+
+Evidence: p2/owned-contract-{1x,2x}-{off,on}, corresponding comparison.json files,
+local summarize-owned-contract.py and compare-owned-contracts.py. Clear, dump,
+resolve-copy, CPU preparation and synchronization costs are outside this ordinary-
+transfer timing account. A1's complete-chain cost coverage therefore remains open,
+as do difficult-area qualification and retention. Restored-source rebuild passes
+and reproduces2B9CED2AEB9270BCECA5FC981BE8539D72A3101AC0B8F42CFF89AE3119F60F10;
+both runtime DLLs restored to qualified87. No diagnostic instrumentation retained.
+## A1: inclusive phase timing fixture ready; shared GPU occupied (2026-09-09 UTC)
+
+Built diagnostic p2/owned-phase-fixture.dll, SHA256
+5A3ED1E6856CCF13F3BB47C05A7AE42278A7810AD38C710BDDE6ABA340B90A04.
+Reproducible patch script p2/make-owned-phase-fixture.py adds short-lived timing
+scopes backed by the existing sampled timestamp allocator. Phase1 wraps the known
+4x D24S8 clear draw from the early native-admission boundary through return,
+including native preparation or the compatibility Update/clear path. Phase2
+wraps depth resolves after successful parsing for pitch13/base720 through return,
+including dump/copy/resolve-clear/barrier work. CPU recording wall time is logged
+separately from GPU duration. Parent scopes include nested transfers: never add
+the earlier transfer interval totals to these inclusive times. Common pre-boundary
+draw processing and resolve parsing are explicitly outside these scopes.
+
+Build passes. All three source files restored byte-for-byte and verified against
+p2/owned-phase-before. Fixture exists only as a diagnostic DLL and local patch
+script. p2/owned-phase-2x-probe.ps1 uses the same fixture for off/on runs and
+restores qualified87. p2/summarize-owned-phases.py requires every selected source
+frame to have four complete samples of each phase and zero reported timing
+losses before writing phases.json. Neither this count nor the timing is yet
+confirmed at runtime; any failure must be investigated, not silently relaxed.
+
+Launch guard prevented execution because another task was using the GPU/game.
+Authoritative process inspection found PID28612, then PID50240, both from
+.local/non-renderer-optimization/compiler-pgo-dump/pinyon_shift.exe. App task
+Retire Xenos renderer (5), thread01a08472-511f-75b1-b29c-51b42db2d25c, is active
+on non-renderer/compiler optimization. Did not terminate or alter those sessions.
+No phase run or new phase timing result exists yet. Both renderer runtime DLLs
+remain qualified87. Defer GPU measurements and restored-source rebuild until
+that workload is idle; revalidate live processes before proceeding. This turn
+made fixture/checker progress, not a completed A1 result or a goal blocker audit.
+## A3/A4: executable ownership lifetime check (2026-09-09 UTC)
+
+Added tools/check-fh1-owned-lifetime.py. It extracts and compiles the actual
+GetFullyOwnedRenderTarget, ClearCache and DestroyAllRenderTargets bodies against
+a minimal resource shell. Checks pass for missing/null/empty/mixed ownership,
+retention of current and both independent history owners, orphan eviction,
+destruction with and without shutdown, and lookup after same-key recreation.
+Command: python tools/check-fh1-owned-lifetime.py --compiler .local/toolchain/llvm-20.1.8/bin/clang++.exe.
+This is a CPU ownership-method check, not a GPU device-loss simulation. It
+complements the prior live1x/2x eviction tests. No production renderer change.
+
+Inspected the old p0-playtest/town-approach route and map capture: endpoint is
+near Recaro Rush on the east side of Montano Plains. Existing checkpoint already
+records that it did not reproduce the reported collapse. It must not substitute
+for the later downtown/outpost/plaza/canyon discovery markers. Marker001 shows
+downtown buildings; the old approach route does not establish that location.
+
+The separate non-renderer task moved from PGO game training to an active compiler
+build (ninja PID49544/cmake51092 with live clang workers,339-340/360 at last read).
+No renderer timing run launched during that workload. Inclusive phase fixture
+remains ready. Goal active; this turn adds executable lifetime evidence, while
+GPU phase timing and difficult-area qualification remain pending.
+## A1: phase samples valid; cost comparison contaminated (2026-09-09 UTC)
+
+After verifying no game/compiler process was live, ran the pending2x off/on
+inclusive phase probe. Both exited normally: off PID14028/session
+20260909T061238Z-p14028, on PID49872/session20260909T061343Z-p49872.
+Fixture5A3ED1E6, unchanged executable882D9247. Both have exactly four clear and
+four resolve phase samples in every selected source frame, zero reported timing
+losses. Off12 sampled frames; on9. This validates the fixture's runtime selection
+and query completion, not qualification of measured costs.
+
+Raw off/on phase costs per sampled frame: clear GPU1.570645/0.010354ms,
+clear recording wall0.020342/0.006644ms; resolve GPU0.076544/0.073159ms,
+resolve recording wall0.030692/0.048722ms. Do NOT retain these as a qualified cost
+comparison: another compiler build (ninja PID49756) started06:13:24UTC and
+continued throughout the on run. Runtime inspection confirmed concurrent clang
+workers. CPU recording wall time is especially susceptible to this contention.
+Both phases.json files explicitly mark qualification_cost_accepted=false.
+
+Hardened local phase probe scripts to reject active compiler workloads at launch
+and record competing compiler process IDs/start times during execution. Summary
+requires an explicit uncontended observation before accepting costs; missing
+observations never imply a clean environment. This does not replace scheduling
+exclusive windows. Asked user which of the two active goals should receive the
+next exclusive benchmark window; answer pending. Do not stop the other task's
+work without coordination. No further game run started. Qualified87 restored.
+Evidence p2/owned-phase-2x-{off,on};1x probe remains unexecuted. Production source
+is restored, but restored-source rebuild remains deferred while compiler work is
+active. A1/A6 remain open; phase measurement needs an uncontended rerun.
+## A1/A3-A5: uncontended inclusive phase runs; implementation gates (2026-09-09 UTC)
+
+Other optimization task was verified idle and no game/compiler process was live
+before starting. All four diagnostic runs exit normally and record no competing
+compiler processes. Each has12 selected source frames, four clear and four resolve
+samples per frame, zero busy/capacity/interrupted/invalid losses. Fixture5A3ED1E6
+and executable882D9247 unchanged. 2x off PID32208/session20260909T071320Z-p32208;
+on PID26296/session20260909T071438Z-p26296. 1x off PID41816/session
+20260909T071626Z-p41816; on PID48868/session20260909T071743Z-p48868.
+
+Per sampled frame, off -> on:
+- 2x inclusive clear GPU1.572267 ->0.010496ms; CPU recording wall0.018258 ->0.004142ms.
+- 2x depth resolve GPU0.076971 ->0.073557ms; CPU recording wall0.039875 ->0.026767ms.
+- 1x inclusive clear GPU0.389717 ->0.004352ms; CPU recording wall0.020817 ->0.006975ms.
+- 1x depth resolve GPU0.027648 ->0.027221ms; CPU recording wall0.030708 ->0.029658ms.
+
+Clear includes its nested forward transfer in the off path; resolve includes
+its dump/copy/barrier work. Do not add previous nested transfer totals to these
+inclusive values. These are diagnostic component costs, not total-frame gains.
+CPU numbers are recording wall time, not thread CPU. Common upstream processing
+before the hook remains outside the scopes. Reproducible evidence in
+p2/owned-phase-2x-clean-{off,on}, p2/owned-phase-1x-{off,on}, phases.json and
+summarize-owned-phases.py. Earlier contaminated2x pair remains rejected.
+The outer shell's stale/null LASTEXITCODE check falsely reported failure after
+both2x probes exited normally; it did not restart either run. Launched1x directly
+after checking terminal results, preserving all original2x evidence.
+
+Restored-source build passes and reproduces2B9CED2AEB9270BCECA5FC981BE8539D72A3101AC0B8F42CFF89AE3119F60F10.
+Both runtime DLLs restored to qualified87. No fixture instrumentation retained.
+
+Checklist A3-A5 now checked for implementation of this selected chain: current
+native allocation identity/lifetime and fallback are explicit; exact1x/2x clear,
+history and publication plus nonzero-stencil/lifetime/eviction checks pass; captures
+and complete-contract comparisons prove removed intermediate work with retained
+consumer boundaries. This does not claim final retention, arbitrary device-loss
+handling or full Xenos retirement. A1/A2 final scope audit and A6 difficult-area
+coverage/final source-binary qualification remain open. Goal stays active.
+## A1/A2 audited; final candidate race checks (2026-09-09 UTC)
+
+Expanded OWNED_DEPTH_CHAIN_CONTRACT.md with non-additive1x/2x cost coverage,
+recording-wall measurements, source-frame/loss checks and explicit consumer
+inventory. A1/A2 now checked based on combined evidence. The actual game GPU
+producer is clear vertex program1E6883FCCDE1F688, distinct from renderer-generated
+transfer shaders. Earliest verified usable hook is IssueDraw before Update,
+with full validated clear state and vertex snapshot. Upstream CPU packet-emitter
+routine remains unidentified and is explicitly retained; bypassing it is B3,
+not something this chain migration claims to implement. The cost table accounts
+for initialization, inclusive clear, eliminated round trips, inclusive publication
+and mixed-history consumption; overlapping intervals are not summed into FPS.
+
+Exact final uninstrumented candidate2B9CED2A was tested at both scales using the
+scoped race scenario and existing AppData save. 2x PID52644/session
+20260909T072325Z-p52644: normal exit, all six captures and scoped checks pass,
+8192 owned clears, median11.049ms, present/distinct64.640Hz, simulation101.678Hz,
+time ratio1.004324, invalid deltas2, MAE79.513. Moving screenshot inspected at
+85km/h; track/crowd/shadows/HUD visible without obvious scene failure.
+1x PID26064/session20260909T072530Z-p26064: normal exit, all scoped checks pass,
+9216 clears, median10.1455ms, present/distinct68.147Hz, simulation102.782Hz,
+time ratio1.004754, invalid deltas2, MAE77.982. No checked renderer error patterns
+in either session. These are whole-run short race-start checks, not FPS benchmarks
+or a substitute for difficult-area coverage. Evidence p2/final-owned-race-{1x,2x}-probe
+and check-final-owned-race-{1x,2x}.py. Qualified87 restored afterward.
+
+A1-A5 complete for the selected chain. A6 remains open for final retention
+comparison against the qualified runtime and recorded difficult-area coverage.
+No default enable, publication or hardware-requirements claim made. Goal active.
+## A epic closed: bounded 1x owned-depth retention (2026-09-09 UTC)
+
+A6 completed with retained DLL27B486FD5BBD928B90186AF2778D8489F364B3C78993FDB7818CC8514E318B50
+(staged and build artifact); EXE882D9247F23B97B0121A0D7F15F3EFB4569728777A26F03EF2B676D8A9DBCB52.
+The native owned-depth chain is enabled by default only at symmetric 1x draw
+resolution. Scaled rendering keeps compatibility clears: North Carson 2x p99
+regressed +24.46% initially and +90.09% in the longer clean ABBA. Do not enable
+or repeat that unchanged scaled candidate. Retained 1x results support useful
+savings, with correctness/history/publication evidence and final exact-DLL
+1x-native / 2x-fallback race-start checks passing. Source is free of temporary
+profiling. No save files were manipulated by tooling; in-game travel used the
+user's authorization to spend credits. No commit/push/release requested here.
+
+See docs/native-renderer/A6_OWNED_DEPTH_RETENTION.md and the updated migration
+checklist. Next bounded work is B1; full Xenos retirement remains B/C work.
+The old goal's credit-approval block was superseded by the user's authorization.
+
+## B epic execution, 2026-09-10 UTC
+
+The B1-B4 goal is active. [B execution and coverage](B_EPIC_EXECUTION.md) fixes
+the required scenes and resource families, records a tested discovery pass-count
+correction (zero collisions and exact live draw accounting), and describes an
+opt-in full-tile depth/stencil clear candidate for base-0 D24S8. The candidate
+builds and runs but has not passed content/history and retention gates. A6 stays
+qualified at 1x only; its unchanged failed 2x design remains disabled. All B
+items remain open. Direct binary identities and local evidence are in that doc.
+
+## B epic follow-up: tile-clear correctness, no new retention (2026-09-10 UTC)
+
+The base-0 full-tile clear candidate passes nonzero depth/stencil and untouched-
+region checks at 1x/2x, both outgoing pixel transfers, the EDRAM dump and final
+RGB7e3A2-to-RGB10A2 tiled texture publication. Independent models report zero
+mismatches. Production ownership checks now cover mixed-owner eviction and
+same-key recreation; two live eviction requests followed by Recaro race-start
+and driving checks pass at both scales. These are correctness proofs within the
+recorded contracts, not full scene coverage or device-reset qualification.
+
+No candidate enabled. Initial 1x ABBA is unfavorable (+14.30% median) with a
++13.15% recorded draw-workload difference. Longer 2x Outpost ABBA initially
+appeared to worsen p95 by 26.22%, but image review found A2's HUD/prompt hidden
+while the other runs retained them. That block is now explicitly invalid for a
+matched renderer comparison; do not claim that number as a proven regression.
+New tools/check-fh1-outpost-workload.py passes A1/B1/B2 and rejects A2. Control
+and validate activity/HUD state before another long route; preserve the rejected
+block. Do not simply repeat unchanged tests seeking a favorable result.
+
+Detailed identities, raw result tables, replay/check scripts and limitations:
+[B epic execution](B_EPIC_EXECUTION.md). Candidate source remains default-off
+with original hashes; unseeded DLL5ED43C... is archived, not retained. Diagnostic
+seed DLL81988E... and eviction DLL764637... never become runtime defaults.
+Qualified root/artifact DLL remains27B486FD5BBD928B90186AF2778D8489F364B3C78993FDB7818CC8514E318B50;
+actual EXE3721619222F6269492B40D91CD4972A7C7536E82C2F7067958F76BD8229AFFD3.
+B1-B4 remain open. Next attribute changed work/cost or pursue the next valuable
+chain, continue full scene/dependency accounting and B2-B4 implementation.
+
+
+## B2 checkpoint: allocation recycling remains experimental (2026-09-10 UTC)
+
+Continue from [B execution and coverage](B_EPIC_EXECUTION.md), its B2 sections.
+New measured CPU attribution finds geometry creation/eviction/import consuming
+41.629 ms of one 80.009 ms Outpost interval. An opt-in same-sized, completed-
+submission buffer-recycling candidate avoids about 40% of observed new-window
+allocations there without enlarging the 32 MiB budget. The production-body cache
+check, Release build and a nonzero 128 KiB live GPU-copy/first-consumer audit pass.
+
+Retention is not established: the 2x Outpost block has unfavorable reverse tails
+and later collision/camera divergence; free 1x/2x Recaro blocks have low activation,
+varying traffic/work and mixed tails. Do not enable recycling or repeat unchanged
+short comparisons to fish for a gain. The paired Outpost cost run is invalid: the
+game refused its 10,000 CR fare with only 1,076 CR left. Paid travel must wait for
+normal gameplay credits or a qualified free driving approach; saves were not edited.
+
+A focused probe additionally shows the historical largest-containing-window policy
+can redirect a CPU snapshot lookup while a held GPU address still names the earlier
+small window. Exact-key and an isolated smallest-containing lookup preserve that
+identity in the probe. No containment change is made in production; this supplies
+a concrete constraint/new design to investigate, not qualification to enable it.
+
+Production source keeps both tile ownership and recycling default-off; A6 remains
+1x-only. Candidate DLL: 8AF0207FE28A2D5FC26F2E45205B9DB13F55FA7EA79DCAEA854027D67C41011F.
+Qualified root/artifact DLL is restored to
+27B486FD5BBD928B90186AF2778D8489F364B3C78993FDB7818CC8514E318B50.
+EXE: 3721619222F6269492B40D91CD4972A7C7536E82C2F7067958F76BD8229AFFD3.
+Minimal source diffs/hashes, diagnostic fixtures, raw runs and checks live in
+.local/native-renderer/b2/. Every launched game/replay/build has exited.
+Next: investigate stable overlap ownership or another measured B2 reduction,
+qualify sustained motion/lifetimes and cost before retention, and continue the
+fixed B1 scene/dependency inventory plus B3/B4. The B1-B4 goal remains active.
+
+
+## Remote dev checkpoint — 2026-09-10 UTC
+
+Continue from [the current source checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md)
+and [B execution](B_EPIC_EXECUTION.md). Stable geometry containment has passing
+production-body checks and bounded 1x GPU import/consumer checks. 2x capture
+startup failures remain unresolved; no B optimization is retained. The goal
+remains active for all B1-B4. Both local runtime paths use retained 27B486...;
+the current source builds experimental 15FB392... and is a distinct identity.
+This is a source checkpoint, not a preview release or a completed B epic.
