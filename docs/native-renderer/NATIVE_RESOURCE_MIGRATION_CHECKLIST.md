@@ -193,10 +193,13 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   Follow-up: changing-input native publication passes a bounded 2x check.
   An experimental replacement removes the 48 legacy mip draws/resolve copies
   in a captured frame, with correct native buffer and cube import contents.
-  All 48 scratch clears match, but differing pixels outside their rectangles
-  require ownership/history investigation. Production lifetime admission, 1x
-  and clean performance retention remain open. See
-  [replacement evidence](B_EPIC_EXECUTION.md#native-mip-work-replacement-and-unresolved-scratch-history).
+  All 48 scratch clears match; incoming-source and later-consumer checks now
+  explain the outside-clear differences and prove those captured transfers.
+  One same-binary 2x diagnostic pair reduces median six-list GPU cost from
+  1.075200 to 0.100352 ms and CPU cost from 0.4011 to 0.1980 ms. This is not
+  frame-time retention. Production lifetime admission, 1x and clean matched
+  qualification remain open. See
+  [history and cost evidence](B_EPIC_EXECUTION.md#mip-scratch-history-proven-and-live-work-cost-measured).
 - [ ] **B3 — Bypass obsolete guest command generation.** For covered chains,
   replace the producer path before packet emission where its contract permits.
   **Done:** less command generation/decoding is measured, and queries, fences,

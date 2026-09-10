@@ -4177,3 +4177,13 @@ lists and all 2,352 packets still execute/are decoded. See
 for exact scope and the next step. Production admission, 1x, full lifetime,
 pre-packet bypass and performance/motion qualification remain open alongside
 the larger depth/transfer opportunities and all B1-B4 completion gates.
+
+The scratch discrepancy is now explained: all 8,192 differing pixels come
+from different incoming source data and are preserved into checked later scene
+transfers. A same-binary 2x diagnostic pair also measures the complete six-list
+cost falling from 1.075200 to 0.100352 ms GPU and 0.4011 to 0.1980 ms CPU at
+the median (13 complete sampled frames per mode). This supports continuing the
+mip replacement; it is not whole-frame or clean retention evidence. Native
+preparation, remaining packet decoding/clears, 1x, production lifetime admission
+and every broader B gate remain open. See
+[captured history and live cost](B_EPIC_EXECUTION.md#mip-scratch-history-proven-and-live-work-cost-measured).

@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Native mip work replacement](#latest-handoff-native-mip-work-replacement).
+**Latest handoff:** [Mip history proof and measured work reduction](#latest-handoff-mip-history-proof-and-measured-work-reduction).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
@@ -1271,3 +1271,42 @@ Retained EXE `372161...`, GPU `27B486...`, runtime `955BDC...`; every build,
 game and replay handle is terminal. Main before checkpoint is `3c9b713`, SDK
 `202247a`; unrelated SDK dirt and saves are preserved. No preview release or
 tag is made. Validation is recorded in the checkpoint commit body.
+
+## Latest handoff: mip history proof and measured work reduction
+
+The 8,192 differing scratch pixels are now explained by different incoming
+source data between captures. Both actual preservation transfers match their
+own source pixels exactly; all differing columns survive unchanged through
+the mip/clear sequence and into a checked later scene transfer. The replacement
+copies only x=256–319 across 256 rows before clearing x=0–255. The control copies
+the whole 320×256 area. Both later transfers write 81,920 checked MSAA samples
+correctly. This resolves the reported difference in these captures; general
+allocation lifetime, streaming, partial writes and 1x remain unqualified.
+
+A preselected same-binary 2x legacy/native diagnostic pair now measures the
+six face-list intervals, including native generation and the retained clear
+path. Across 13 complete sampled frames per mode, median GPU cost falls from
+**1.075200 to 0.100352 ms**, and CPU cost from **0.4011 to 0.1980 ms**. These
+are work-interval reductions, not total frame-time/FPS retention. All 2,352
+original packets per cube are still decoded. Native generation accounts for
+0.084992 ms GPU / 0.0638 ms CPU at the median; packet handling/clears remain.
+
+Timing GPU `990D6BF9...`, EXE `7EA829...`, runtime `955BDC...`.
+[B execution](B_EPIC_EXECUTION.md#mip-scratch-history-proven-and-live-work-cost-measured)
+records full identities, sessions, ranges, percentile limits, the initial
+checker failure and local scripts. All new runs/builds/replays are terminal.
+The three newly reviewed 20-second stills show the stopped Recaro entry with
+intact car, road and HUD; NPC/traffic phases differ. Motion is not qualified.
+
+**Resume:** implement/prove 1x native memory publication and production semantic,
+external-data and lifetime admission, then remove obsolete generation/decoding
+at the actual producer boundary. Keep the captured-list diagnostic local.
+Broader B1 scene/family coverage, B2 mutation/streaming and tail/memory retention,
+and B4 visual profile plus NPC/UI timing remain required. All B1-B4 items are
+open; neither stopped comparison is restarted, and A6 remains symmetric-1x-only.
+
+Preflight rechecks all nine retained runtime files/backups, eighteen restored
+source baselines and the complete 1x shader pack. Retained EXE `372161...`, GPU
+`27B486...`, runtime `955BDC...`; unrelated SDK dirt and saves are preserved.
+Main before checkpoint is `b63723a`, SDK `202247a`. This is another evidence
+checkpoint, with no retained B setting, preview release or tag.

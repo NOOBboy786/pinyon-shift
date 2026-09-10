@@ -3296,3 +3296,115 @@ motion/NPC/UI timing and matched tail/memory gates. The unchanged failed
 comparisons remain stopped. Preflight verifies nine retained runtime files and
 backups, eighteen restored source baselines and the complete staged 1x pack;
 all game/build/replay handles are terminal. All B1-B4 items remain open.
+
+## Mip scratch history proven and live work cost measured
+
+The outside-clear difference reported above is resolved for the two captured
+frames. `inspect-mip-scratch-usage.py` enumerates actual resource uses, not stale
+graphics output bindings attached to compute actions. Control scratch 7966 has
+one incoming transfer, 48 mip draws, 48 clears, 48 compute reads for resolves
+and one later scene transfer. Replacement scratch 7965 has one incoming transfer,
+48 clears and one later scene transfer. There are no further uses of either
+scratch resource within its captured frame. The later read means the differing
+columns cannot simply be dismissed as unused padding.
+
+`export-mip-scratch-transfers.py` exports actual post-VS rectangles, constants,
+source sample planes and destination samples for those four transfer draws.
+The incoming shaders/constant word 4098 match between captures, as do the
+outgoing shaders/constant word 2080. The CPU check follows their integer address
+mapping and verifies **every fragment in all four captured transfer rectangles**:
+
+| Run / event | Transfer rectangle | Checked samples | Byte mismatches |
+| --- | --- | ---: | ---: |
+| Control / 8973 | Source → scratch, x=0–319, y=0–255 | 81,920 | 0 |
+| Replacement / 7574 | Source → scratch, x=256–319, y=0–255 | 16,384 | 0 |
+| Control / 10780 | Scratch → 4x-MSAA scene target, 1280×16 | 81,920 | 0 |
+| Replacement / 7815 | Scratch → 4x-MSAA scene target, 1280×16 | 81,920 | 0 |
+
+All **8,192 cross-run differing pixels already differ in the checked incoming
+source transfers**. Their values remain unchanged through mip generation,
+every clear, the checked outgoing transfer and the final scratch snapshot.
+The replacement's clear path correctly preserves the 64 columns outside the
+256-wide clear. A changed transferred byte fails the padding comparison.
+No source fix or padding overwrite was required. This proves the captured
+ownership transitions; it does not establish general reuse/destruction,
+streaming, arbitrary partial writes, other consumers or 1x contents.
+
+Evidence: `b2/reflection-mip-scratch-usage-v1/` and
+`b2/reflection-mip-scratch-transfers-v1/{report,content-check}.json` plus exported
+blobs/shaders. Reproduce with `check-mip-scratch-transfers.py`; it validates
+blob/shader hashes, actual triangle rectangles and all sample address bounds.
+The earlier failed format-only inspector and cross-run scratch mismatch remain
+preserved; this later source/consumer proof explains rather than deletes them.
+
+The next diagnostic reuses the existing GPU timestamp heap and completion
+checks to time entire exact face lists. The same binary executes either all
+legacy operations or the native replacement. Three timestamp positions delimit
+native generation and original packet execution/clears, while CPU intervals
+measure the corresponding recording work. The CPU interval starts after exact
+list recognition and `BeginSubmission`; it includes native preparation, but
+excludes the common admission comparison and outer submission setup. Every
+original state/event packet remains decoded in both modes.
+
+Timing GPU SHA256:
+`990D6BF937CB936BB1419CD6465DE3714305B8C2B40B727D2404CB8AD9D7494B`.
+EXE `7EA8294116970A817CA3112E5E5229D5DE1249F124F054FA11E721ACF359D70E`,
+runtime `955BDC64AD9ABA356B162F1BD0B89E356ED45622F8F8C7D66CDB4213290F3500`,
+route `19A53072C258EDFC2B05F5ECA3F263656A9D335C3EBB272B89B25ECAA00BA3E5`.
+Main before the fixture is `b63723a`, SDK `202247a`. The existing 2x pack/catalog
+pins are unchanged. `reflection-mip-replacement-timing-v1/plan.json` preselects
+legacy control followed by native; neither run replaces a failed comparison.
+
+| Mode / session | Complete list frames | Sampled frames | Face lists / sampled |
+| --- | --- | --- | ---: |
+| Legacy / `20260910T174447Z-p28976` | 745, frames 1200–1944 | 13, frames 1200–1920 | 4,470 / 78 |
+| Native / `20260910T174555Z-p26692` | 785, frames 1206–1990 | 13, frames 1260–1980 | 4,710 / 78 |
+
+Both sessions exit normally, with all ten inputs and three capture clocks
+passing. Each sampled frame contains all six faces in order. All 78 CPU samples
+join 78 completed GPU samples per mode by observation-frame/record identity;
+CPU submission means the starting submission, while GPU retirement reports the
+frame slot's final submission. These are distinct values, not a row-position
+or equal-submission join. No face timing is lost in the checked sets.
+
+Per-frame sums over six lists, in milliseconds; **all complete samples included**:
+
+| Interval | Legacy median | Native median | Legacy p95 / p99 | Native p95 / p99 |
+| --- | ---: | ---: | ---: | ---: |
+| CPU total | 0.4011 | 0.1980 | 0.6998 / 0.6998 | 0.3326 / 0.3326 |
+| GPU total | 1.075200 | 0.100352 | 1.334272 / 1.334272 | 0.100352 / 0.100352 |
+| Native generation, CPU | — | 0.0638 | — | 0.2002 / 0.2002 |
+| Native generation, GPU | — | 0.084992 | — | 0.086016 / 0.086016 |
+
+The median measured work reduction is **0.2031 ms CPU / 0.974848 ms GPU**.
+These intervals must not be added into a total frame-time saving. Percentiles
+use nearest rank; with only 13 samples, p95 and p99 are the maximum. Sampling
+one frame in 60 also misses unsampled first-use compilation and other frames.
+Native packet/clear medians are 0.1307 ms CPU and 0.015360 ms GPU. Separate
+component medians need not sum to the median total. Native counters record
+37,680 removed draws and 37,680 removed resolve copies; control removes zero.
+
+The first timing checker rejected a shared startup filesystem error:
+`ResolvePath(\Device) failed - device not found`. Both runs contain precisely
+that same non-renderer message. Its failed checker/result remain preserved.
+The corrected check records the message explicitly and still rejects renderer
+or native contract errors. Both timing checks now pass. Manual review of both
+20-second stills and the earlier replacement-capture still shows the stopped
+Recaro entry, car, road and HUD without an obvious new artifact. NPC/traffic
+phases differ, so these are neither pixel-parity nor motion/timing qualification.
+
+Local reproduction: `make-mip-replacement-timing-profile.py` through the existing
+restoring build helper; `run-mip-replacement-timing.ps1 -Case control|native`;
+`check-mip-replacement-timing.py`. Source snapshots, patches, all logs and
+producer traces, `timing-check.json`, `world-review.json` and restoration checks
+remain in `b2/reflection-mip-replacement-timing-v1/`. Exact captured game-command
+arrays remain local. The retained nine runtime files/backups, eighteen source
+baselines and complete 1x shader pack are verified restored; no process is live.
+
+**Resume:** prove 1x native contents/publication and replace fixed-list admission
+with production semantic/external-data/lifetime validation. Then bypass the
+actual obsolete producer work before packet emission. All 2,352 original packets
+per cube still decode, so B3 remains open. This diagnostic reduction supports
+continued development, not retention or lower hardware claims. The full B1-B4
+scene, mutation/streaming, motion/NPC/UI timing and clean matched tail/memory
+requirements remain unchanged, as do both stopped comparisons and A6's 1x scope.
