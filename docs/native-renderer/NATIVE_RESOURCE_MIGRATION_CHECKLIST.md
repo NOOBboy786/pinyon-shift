@@ -231,6 +231,10 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   frame; input/publication integration and gameplay qualification remain open.
   The isolated 0.020480 ms kernel timing is not retained frame-time savings. See
   [native mip candidate](B_EPIC_EXECUTION.md#native-reflection-mip-kernel-bounded-gpu-proof).
+  The corrected 2x tiled kernel also passes GPU content/mutation checks, but
+  integration has not run: the first diagnostic build fails on private range-query
+  access. Original mip resolves also clear color, which any replacement must
+  preserve. See [publication contract and resume point](B_EPIC_EXECUTION.md#tiled-reflection-mips-and-publication-contract).
 
 B1 follow-up: the 2x owned-clear optimization failed North Carson tail retention
 (short p99 +24.46%, longer p99 +90.09%). Keep the 1x-only guard until actual

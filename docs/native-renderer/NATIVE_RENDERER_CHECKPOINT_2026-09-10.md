@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Native reflection mip kernel](#latest-handoff-native-reflection-mip-kernel).
+**Latest handoff:** [Tiled mip proof and integration build](#latest-handoff-tiled-mip-proof-and-integration-build).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
@@ -1147,3 +1147,41 @@ restored sources and the complete staged 1x pack. EXE `372161...`, GPU
 Markdown links, the 509-file repository boundary check and diff whitespace
 checks pass. Main before this checkpoint is `f3ee41c`, SDK `202247a`;
 unrelated SDK changes and saves are preserved.
+
+## Latest handoff: tiled mip proof and integration build
+
+The native reflection-mip kernel now operates directly on the captured 2x
+scaled/tiled resolve layout. CPU checks join all 2,097,144 logical cube pixels
+to actual GPU memory. The corrected optimized kernel matches the complete
+8,847,360-byte CPU fixture, preserves base/padding/guards and passes an input
+mutation control. Its isolated eight-dispatch median is **0.023040 ms** on the
+RTX 4080; no in-game savings or lower hardware requirement is established.
+
+The first optimized shader failed its content check; the unoptimized control
+and corrected address calculation pass. All versions remain preserved.
+The new contract audit also identifies **color clears on every mip resolve**.
+Replacing mip writes alone would omit required render-target history effects.
+
+A bounded integration diagnostic was prepared to write native mips after the
+final legacy resolve, retaining all original draws, resolves and clears for
+an output/publication proof. Its build **failed** because
+`IsRangeScaledResolved` is private in the base texture cache. No candidate DLL
+or live integration run exists. The failed fixture, build log and exact source
+snapshots remain under `b2/reflection-mip-publication/`.
+
+**Resume:** repair the diagnostic's range-validation access without dropping
+the check, build a separate version, then prove actual native GPU publication
+and later consumers in a bounded 2x run/capture. This would still execute
+duplicate work. Production admission, resolve-clear preservation, actual
+pre-packet bypass, 1x contents and full B1-B4 qualification remain required.
+See [tiled mip evidence](B_EPIC_EXECUTION.md#tiled-reflection-mips-and-publication-contract).
+
+The build handle is terminal, including its restoration path. Preflight checks
+all nine runtime files/backups, thirteen restored sources and the complete 1x
+pack. EXE `372161...`, GPU `27B486...`, runtime `955BDC...`; no game/build/replay
+is active. Main before this checkpoint is `2825e9d`, SDK `202247a`. Unrelated
+SDK dirt and saves are preserved. A6 stays symmetric-1x-only, both stopped
+comparisons stay stopped, and all B1-B4 gates remain open. This checkpoint
+adds evidence and a concrete resume point, with no retained renderer change.
+The tiled CPU content check, tracked Markdown links, 509-file repository
+boundary check and `git diff --check` pass at checkpoint.

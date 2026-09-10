@@ -4143,3 +4143,14 @@ Maintain packet ordering and guest/cache side effects; finish resource lifetime,
 changing content, motion and matched qualification. See
 [native kernel evidence](B_EPIC_EXECUTION.md#native-reflection-mip-kernel-bounded-gpu-proof).
 Broader depth/transfer opportunities and all B1-B4 completion gates remain open.
+
+The native candidate now passes content and mutation checks directly in the
+captured 2x scaled/tiled resolve layout, with base/padding/guards preserved.
+The corrected optimized kernel measures 0.023040 ms in isolation; its first
+optimizer-dependent failure remains archived. Every original mip resolve also
+clears color, so suppression must preserve that render-target history as well
+as output bytes. The first live-publication diagnostic build fails on private
+range-query access; no live replacement or new savings are retained. See
+[tiled mip and publication evidence](B_EPIC_EXECUTION.md#tiled-reflection-mips-and-publication-contract)
+for the exact next step, hashes, failed build and verified runtime restoration.
+All B1-B4 gates and the larger depth/transfer priorities remain unchanged.
