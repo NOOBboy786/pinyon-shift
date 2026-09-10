@@ -4,6 +4,11 @@
 
 includes = ["fh1-post-processing.toml"]
 
+# Microsoft CRT non-local jump pair. These must be semantic codegen hooks so a
+# longjmp restores the host-side PPCContext captured at the setjmp call site.
+setjmp_address = 0x82A81E80
+longjmp_address = 0x82A81950
+
 # NR-00 graphics-hook owner. This is the sole title call to VdSwap, observed
 # immediately before the import without changing registers or control flow.
 # Future graphics hooks must dispatch through src/native_renderer/ rather than
@@ -18,11 +23,6 @@ name = "PinyonShiftObserveGraphicsFrame"
 address = 0x82416F18
 name = "PinyonShiftObserveSceneCommandBuffer"
 registers = ["r24", "r10", "r11"]
-
-# Microsoft CRT non-local jump pair. These must be semantic codegen hooks so a
-# longjmp restores the host-side PPCContext captured at the setjmp call site.
-setjmp_address = 0x82A81E80
-longjmp_address = 0x82A81950
 
 # Read-only B3 observation of the checked clear producer. No guest stores,
 # jumps or packet suppression: the default-off trace measures the original path.
