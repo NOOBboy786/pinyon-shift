@@ -700,7 +700,7 @@ raw-PE address guess is discarded; the instruction bytes and generated code
 confirm the addresses below.
 
 `sub_8240E130` constructs the clear command stream. At `0x8240E480..0x8240E4A4`
-it selects the shader header at `0x820C5FA8`, code at header +40, and byte count
+it selects the shader blob at `0x820C5FA8`, vertex code at +40, and byte count
 108, then prepares `IM_LOAD_IMMEDIATE` (`0xC01C2B00`, 27 shader dwords).
 The call at `0x8240E4A8` copies those exact bytes through `sub_82A7D730` into
 the guest command buffer. A direct caller is `sub_824018B0`, with its call at
@@ -723,3 +723,152 @@ report; it checks the unique shader match, loaded-image instructions and both
 relative branch targets. Guest image/generated-code excerpts remain local.
 All B1-B4 completion criteria remain open; neither this anchor nor a rejected
 B2 comparison completes an item.
+
+
+### B3 live clear-producer attribution (2026-09-10 UTC)
+
+Default-off, restart-required `pinyon_shift_fh1_clear_producer_trace` observes
+entry `0x8240E130`, common epilogue `0x8240E7A4`, the two shader copy callsites
+`0x8240E4A8` / `0x8240E4F4`, and command-buffer refill entry `0x8240CF68`.
+It reads registers without changing guest state or emitting/suppressing packets.
+Elapsed wall time excludes entry setup and the final log write; inner hook cost,
+scheduling and refill work remain included. Nesting, mismatched pairs and the
+100,000-record cap are explicit. This is diagnostic attribution, not a clean
+benchmark, CPU-cycle measurement or a downstream GPU-decode measurement.
+
+Release trace EXE SHA256 is
+`B3CF0B7AFE63FB8FE50FF0DF9131712AC8B3080F69835566D82E229C47D0AACE`.
+It runs with retained renderer `27B486...` and unchanged runtime DLL
+`955BDC64AD9ABA356B162F1BD0B89E356ED45622F8F8C7D66CDB4213290F3500`.
+The original EXE `372161...` and all staged DLLs are backed up and restored.
+The production-body trace check passes disabled observation, register
+non-mutation, nested accounting, thread isolation, mismatches and record limits:
+`tools/check-fh1-clear-producer-trace.py --compiler <clang++>`.
+
+The 1x session `20260910T044707Z-p12388` exits normally. The 2x session
+`20260910T044922Z-p29968` completes the route and logs process shutdown, but its
+wrapper initially matches an older session with reused PID 29968 and throws
+before preserving the launcher result. The exact current session is recovered
+from its capture output path. Its OS exit code remains **unrecorded**, not
+assumed zero. The wrapper now saves launch results before archiving and excludes
+pre-existing session files. No repeat run is used to replace this evidence.
+Both runs pass arrival/pose/HUD checks; contact-sheet review shows intact car,
+road, crowd and HUD while driving at 36 km/h.
+
+| Scale / phase | Source frames | Total producer median / p95 / p99 per frame (ms) |
+| --- | ---: | --- |
+| 1x stationary, 32..41 s | 425 | 0.03580 / 0.17578 / 0.26738 |
+| 1x accelerating, 46..48 s | 123 | 0.02990 / 0.04246 / 0.04985 |
+| 1x braking, 52..57 s | 252 | 0.03795 / 0.05077 / 0.13555 |
+| 2x stationary, 32..41 s | 449 | 0.03460 / 0.05126 / 0.08689 |
+| 2x accelerating, 46..48 s | 89 | 0.03940 / 0.05458 / 0.23095 |
+| 2x braking, 52..57 s | 192 | 0.04505 / 0.06761 / 0.27842 |
+
+There are 45,103 / 42,350 complete records, one observed producer thread and
+60 / 47 refill calls at 1x/2x. No unmatched/nested records or cap exhaustion
+occur. Each producer invocation copies 108 + 36 shader bytes; gameplay has
+15 invocations per source frame at the median. Complete groups inside each
+phase have no missing source-frame IDs. Capture-clock anchor spread is 17 / 54
+ms; phase summaries use whole groups within the boundaries and do not join
+asynchronous GPU samples. Raw logs, images, identities, the recovered-exit
+limitation and summary are under `.local/native-renderer/b3/producer-trace-*`;
+reproduce the summary with `b3/summarize-producer-trace.py`.
+
+The typical measured producer contribution is small in this free local scene.
+Do not prioritize a complex clear-producer rewrite on the assumption that it
+will remove milliseconds of CPU work. GPU decoding is still unmeasured here,
+and this does not close B3: an actual safe pre-packet bypass is still required.
+A pointer-based shader load cannot directly reference `0x820C5FD0`, because the
+image uses a virtual XEX heap whereas `PM4_IM_LOAD` reads physical memory.
+Do not substitute a masked image address. Any such design needs a proven mirror
+and lifetime contract; return first to higher measured preparation costs.
+
+
+### B2 handbrake workload and first qualified-DLL controls (2026-09-10 UTC)
+
+The first stationary-route adjustment held the left trigger from rest. Retained
+control `20260910T045723Z-p7324` completes but fails every position gate:
+screenshots show reverse gear at 54/59 km/h. Holding that trigger engages reverse;
+it is not a stationary brake hold. The wrapper stops before candidate runs.
+Keep the failed route/results under `b2/stable-containment-braked-local-*`.
+
+A changed route holds A (handbrake) from 27 seconds until the planned 65-second
+acceleration. The preselected 1x C-A-B-B-A-C block completes with all six normal
+exits and automated arrival/stationary/motion/HUD checks. C uses qualified
+`27B486...`; A/B use `15FB392...` with containment off/on, recycling and tile
+ownership off. All use EXE `372161...`. No compiler/replay contention, GPU errors
+or timing drops are recorded. The selected CPU phases have zero invalid
+simulation deltas. Start/stationary pose spread is below 0.001 m, moving spread
+0.61 m, stopped spread 1.28 m. Images show intact car/road/crowd and 34-35 km/h
+motion, but **passing traffic differs**: A1 has nearby vehicles in stationary,
+moving and stopped images, including partial HUD occlusion in the last image.
+Thus matching the player pose does not establish a matched traffic workload.
+
+| 1x phase / CPU frame clock | B vs A median / p95 / p99 | B vs C median / p95 / p99 | B vs A draw-count change |
+| --- | --- | --- | ---: |
+| Stationary, 32..61 s | +1.25% / +0.91% / +1.17% | +4.24% / -0.30% / -0.67% | +1.65% |
+| Accelerating, 66..68 s | -4.38% / -4.44% / -5.02% | +9.77% / +1.51% / +0.55% | -6.00% |
+| Braking, 72..77 s | +0.45% / +0.02% / +0.06% | +0.16% / -0.22% / -11.71% | +1.25% |
+| Settled, 80..88 s | +8.02% / +4.63% / +8.64% | -0.79% / +1.27% / -3.06% | +2.52% |
+
+These are descriptive results, not isolated causal gains/regressions. Compared
+with A, B whole-session GPU time rises 2.02%, process CPU falls 1.47%, steady
+private memory rises 14.21 MiB and peak private memory rises 18.37 MiB.
+At the last periodic record (all A/B runs have 14,155,776 cache hits), mean
+allocations rise from 397 to 447.5, imports from 4,934.5 to 5,430, and imported
+bytes from 340,328,448 to 402,128,896. Stationary import rates are approximately
+69.4/s for A and 70.3/s for B. Candidate contained-use counts 714,780/829,423
+are not avoided imports. This does not demonstrate reduced recurring work.
+Memory/CPU clocks and whole-session asynchronous GPU totals retain separate
+scope; no GPU sample is paired naively with a CPU row.
+
+**No retention.** The ordered-map exact path also has mixed differences against
+C; flag-off source has not earned equivalence to the retained DLL. The planned
+2x free-road block is deferred after this workload/work-reduction review;
+there is no 2x containment performance verdict. Preserve all six runs and do
+not repeat the same free-road block for a more favorable result. The handbrake
+fix remains useful route tooling. A closed-course race hold/motion probe is the
+next workload investigation, not yet a qualified comparison or full race proof.
+
+Sessions in C-A-B-B-A-C order: `20260910T050003Z-p9796`,
+`20260910T050137Z-p27808`, `20260910T050312Z-p7120`,
+`20260910T050446Z-p7076`, `20260910T050620Z-p29068`,
+`20260910T050754Z-p25844`. Source-of-truth identities remain each run's metadata;
+results, contact sheet, plan and explicit visual review are under
+`.local/native-renderer/b2/stable-containment-handbrake-local-*`. Reproduce the
+summary using `b2/summarize-handbrake-containment.py 1`. Its `complete` flag
+means all six runs were collected, not retention qualification. The separate
+review records `retention_qualified: false`. All B items stay open.
+
+
+#### Closed-course route probe
+
+Retained-build session `20260910T051524Z-p27136` exits normally after the new
+130-second Recaro Rush hold/motion probe. The race starts at
+(-1296.251587, 47.215019, -3550.364990); the 68- and 103-second captures have
+identical player coordinates. Four seconds after releasing the handbrake, the
+car has moved 16.74 m at a visible 32 km/h; the stopped sample is 49.96 m from
+the start. All four race images pass the existing race-HUD checks and show
+8/8 position, intact scenery/car and no nearby traffic. This establishes one
+usable 1x route probe, **not** repeatability, matched performance, streaming or
+a full race. Reproduce its checks with `b2/check-closed-course-handbrake.py`;
+script, logs, images, hashes and contact sheet are in
+`b2/closed-course-handbrake-probe*`. Both runtime paths remain retained.
+
+
+#### Separate correctness lead found while adding producer hooks
+
+The existing `setjmp_address` / `longjmp_address` entries in `main-xex.toml`
+parse inside the scene-observer `[[midasm_hook]]`, rather than at the TOML root.
+The SDK parser reads these scalar keys only at the root. The current generated
+CRT functions therefore still contain raw guest instruction bodies instead of
+the configured semantic context hooks. Parsed data at checkpoint `f613ed0` and
+the current source confirm this predates the clear trace; new hook blocks were
+placed after the old metadata to preserve its existing scope during the probe.
+Evidence: `b3/crt-config-scope-observation.json`.
+
+This is a concrete configuration correctness lead, **not an established cause**
+of the earlier renderer null read or timeout. It is not fixed in the trace
+experiment. Before broad new qualification, verify the target contract and add
+a parsed-config/non-local-jump round-trip regression, then qualify any rebuilt
+EXE. Preserve the existing renderer evidence and exact binary identities.

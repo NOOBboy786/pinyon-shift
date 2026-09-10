@@ -138,3 +138,45 @@ then matched 1x/2x retention including qualified-DLL controls. Continue the full
 B1 scene/family inventory and B4 visual/timing work; the prior scope is intact.
 The source checkpoint remains `6605268` with SDK `261dd6a`; this follow-up adds
 documentation only. No new preview release or tag is made.
+
+
+## Follow-up: producer timing and improved route tooling
+
+The default-off `pinyon_shift_fh1_clear_producer_trace` is implemented and its
+production-body tests pass. Diagnostic EXE `B3CF0B...` measures all clear
+invocations together at about 0.03-0.045 ms per local gameplay frame at the
+median. This is a small measured CPU opportunity in that scene; it does not
+measure downstream GPU decode or implement B3's required pre-packet bypass.
+[B execution](B_EPIC_EXECUTION.md) records phase tails, exact identities and
+the 2x wrapper's recovered-session/unrecorded-exit-code limitation. The trace
+source is present, but qualified EXE `372161...` remains staged.
+
+The 1x handbrake C-A-B-B-A-C comparison completes all six runs. It holds the
+player pose fixed but has differing passing traffic, mixed frame timings and
+higher candidate import/allocation counts. **No retention; no 2x containment
+performance verdict.** The free-road 2x block is deferred after workload and
+work-reduction review. The failed earlier left-trigger hold is preserved: it
+engages reverse from rest, so use the handbrake for stationary work.
+
+A new retained-build Recaro Rush probe completes with an identical stationary
+pose at 68/103 seconds, valid race HUD, 32 km/h motion and no nearby traffic in
+the sampled race images. It is a better candidate workload for repeatability
+checks, not proof of a full race or a new benchmark result. Next, establish
+representative workload/cost and live mutation/streaming coverage before more
+retention comparisons; do not repeat the rejected free-road block unchanged.
+B1's full scene/family inventory, B3 bypass and B4 profile/timing remain open.
+
+Current trace source snapshots/hashes are in
+`.local/native-renderer/b3/producer-trace-source-manifest.json`. The trace build
+used the unchanged qualified runtime DLL `955BDC...`; unrelated local kernel
+profiling is preserved. SDK renderer source and candidate default flags do not
+change in this follow-up. Retained DLL `27B486...` is restored at both runtime
+paths. No game, build or replay remains running.
+
+
+Before broad new comparisons, investigate the separate CRT configuration lead
+recorded at the end of [B execution](B_EPIC_EXECUTION.md): the pre-existing
+setjmp/longjmp addresses are scoped inside a hook table, so the root-only SDK
+parser ignores them. No fix or renderer-crash causality is claimed. A corrected
+scope needs a non-local-jump contract/regression and a newly qualified EXE;
+do not merge that change silently into renderer measurements.

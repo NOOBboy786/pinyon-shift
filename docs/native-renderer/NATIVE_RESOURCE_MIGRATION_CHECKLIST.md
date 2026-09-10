@@ -98,8 +98,10 @@ opt-in buffer recycling and a bounded GPU copy proof, but the mixed Outpost/loca
 comparisons do not establish retention. Paid Outpost travel is unavailable until
 normal play replenishes credits; free routes remain usable. Stable containment
 has bounded 1x/2x GPU validation, but live mutation/streaming and retention remain
-open. The longer comparison stops on a stationary workload mismatch. B3 now has
-a static guest clear-producer anchor; live attribution and bypass remain open.
+open. A completed 1x handbrake comparison has mixed timings, more imported bytes
+and differing traffic; 2x performance remains unqualified. B3 now has
+live clear-producer attribution (about 0.03-0.045 ms/frame median in the local
+scene); downstream decode attribution and actual pre-packet bypass remain open.
 See the [current checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md).
 All B items remain open.
 

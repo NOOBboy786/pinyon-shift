@@ -3840,3 +3840,34 @@ calls it at `0x824019D0`. This establishes where to measure obsolete guest work,
 not that it can all be skipped. Device dirty state, rectangle/scissor handling
 and command-buffer refill/flush still need a live contract. No producer bypass
 or CPU saving is claimed. B1-B4 remain open with their full original criteria.
+
+
+## 2026-09-10 B3 attribution: clear emission has a small CPU contribution
+
+The new opt-in producer trace measures roughly 0.03-0.045 ms per local gameplay
+frame at the median for all 15 clear invocations together. It observes 108 + 36
+shader-copy bytes per invocation, with no pairing errors. This makes a complex
+rewrite of this producer a low CPU priority in the measured scene; downstream
+GPU decoding and other producers remain unmeasured. B3 is still open, including
+its actual pre-packet bypass requirement. Return first to measured geometry
+preparation while retaining the producer anchor for later complete-chain work.
+See [B execution](B_EPIC_EXECUTION.md) for phase tails, diagnostic overhead,
+1x/2x identities and the 2x wrapper's unrecorded OS exit-code limitation.
+The qualified EXE/DLL are restored; the trace is source-only and default-off.
+
+
+## 2026-09-10 B2 comparison: no containment retention
+
+The completed 1x handbrake C-A-B-B-A-C block holds the player stationary, but
+traffic differs and timings are mixed. At the last periodic records, candidate
+mean imports rise from 4,934.5 to 5,430 and imported bytes from 340,328,448 to
+402,128,896 against same-binary exact mode; no recurring-work reduction is
+established. Qualified-DLL controls also show mixed differences. The 2x free-road
+block is deferred after review, and containment remains off. Full numbers and
+scope are in [B execution](B_EPIC_EXECUTION.md).
+
+The next workload lead is a retained-build closed-course Recaro Rush probe:
+it completes with a fixed 68..103-second pose and verified race HUD/motion.
+One probe is not matched performance or sustained streaming evidence. Use it
+to establish representative cost/repeatability, while preserving the entire
+B1 scene set and every B2/B3/B4 completion requirement.
