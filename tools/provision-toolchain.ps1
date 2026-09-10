@@ -104,6 +104,13 @@ if (-not $pythonReady) {
 & $pythonExe -I -c $pythonCheck
 if ($LASTEXITCODE -ne 0) { throw 'The local Python runtime failed its shader tooling check.' }
 
+Write-PinyonEvent tools 31 'Preparing CMake with support for the build presets.' -JsonEvents:$JsonEvents
+$cmakeRoot = Resolve-PinyonLocalPath -RelativePath $config.cmake.install_path
+if (-not (Test-Path -LiteralPath (Join-Path $cmakeRoot $config.cmake.executable) -PathType Leaf)) {
+    $archive = Join-Path $downloads "cmake-$($config.cmake.version).zip"
+    Invoke-PinyonDownload -Uri $config.cmake.url -Destination $archive -Sha256 $config.cmake.sha256
+    Expand-Archive -LiteralPath $archive -DestinationPath (Split-Path $cmakeRoot -Parent) -Force
+}
 $environment = Enter-PinyonBuildEnvironment
 $git = Get-PinyonGit
 foreach ($required in @(

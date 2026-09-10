@@ -43,11 +43,12 @@ $guestPatchSetSha256 = (Get-FileHash -LiteralPath $guestPatchPath -Algorithm SHA
 Write-PinyonEvent build 62 'Building the local code generator.' -JsonEvents:$JsonEvents
 Push-Location $sdkRoot
 try {
-    & $environment.CMake --preset win-amd64 `
-        -DREXGLUE_ENABLE_TRACY=OFF -DSDL_HIDAPI_LIBUSB=OFF
-    if ($LASTEXITCODE -ne 0) { throw 'ReXGlue configuration failed.' }
-    & $environment.CMake --build --preset win-amd64-release --target rexglue --parallel $Parallel
-    if ($LASTEXITCODE -ne 0) { throw 'ReXGlue code-generator build failed.' }
+    Invoke-PinyonBuildCommand $environment.CMake @('--preset', 'win-amd64',
+        '-DREXGLUE_ENABLE_TRACY=OFF', '-DSDL_HIDAPI_LIBUSB=OFF') `
+        (Join-Path $logs 'rexglue-configure.log') 'ReXGlue configuration failed.'
+    Invoke-PinyonBuildCommand $environment.CMake @('--build', '--preset', 'win-amd64-release',
+        '--target', 'rexglue', '--parallel', "$Parallel") `
+        (Join-Path $logs 'rexglue-build.log') 'ReXGlue code-generator build failed.'
 }
 finally { Pop-Location }
 if (-not (Test-Path -LiteralPath $rexglueExe -PathType Leaf)) {
@@ -106,10 +107,10 @@ if (-not (Test-Path -LiteralPath (Join-Path $generatedRoot 'default/codegen.buil
 Write-PinyonEvent build 82 'Compiling the playable preview. This is the longest step.' -JsonEvents:$JsonEvents
 Push-Location $root
 try {
-    & $environment.CMake --preset win-amd64-release "-DREXSDK_DIR=$sdkRoot"
-    if ($LASTEXITCODE -ne 0) { throw 'Preview configuration failed.' }
-    & $environment.CMake --build --preset win-amd64-release --parallel $Parallel
-    if ($LASTEXITCODE -ne 0) { throw 'Preview compilation failed.' }
+    Invoke-PinyonBuildCommand $environment.CMake @('--preset', 'win-amd64-release', "-DREXSDK_DIR=$sdkRoot") `
+        (Join-Path $logs 'preview-configure.log') 'Preview configuration failed.'
+    Invoke-PinyonBuildCommand $environment.CMake @('--build', '--preset', 'win-amd64-release', '--parallel', "$Parallel") `
+        (Join-Path $logs 'preview-build.log') 'Preview compilation failed.'
 }
 finally { Pop-Location }
 

@@ -155,6 +155,45 @@ function ConvertTo-PinyonCommandPath {
     $entries -join ';'
 }
 
+function Get-PinyonCMake {
+    param([Parameter(Mandatory)] [string]$VisualStudioRoot)
+    $config = Get-PinyonReleaseToolchain
+    $candidate = Join-Path (Resolve-PinyonLocalPath $config.cmake.install_path) $config.cmake.executable
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        $candidate = Join-Path $VisualStudioRoot 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
+    }
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        throw 'CMake is missing. Run tools/provision-toolchain.ps1 first.'
+    }
+    $versionLines = @(& $candidate --version)
+    if ($LASTEXITCODE -ne 0 -or $versionLines.Count -eq 0 -or
+        $versionLines[0] -notmatch '^cmake version (\d+\.\d+\.\d+)' -or
+        [version]$Matches[1] -lt [version]'3.25.0') {
+        throw 'CMake 3.25 or newer is required. Run tools/provision-toolchain.ps1 to install the supported version.'
+    }
+    $candidate
+}
+
+function Invoke-PinyonBuildCommand {
+    param(
+        [Parameter(Mandatory)] [string]$FilePath,
+        [Parameter(Mandatory)] [string[]]$Arguments,
+        [Parameter(Mandatory)] [string]$LogPath,
+        [Parameter(Mandatory)] [string]$FailureMessage
+    )
+    # Windows PowerShell treats redirected native stderr as ErrorRecord objects.
+    # Keep streaming it, then decide success from the process exit code.
+    $ErrorActionPreference = 'Continue'
+    & $FilePath @Arguments 2>&1 | Tee-Object -FilePath $LogPath -ErrorAction Stop
+    $code = $LASTEXITCODE
+    if ($code -ne 0) {
+        $failure = [Exception]::new("$FailureMessage Exit code: $code. Build log: $LogPath")
+        $failure.Data['build_log'] = $LogPath
+        $failure.Data['exit_code'] = $code
+        throw $failure
+    }
+}
+
 function Enter-PinyonBuildEnvironment {
     $root = Get-PinyonRepoRoot
     $config = Get-PinyonReleaseToolchain
@@ -181,7 +220,7 @@ function Enter-PinyonBuildEnvironment {
     $env:PATH = "$(Join-Path $llvm 'bin');$env:PATH"
     [pscustomobject]@{
         VisualStudioRoot = $vsRoot
-        CMake = Join-Path $vsRoot 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
+        CMake = Get-PinyonCMake -VisualStudioRoot $vsRoot
         Ninja = Join-Path $vsRoot 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe'
         LlvmRoot = $llvm
     }

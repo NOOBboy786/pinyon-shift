@@ -2,6 +2,7 @@ import getpass
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -30,6 +31,71 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("if ($release.channel -eq 'preview') { 'dev' } else { 'main' }", workflow)
         self.assertIn('--main-ref "refs/remotes/origin/$branch"', workflow)
 
+
+    @unittest.skipUnless(shutil.which("powershell"), "Windows PowerShell is required")
+    def test_build_command_keeps_stderr_and_exit_status(self):
+        with tempfile.TemporaryDirectory(prefix="pinyon-build-log-") as directory:
+            environment = os.environ.copy()
+            environment["PINYON_TEST_DIR"] = directory
+            command = r"""
+. ./tools/release-common.ps1
+$ErrorActionPreference = 'Stop'
+foreach ($code in @(0, 7)) {
+    $log = Join-Path $env:PINYON_TEST_DIR "$code.log"
+    try {
+        Invoke-PinyonBuildCommand $env:ComSpec @('/d', '/c', "echo diagnostic 1>&2 & echo output & exit /b $code") $log 'build failed' | Out-Host
+        if ($code -ne 0) { throw 'Failure was swallowed' }
+    } catch {
+        if ($code -eq 0 -or $_.Exception.Data['exit_code'] -ne $code -or $_.Exception.Data['build_log'] -ne $log) { throw }
+    }
+    $text = Get-Content -LiteralPath $log -Raw
+    if ($text -notmatch 'diagnostic' -or $text -notmatch 'output') { throw 'Output missing' }
+}
+"""
+            result = subprocess.run(["powershell", "-NoProfile", "-Command", command],
+                                    cwd=ROOT, env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which("powershell"), "Windows PowerShell is required")
+    def test_cmake_rejects_old_version_and_prefers_local_install(self):
+        with tempfile.TemporaryDirectory(prefix="pinyon-cmake-") as directory:
+            root = pathlib.Path(directory)
+            (root / "config").mkdir()
+            config = json.loads((ROOT / "config/release-toolchain.json").read_text())
+            config["cmake"]["executable"] = "bin/cmake.cmd"
+            (root / "config/release-toolchain.json").write_text(json.dumps(config))
+            cmake = root / config["cmake"]["install_path"] / "bin/cmake.cmd"
+            cmake.parent.mkdir(parents=True)
+            environment = os.environ.copy()
+            environment["PINYON_TEST_ROOT"] = str(root)
+            command = r"""
+. ./tools/release-common.ps1
+function Get-PinyonRepoRoot { $env:PINYON_TEST_ROOT }
+try { [Console]::Out.Write((Get-PinyonCMake -VisualStudioRoot $env:PINYON_TEST_ROOT)) }
+catch { [Console]::Error.Write($_.Exception.Message); exit 2 }
+"""
+            for version, expected in (("3.20.0", 2), ("3.31.10", 0)):
+                cmake.write_text(f"@echo cmake version {version}\n@exit /b 0\n")
+                result = subprocess.run(["powershell", "-NoProfile", "-Command", command],
+                                        cwd=ROOT, env=environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                if expected == 0:
+                    self.assertEqual(pathlib.Path(result.stdout), cmake)
+                else:
+                    self.assertIn("provision-toolchain.ps1", result.stderr)
+
+    def test_packaged_sources_cover_literal_cmake_inputs(self):
+        package = (ROOT / "tools/package-launcher.ps1").read_text(encoding="utf-8")
+        include = package.split("$include = @(", 1)[1].split("\n)", 1)[0]
+        paths = re.findall(r"'([^']+)'", include)
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+        sources = re.findall(r"^\s*((?:src|tests|tools)/[^\s)]+)", cmake, re.MULTILINE)
+        self.assertTrue(sources)
+        for source in sources:
+            self.assertTrue((ROOT / source).is_file(), source)
+            self.assertTrue(any(source == path or source.startswith(path + "/")
+                                for path in paths), source)
+
     def test_supported_dump_uses_exact_hash_and_size(self):
         data = json.loads((ROOT / "config/supported-dumps.json").read_text())
         self.assertEqual(data["policy"]["match"], "exact_sha256_and_size")
@@ -40,7 +106,7 @@ class ReleaseContractTests(unittest.TestCase):
 
     def test_downloads_are_https_and_sha256_pinned(self):
         data = json.loads((ROOT / "config/release-toolchain.json").read_text())
-        for key in ("git", "xz", "llvm", "extract_xiso", "python"):
+        for key in ("git", "xz", "llvm", "extract_xiso", "python", "cmake"):
             item = data[key]
             self.assertTrue(item["url"].startswith("https://"))
             self.assertRegex(item["sha256"], r"^[0-9A-F]{64}$")

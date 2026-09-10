@@ -91,6 +91,11 @@ catch {
         line = $_.InvocationInfo.ScriptLineNumber
     }
     $errorPath = Join-Path $logs 'setup-error.json'
+    if ($_.Exception.Data.Contains('build_log')) {
+        $errorRecord.build_log = $_.Exception.Data['build_log']
+        $errorRecord.exit_code = $_.Exception.Data['exit_code']
+        $errorRecord.output_tail = @(Get-Content -LiteralPath $errorRecord.build_log -Tail 80)
+    }
     [IO.File]::WriteAllText($errorPath, ($errorRecord | ConvertTo-Json) + [Environment]::NewLine,
         [Text.UTF8Encoding]::new($false))
     Write-Error $_

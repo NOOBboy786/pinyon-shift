@@ -74,7 +74,7 @@ $include = @(
 )
 foreach ($relative in $include) {
     $source = Join-Path $root $relative
-    if (-not (Test-Path -LiteralPath $source)) { continue }
+    if (-not (Test-Path -LiteralPath $source)) { throw "Required launcher payload source is missing: $relative" }
     $destination = Join-Path $payloadRoot $relative
     if (Test-Path -LiteralPath $source -PathType Container) {
         [void](New-Item -ItemType Directory -Force -Path $destination)
