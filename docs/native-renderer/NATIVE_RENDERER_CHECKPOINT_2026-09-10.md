@@ -1,12 +1,15 @@
 # Native renderer checkpoint — 2026-09-10 UTC
 
 This is a source checkpoint for remote `dev`, not a new preview release or a
-claim that B is complete. Continue with the active B1–B4 goal in the
+claim that B is complete. Remaining B1-B4 work is deferred in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [1x mip proof and failed 2x admission](#latest-handoff-1x-mip-proof-and-failed-2x-admission).
+**Latest handoff:** [experimental mipmap milestone complete](#latest-handoff-experimental-mipmap-milestone-complete).
 Earlier sections preserve the sequence of experiments; their resume orders and
-source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
+source pins are historical. Current SDK pin: `d65d59d61c3b2408b1096564c8fb440b8138c02b`.
+
+The historical runtime table and resume instructions below predate the mipmap
+implementation. Current binaries and scope are in the latest handoff.
 
 ## Retained behavior and current source
 
@@ -1356,3 +1359,36 @@ eighteen restored source baselines and the complete staged 1x pack. EXE
 active. Main before checkpoint is `89ff2cb`, SDK `202247a`; unrelated SDK dirt
 and saves are preserved. This checkpoint goes to remote `dev` without a new
 preview release or tag. The B goal is paused at this checkpoint.
+
+## Latest handoff: experimental mipmap milestone complete
+
+The focused reflection-mipmap replacement is implemented, enabled by default
+at symmetric 1x/2x, and available through the normal runtime. Current command
+and CPU-owned external snapshots replace fixed-address/captured-list matching.
+Unknown state or inputs fall back; `--fh1_native_reflection_mips=false` selects
+the original draws/copies. State packets, scratch clears and transfers remain.
+
+Final moving 1x/2x captures pass complete native buffer, all 54 cube imports and
+later-consumer checks. The 1x scratch-history gap is closed for the captured
+chain. Release/contract/mutation/shader reproduction checks and eight clean
+comparison runs pass their stated gates. Median whole-frame changes are +2.15%
+at 1x and -1.35% at 2x; tails and memory are similar. No large FPS or lower
+hardware requirement is claimed. Existing startup simulation anomalies are
+reported separately and NPC/UI timing remains open.
+
+See [the full result and reproduction](REFLECTION_MIPMAP_REPLACEMENT.md) for
+exact hashes, sessions, proof scope and preserved failed attempts. The qualified
+local EXE is `EC2E5F...`, renderer `588648...`, runtime `6B97FB...`; both renderer
+paths use the new build and the complete 1x offline pack is staged. The previous
+nine-file runtime remains archived at `b3/pre-trace-runtime/`; the new manifest
+is `b2/reflection-mip-retained-runtime-v1/manifest.json`, under `.local/native-renderer/`.
+
+**Deferred by the user:** all other B migrations, recycling/containment, broader
+streaming/tail and scene coverage, NPC/UI timing, and producer/packet removal.
+The mip chain still submits six lists and decodes all 2,352 packets per cube.
+B1-B4 and C remain open, A6 stays symmetric-1x-only, and the stopped comparisons
+remain stopped. No goal was restarted, and no preview release/tag is published.
+
+This checkpoint pins SDK `d65d59d61c3b2408b1096564c8fb440b8138c02b` and goes to remote `dev`.
+Unrelated SDK kernel/libmspack work and save files are preserved. All launched
+game/build/replay processes are terminal.

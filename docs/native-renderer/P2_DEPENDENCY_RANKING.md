@@ -4200,3 +4200,17 @@ do not qualify this one. See
 1x scratch history, production admission/lifetime, upstream packet removal,
 motion and clean matched retention remain open. No new setting is retained;
 the broader depth/transfer priorities and all B1-B4 gates are unchanged.
+
+### Focused mipmap implementation complete — 2026-09-10
+
+The experimental native reflection-mipmap replacement is now enabled for its
+validated 1x/2x command/input contract, with compatibility fallback and an off
+switch. Both scales pass live output/import/consumer and clear-history checks;
+final default-enabled moving smoke and eight clean comparison runs are recorded.
+Whole-frame changes are small/mixed, despite much lower isolated mip-pass cost.
+See [the current mipmap result](REFLECTION_MIPMAP_REPLACEMENT.md).
+
+All six original lists and 2,352 packet decodes per cube remain. Their upstream
+removal, the other B migrations, broader streaming/tails and NPC/UI work are
+deferred and open. This supersedes the old prototype's next-step instructions
+without erasing its unexplained 2x admission failure or failed harness evidence.

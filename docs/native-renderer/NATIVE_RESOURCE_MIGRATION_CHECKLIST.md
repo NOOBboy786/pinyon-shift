@@ -88,11 +88,30 @@ it does not complete A3–A6. Do not expand a failing design merely to increase 
 
 ## B — Expand the demonstrated approach
 
+**Focused mipmap milestone complete:** the experimental native reflection-mipmap
+replacement is enabled at symmetric 1x/2x with current-input validation and
+compatibility fallback. It removes 48 render draws and 48 resolve copies per
+admitted cube while retaining state packets, clears and transfers. Both scales
+pass publication/consumer checks, clear history and moving smoke; eight clean
+comparison runs show small/mixed whole-frame changes, not a large FPS gain.
+See [implementation, measurements and limits](REFLECTION_MIPMAP_REPLACEMENT.md).
+
+- [x] Replace captured-list/fixed-address admission with a current-data contract.
+- [x] Validate 1x/2x native writes, cube imports, clears and later consumers.
+- [x] Add the normal runtime switch and aggregate admission counters.
+- [x] Complete bounded motion checks and record the clean comparison honestly.
+- [x] Checkpoint the implementation and SDK pin for remote dev.
+
+Other B migrations, recycling/containment, general producer bypass and the
+broader visual profile are **deferred by the user, still open**. Six mip guest
+lists and all 2,352 packets per cube remain; their removal is deferred B3 work.
+Broader scene/streaming/hardware qualification is not completed by this milestone.
+
 Start after A6. Each item needs its own bounded implementation and evidence.
-The B1-B4 goal is active; see [B execution and coverage](B_EPIC_EXECUTION.md)
-for the fixed scene set, discovery accounting correction and opt-in tile-clear
-candidate. GPU clear/publication and live eviction checks now pass, but no new
-optimization is retained: 1x triage is unfavorable and the 2x long comparison
+The B1-B4 goal is paused; see [B execution and coverage](B_EPIC_EXECUTION.md)
+for the fixed scene set and earlier experiments. The opt-in tile-clear
+candidate remains unretained despite passing GPU clear/publication and live
+eviction checks: 1x triage is unfavorable and the 2x long comparison
 has a HUD workload mismatch. B2 now has measured allocation-churn attribution,
 opt-in buffer recycling and a bounded GPU copy proof, but the mixed Outpost/local
 comparisons do not establish retention. Paid Outpost travel is unavailable until

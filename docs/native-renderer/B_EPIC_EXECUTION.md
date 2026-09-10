@@ -5,6 +5,11 @@ Started 2026-09-10 UTC. **B1-B4 remain open.** The retained resource baseline is
 2x uses compatibility. This document fixes the required coverage before choosing
 more migrations. A sampled shader inventory is not native resource ownership.
 
+Latest: [the experimental mipmap replacement](REFLECTION_MIPMAP_REPLACEMENT.md)
+is implemented and enabled at 1x/2x. Whole-frame gains are small/mixed; the
+remaining B work is deferred by the user. Historical sections below preserve
+rejected attempts and their original resume instructions.
+
 ## Required scene set
 
 | Scene | Existing evidence / reproduction | Remaining qualification |
@@ -3519,3 +3524,29 @@ matched tails/memory gates remain open. No B setting is retained, neither
 stopped comparison is restarted and A6 remains symmetric-1x-only. Fresh
 preflight verifies nine retained runtime files/backups, eighteen restored
 source baselines and the complete staged 1x pack; all handles are terminal.
+
+## Experimental mipmap replacement implemented
+
+The focused mipmap milestone is complete at symmetric 1x/2x. The retained
+implementation validates current commands, external inputs and inherited state,
+generates native mips in existing memory, and retains all state packets, clears
+and ownership transfers. The original path remains the fallback and can be
+selected with `--fh1_native_reflection_mips=false`.
+
+Both final moving captures prove 48 native dispatches, zero original mip draws,
+CPU-exact output, all 54 cube imports and a later consumer. The missing 1x
+scratch-history checks now pass, including real incoming/outgoing transfers.
+Eight clean off/on/on/off runs at 1x/2x pass identity, clock, admission and
+stationary image checks. Whole-frame results are small/mixed: 1x median +2.15%,
+p95 +0.38%, p99 -0.18%; 2x median -1.35%, p95 -1.53%, p99 +1.27%.
+This is experimental work removal, not a demonstrated large FPS or hardware
+requirement reduction. Earlier instrumented pass savings remain separate.
+
+Full source/binary identities, per-run evidence, default-enabled moving checks,
+legacy error limits, preserved harness/prototype failures and reproduction:
+[reflection mipmap replacement](REFLECTION_MIPMAP_REPLACEMENT.md).
+
+The user deferred the other B work. B1-B4 and C remain open; A6 remains 1x-only.
+The six cached mip lists and their 2,352 decoded packets remain explicit B3
+dependencies. Do not restart the stopped HUD/recycling comparisons or other
+resource migrations automatically.
