@@ -24,6 +24,32 @@ registers = ["r24", "r10", "r11"]
 setjmp_address = 0x82A81E80
 longjmp_address = 0x82A81950
 
+# Read-only B3 observation of the checked clear producer. No guest stores,
+# jumps or packet suppression: the default-off trace measures the original path.
+[[midasm_hook]]
+address = 0x8240E130
+name = "PinyonShiftObserveClearProducerBegin"
+registers = ["r3", "r4", "r5", "r6", "r8", "r1", "f1"]
+
+[[midasm_hook]]
+address = 0x8240E7A4
+name = "PinyonShiftObserveClearProducerEnd"
+registers = ["r31", "r1"]
+
+[[midasm_hook]]
+address = 0x8240E4A8
+name = "PinyonShiftObserveClearShaderCopy"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x8240E4F4
+name = "PinyonShiftObserveClearShaderCopy"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x8240CF68
+name = "PinyonShiftObserveClearCommandRefill"
+
 # Complete XMedia movies through the title's normal end-of-stream path when
 # the opt-in test shortcut is enabled.
 [[midasm_hook]]
