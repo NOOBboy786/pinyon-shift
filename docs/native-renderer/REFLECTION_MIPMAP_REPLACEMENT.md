@@ -3,7 +3,9 @@
 Status: **focused mipmap implementation complete; enabled by default at symmetric
 1x/2x with compatibility fallback.** The remaining B epic is deferred and open.
 This is a bounded renderer improvement, not complete Xenos retirement or a
-new hardware-requirement claim.
+new hardware-requirement claim. Subsequent user testing reports green reflection
+flashes and severe Carson slowdowns; see the open follow-up below. The bounded
+capture checks do not establish visual correctness across normal gameplay.
 
 ## Runtime behavior
 
@@ -177,3 +179,37 @@ profiles/NPC/UI timing and the stopped HUD/recycling comparisons remain open.
 C's full Xenos retirement and actual lower-hardware qualification also remain open.
 Continue from the [backlog](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md) when the user
 resumes that work; do not automatically restart the other experiments.
+
+## User follow-up: Carson and green reflection flashes
+
+Reported after the latest-build launch on 2026-09-10:
+
+- [ ] Intermittent green flashes on the main car's rear glass (reported as
+  "back shield"), suspected by the user to involve reflections.
+- [ ] Carson town runs at roughly half the usual performance.
+- [ ] A Carson race has severe performance problems; event name pending.
+
+Session `20260910T200636Z-p26860` ran from 20:06:36 to 20:12:12 UTC and
+terminated normally. The last periodic counters show mipmaps enabled, 87,898
+candidates, 87,894 native faces and four fallback lists. These are aggregate
+lower bounds, with no location or flash-event association. They establish that
+the new path ran, not that it caused any of the three symptoms. No matching
+mipmap-disabled Carson comparison or flashing-frame GPU capture exists yet.
+
+The three current on-disk binary hashes match the qualified artifacts above.
+The process-start log contains older embedded build metadata; do not use that
+metadata as the source revision or current on-disk binary identity.
+Logs, session JSONL, performance CSV and a SHA256 manifest are preserved locally
+at `.local/native-renderer/b2/carson-user-report-20260910/`. The CSV spans menus,
+free driving and racing without scene markers, so a whole-session statistic
+would not establish Carson-specific performance.
+
+Follow-up investigation: Hot Hatch Hustle reproduces the race slowdown with
+native mipmaps disabled. The [geometry cache fix](CARSON_GEOMETRY_CACHE_FIX.md)
+removes repeated eviction of recently used owners and materially improves the
+short race comparison. Mipmap-enabled 1x/2x race runs also pass smoke checks.
+Longer Carson town/race acceptance remains open. Green flashes have not been
+reproduced; a clean-frame native mip publication check cannot close that issue.
+Capture the affected car and failing reflection frame next. Other B work remains
+deferred. The hashes above describe the original mipmap milestone; the linked
+follow-up records the newer tested renderer identity.

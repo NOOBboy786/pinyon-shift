@@ -96,6 +96,16 @@ pass publication/consumer checks, clear history and moving smoke; eight clean
 comparison runs show small/mixed whole-frame changes, not a large FPS gain.
 See [implementation, measurements and limits](REFLECTION_MIPMAP_REPLACEMENT.md).
 
+**Open user follow-up (2026-09-10):** green flashes on the main car's rear glass,
+roughly half normal performance in Carson town, and severe Carson race slowdown.
+The Hot Hatch Hustle slowdown reproduces with native mipmaps disabled. A geometry
+cache eviction fix improves the short 2x race comparison from about 100 ms to
+33.5 ms median frame time without increasing the cache budget. Native mipmaps
+enabled also pass 1x/2x race smoke. Green flashes remain unreproduced, and longer
+Carson town/race acceptance remains open. See the
+[cache fix and validation limits](CARSON_GEOMETRY_CACHE_FIX.md) and
+[the preserved report](REFLECTION_MIPMAP_REPLACEMENT.md#user-follow-up-carson-and-green-reflection-flashes).
+
 - [x] Replace captured-list/fixed-address admission with a current-data contract.
 - [x] Validate 1x/2x native writes, cube imports, clears and later consumers.
 - [x] Add the normal runtime switch and aggregate admission counters.

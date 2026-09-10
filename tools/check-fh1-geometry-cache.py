@@ -250,7 +250,7 @@ int main(int argc,char**){
     constexpr uint32_t size=16*1024*1024;
     auto held=c.GetFh1OwnedGeometry(0,size,true);assert(held);
     c.submission_current_=2;assert(c.GetFh1OwnedGeometry(size,size));
-    c.submission_current_=3;c.submission_completed_=2;
+    c.submission_current_=3;c.submission_completed_=2;c.frame_current_=3;
     assert(c.GetFh1OwnedGeometry(64,16,true)==held+64);
     c.submission_current_=4;assert(c.GetFh1OwnedGeometry(2*size,size));
     assert(c.fh1_geometry_.contains(size)); // Nested use protected first owner.
@@ -275,6 +275,11 @@ int main(int argc,char**){
     assert(!c.GetFh1OwnedGeometry(2*bytes,bytes,true)); // Every victim still in flight.
     assert(c.fh1_geometry_recycles_==0 && c.provider.device.creations==2);
     c.submission_completed_=1;
+    assert(!c.GetFh1OwnedGeometry(2*bytes,bytes,true)); // Completed but used this frame.
+    c.frame_current_=2;
+    assert(!c.GetFh1OwnedGeometry(2*bytes,bytes,true)); // Previous frame stays resident.
+    assert(c.provider.device.creations==2 && c.fh1_geometry_.size()==2);
+    c.frame_current_=3;
     c.provider.device.fail=recycle; // Reuse needs no successful allocation call.
     auto barrier_start=c.barriers.size();
     auto replacement=c.GetFh1OwnedGeometry(2*bytes,bytes,true);assert(replacement);
@@ -302,7 +307,7 @@ int main(int argc,char**){
     constexpr uint32_t unit=8*1024*1024;
     assert(c.GetFh1OwnedGeometry(0,unit));
     c.submission_current_=2;assert(c.GetFh1OwnedGeometry(unit,3*unit));
-    c.submission_current_=3;c.submission_completed_=2;
+    c.submission_current_=3;c.submission_completed_=2;c.frame_current_=3;
     assert(c.GetFh1OwnedGeometry(4*unit,2*unit)); // Neither victim has the requested size.
     assert(c.provider.device.creations==3 && c.fh1_geometry_recycles_==0);
     assert(c.fh1_geometry_bytes_==2*unit && c.memory.watches.size()==1);
@@ -320,7 +325,7 @@ int main(int argc,char**){
     victim.depth_bounds.emplace_back();victim.terrain_bounds.emplace_back();
     c.submission_current_=3;
     auto held=c.GetFh1OwnedGeometry(6*unit,2*unit);assert(held);
-    c.submission_current_=4;c.submission_completed_=2;
+    c.submission_current_=4;c.submission_completed_=2;c.frame_current_=3;
     c.provider.device.fail=true; // Creation cannot accidentally satisfy the test.
     std::fill_n(c.memory.source.bytes.begin()+8*unit,2*unit,0xC7);
     auto replacement=c.GetFh1OwnedGeometry(8*unit,2*unit,true);
@@ -576,6 +581,12 @@ int main(int argc,char**){
   assert(c.fh1_geometry_bytes_==32*1024*1024);
   assert(!c.GetFh1OwnedGeometry(512*65536,64)); // every entry is still in flight
   c.submission_completed_=1;c.submission_current_=2;
+  const auto creations=c.provider.device.creations;
+  assert(!c.GetFh1OwnedGeometry(512*65536,64));
+  c.frame_current_=2;
+  assert(!c.GetFh1OwnedGeometry(512*65536,64));
+  assert(c.provider.device.creations==creations && c.fh1_geometry_.size()==512);
+  c.frame_current_=3;
   assert(c.GetFh1OwnedGeometry(512*65536,64)); // now completed entries may be evicted
   assert(c.fh1_geometry_.size()==512 && c.memory.watches.size()==512);
   assert(c.fh1_geometry_bytes_==32*1024*1024);
