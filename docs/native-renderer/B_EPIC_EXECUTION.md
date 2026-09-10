@@ -1995,6 +1995,115 @@ matches are unrelated. The existing `PinyonShiftObserveSceneCommandBuffer`
 hook may help identify the live producer, but has not yet been matched to these
 HUD lists. The B4 f8 dataflow correction above also remains a static lead.
 
+### CPU submission, queue and dispatcher evidence
+
+Four further local diagnostic builds follow the existing scene-command-buffer
+hook upstream. **No production rendering change is retained.** The stopped v2
+comparison remains stopped, and no B item completes here.
+
+| Probe | Session | Result |
+| --- | --- | --- |
+| List heads and CPU submit | `20260910T110052Z-p27160` | Missing HUD at 73.0, 73.5, 74.0, 76.5 and 78.0 s |
+| Queue/caller recovery | `20260910T110833Z-p30612` | All 27 HUD captures visible; 17 source frames in the 72–84 s diagnostic window still lack group-2 draw packets |
+| All ordinary dispatcher decisions | `20260910T111433Z-p12484` | Reaches the one-million-record cap; diagnostic error rejects the decode gate; prefix evidence only |
+| Three relevant dispatcher callbacks | `20260910T112214Z-p6248` | Complete diagnostic accounting; missing HUD at 77.0 s |
+
+All four exit normally with all 21 inputs and 32 capture/clock checks. The
+three complete decoder reports also verify all 27 race poses. Each run records
+two invalid simulation deltas and zero GPU timestamp drops. Present-drop totals
+are 3/43/69/3 respectively; these instrumented runs are not performance
+comparisons. The existing startup device-path error persists. The broad probe's
+additional GPU-category diagnostic error is preserved, not waived. The queue
+run's passing images do not establish continuous HUD visibility or a fix.
+
+The copied-reader heads are linked to exact per-source IB ordinals, including
+repeated buffer addresses. For every known HUD-buffer reference in the first
+run's 27 captures, the CPU trace matches header destination, target, word count
+and packet before decoding. Its first 16 words are four identical type-0 writes
+to `PA_SC_WINDOW_OFFSET` and the two window-scissor registers: offset/TL zero,
+BR `0x02D00500`. **The short lists contain no draws or nested IBs.** Visible
+captures have full 2,475/4,076-word lists. Each missing capture has 28 short
+references and no full reference. This is evidence of CPU-submitted short lists,
+not just a downstream renderer failure to issue their draws.
+
+The checked call path is:
+
+```text
+82450160 ordinary-job dispatcher, callback return 8245032C
+  -> 8249CC40 callback thunk, tail-dispatch through live vtable + 228
+  -> 824726C8, consume one of twelve 60-byte queue slots
+  -> 8246E8F8, wait on slot + 28 and submit slot + 20
+  -> 82416A00, observed pre-store at 82416F18
+```
+
+The live queue owner is `402BBD10`, vtable `820033FC`. All 10,753 queue records
+in the second run match `slot = owner + 1136 + 60 * read_index`, with indices
+in 0–11, and match the original CPU trace's timestamp/object/word count. The
+consumer advances `owner + 1884`; producer finalization at `823E97F8` uses
+`owner + 1888`. These are sampled indices, not proof of matching generation
+or completion. The wait helper reaches `NtWaitForSingleObjectEx` with an
+infinite timeout; its live result has not yet been recorded.
+
+The broad dispatcher trace covers 1,000,000 decisions in 14.989 seconds before
+saturating. It is kept under `b2/hud-dispatch-profile/`, including its failed
+decode analysis. A first direct-callback-address filter found no consumers:
+`8249CC40` is the tail thunk, so the saved caller LR alone does not identify the
+immediate callback. Corrected prefix matching associates 1,842 short submissions
+with dispatcher input mode 1 at caller `8259FB14`, versus 609 full and 15 short
+submissions in mode 0 at `8259FA90`. This is incomplete prefix attribution.
+The dispatcher's special earlier callback is `82C09C08`, which changes the
+nesting counter at dispatcher + 140; an initial metadata label `82C19C08` was
+an address-arithmetic error. It was never the instrumented branch.
+
+The narrowed trace records only checked thunks `82472A68` (vtable + 220,
+begin), `823E6620` (+224, finalize), and `8249CC40` (+228, consume). It covers
+28,440 decisions, 9,480 per callback, all executed. All 11,679 observed CPU
+queue submissions match preceding decisions on the same thread and owner:
+5,544 full submissions use mode 0; 6,093 short submissions use mode 1; 42 short
+submissions also use mode 0. The dispatcher intentionally skips ordinary
+callbacks when its input mode is nonzero and its computed conditional flag
+is true; the three queue callbacks have node byte 16 set and remain executed
+in both modes. No guest branch or queue behavior has been changed.
+
+**The 77-second failure has 20 short known-HUD references from mode 1 and two
+short references from mode 0, with no full HUD lists.** Its visible neighbors
+have full mode-0 lists, sometimes after short mode-1 submissions. Therefore
+simply suppressing drain-mode presentation would not resolve the evidence.
+Trace command-list begin/finalize and the producer-to-consumer generation
+handoff next, including the nested job queues and normal-mode empty lists.
+Preserve queue completion, waits, guest side effects and presentation ordering;
+do not replay old HUD commands or classify correctness from HUD visibility alone.
+
+All diagnostics reuse the 94-second route `0154B43D...`, complete staged 1x
+pack `1636179B...` and unchanged catalog pins. Runtime DLL is
+`0558BADA33DB85F57C27C8404F3A0A3076A846BF22378E6E58F00282B2C7A52E`.
+Exact EXE/GPU hashes, in table order:
+
+- Submit: `4BEFBB1CFF03535E2070F25CBA4084DD184C13CF9AC2F2E01EA79A58371E43B1` /
+  `E7673F38541FFB4EC2478A7995044D124B04185943A27D6D29CCFEAEC00B972C`.
+- Queue: `EF6E8C7401D3772061CA70ECC09F550EC6D251B929A7D4AE0EDD4EE688CB6212` /
+  `4485308ADA59B78B775619F5422492327B30175E32E8866E8023373D92DA3BC1`.
+- Broad dispatcher: `D329E211F962A8C14B7E272EAE1C86FBBF5B69631070A800CB11885C8687F52A` /
+  `3E0636AAD469D898BC6407FC639A3EFA1EC7C5F2C2D0036711706DE426E10FDB`.
+- Filtered dispatcher: `DD61608FA54E27FBC847F048B0F8891AB6881ABF6D14700A4714214DB47B7708` /
+  `FEAF57A2FCCF500F4E0CA3C8D6F0AF8DB38CF9B6946DFD611A053A28C7C6EEF6`.
+
+The complete probes validate 1,817,979 / 1,910,720 / 2,204,837 IB records against
+independent packet counts, plus 22,892 / 24,052 / 26,883 ordered list heads.
+Their raw streams, source snapshots/patches, manifests and make/build/run/analyze
+helpers remain under `.local/native-renderer/b2/`. The filtered dispatch stream
+SHA256 is `F75E7C6E69A8B5C14D6A9BFE4149CD00403750EB5F0CA21FF19500C333AFBFF0`.
+The initial preparation attempt rejected a mistaken 64-bit saved-LR assumption;
+the checked guest prologue uses a 32-bit `stw`. Its failed preparation is also
+preserved. Local analyzers are runnable checks, not evidence of B retention.
+
+Four Release builds and geometry-cache checks pass. Direct hashes verify all
+nine retained runtime files and every modified diagnostic source restored;
+unrelated SDK kernel/libmspack edits and saves remain intact. Retained EXE is
+`372161...`, GPU `27B486...`, runtime `955BDC...`. No game/build/replay remains
+active. A6 remains symmetric-1x-only, recycling stays off, and the full B1-B4
+scene, lifetime, producer-bypass and visual/timing qualification remains open.
+
 **Next:** attribute the 16-word contents, ordered wrapper publication and the
 actual CPU producer before changing behavior or restarting retention. Preserve
 queries, fences and guest-visible side effects. The v2 block remains stopped;

@@ -185,6 +185,12 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   replace the producer path before packet emission where its contract permits.
   **Done:** less command generation/decoding is measured, and queries, fences,
   memory export and other guest-visible behavior remain correct.
+
+  Current qualification blocker: CPU tracing follows the intermittent HUD gap
+  to short lists submitted through the guest queue. A failing frame also has
+  empty normal-mode lists after draining; producer/finalizer generation matching
+  is next. The [dispatcher evidence](B_EPIC_EXECUTION.md#cpu-submission-queue-and-dispatcher-evidence)
+  narrows the investigation but implements no bypass or HUD fix.
 - [ ] **B4 — Qualify a lower-cost visual profile.** Test individually measured
   AA, shadow/reflection, scene-scale or postprocessing changes; combine only retained
   settings. Mark an effect inapplicable if attribution shows no worthwhile opportunity.

@@ -735,3 +735,44 @@ Validation covers both Release diagnostic builds, geometry-cache checks,
 live input/capture clocks, decoder/IB accounting, visual review, the B4 dataflow
 check, runtime/source hashes, Markdown links, repository boundary and whitespace.
 B1-B4 and the goal remain active; no preview release occurs.
+
+## Latest handoff: normal-mode empty HUD lists after queue draining
+
+The missing HUD is now traced through actual CPU submissions and the guest's
+render-job dispatcher. The 16-word lists contain only four repeated scissor/
+window-offset writes. Their short lengths are already present at CPU hook
+`82416F18`; the full 2,475/4,076-word references appear in visible neighbors.
+The submission path goes through a twelve-slot queue and callback thunk
+`8249CC40`, called from dispatcher `82450160`. Producer and consumer generation
+matching remains unproven.
+
+Four diagnostic builds/runs are preserved. The first reproduces five missing
+HUD captures. The second establishes queue indices/callers, while its passing
+screenshots still leave source frames without HUD-group packets. The broad
+dispatcher probe saturates its one-million-record limit and fails its diagnostic
+gate. A narrowed three-callback probe completes, recording 28,440 decisions and
+matching all 11,679 CPU queue submissions. It reproduces missing HUD at 77 s.
+
+Most short lists come from mode-1 queue draining, and every full list comes
+from normal mode 0. **The failing capture also has two empty mode-0 lists.**
+Suppressing drain-mode output alone would not address this case. No HUD fix,
+performance optimization or new setting is retained. See
+[B execution](B_EPIC_EXECUTION.md#cpu-submission-queue-and-dispatcher-evidence)
+for sessions, complete hashes, failures, decoded contents, caller proof and
+validation. Local evidence/helpers are in `b2/hud-submit-profile/`,
+`b2/hud-queue-profile/`, `b2/hud-dispatch-profile/` and
+`b2/hud-dispatch-filtered/` under `.local/native-renderer/`.
+
+**Resume:** trace the queue's begin/finalize operations and list generation
+handoff, including nested dispatcher queues and empty normal-mode submissions.
+Use the filtered probe as the starting point; preserve its failed broad sibling.
+Do not restart stopped retention v2 unchanged or replay stale HUD lists as a
+fix. Keep full B1 scenes, B2 mutation/streaming/tails, actual B3 pre-packet
+bypass and B4 visual/NPC/UI timing in scope. All B items and the goal remain open.
+
+The nine retained runtime files and diagnostic source bytes are restored and
+directly verified: EXE `372161...`, GPU `27B486...`, runtime `955BDC...`.
+The complete 1x shader pack remains staged. No game/build/replay is active.
+Source before this documentation checkpoint is main `3790487`, SDK `202247a`;
+no production algorithm/default or toolchain-pin changes. Unrelated SDK dirt
+and saves remain preserved. A6 stays symmetric-1x-only; recycling stays off.

@@ -4011,3 +4011,13 @@ producer, contents and publication order need tracing before new retention
 runs. Early recycling gains repeat, but later hold tails worsen and no setting
 is retained. See [B execution](B_EPIC_EXECUTION.md#v2-stops-on-an-early-hud-gap-trace-the-indirect-buffer-submission)
 for the complete results, exact diagnostic identities and B4 dataflow correction.
+
+CPU/list-content tracing now identifies the short lists as scissor-only setup
+and follows their submission through the guest's twelve-slot queue and render-job
+dispatcher. Most come from queue draining, but a reproduced missing-HUD frame
+also has two empty normal-mode lists. Follow producer/finalizer generation and
+handoff before any presentation workaround or fresh retention comparison. The
+broad dispatcher probe hit its cap and remains rejected; the narrowed probe
+completes accounting without fixing the defect. See
+[B execution](B_EPIC_EXECUTION.md#cpu-submission-queue-and-dispatcher-evidence).
+No B item, performance setting or hardware claim is retained by this evidence.
