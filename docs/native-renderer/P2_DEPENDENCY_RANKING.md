@@ -4028,3 +4028,15 @@ completes accounting without fixing the defect. See
   still fails its trace cap, and the lifecycle run misses one early capture.
   Follow the per-frame queue discard policy before resuming comparisons. See
   [producer evidence](B_EPIC_EXECUTION.md#empty-normal-mode-lists-originate-in-producer-side-job-discards).
+
+The next local prototype retains jobs within a checked HUD recording span
+until the existing worker makes its render/drain decision. Its complete
+selected-outcome trace has no cap failure: 506,175 jobs reach recording despite
+the old discard inputs, and 3,893 matched cycles contain no empty normal-mode
+submission. All 27 captured HUDs and 8,421 slot lifetimes pass their checks;
+drain mode still skips drawing. This is bounded stationary 1x evidence, with
+51 present drops in an instrumented run, not performance or retention proof.
+Memory pressure, full scenes/motion and clean repeated comparisons remain next.
+See [prototype evidence](B_EPIC_EXECUTION.md#hud-admission-prototype-passes-bounded-correctness-checks)
+and the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md#latest-handoff-hud-admission-prototype-awaits-retention).
+The production path is restored, recycling stays off, and B1-B4 remain open.

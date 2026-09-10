@@ -189,9 +189,13 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   Current qualification blocker: matched slot lifetimes show HUD lists already
   empty before finalization. A rejected enqueue probe's checked prefix links
   producer-side job discards to 48 subsequent normal-mode empty submissions.
-  Correct the per-frame recording/consumption policy before restarting retention;
-  preserve the trace coverage/cap failures. The [producer evidence](B_EPIC_EXECUTION.md#empty-normal-mode-lists-originate-in-producer-side-job-discards)
-  implements no bypass or HUD fix.
+  A local admission prototype now preserves HUD-span jobs until the existing
+  worker decides whether to render or drain. All 27 bounded captures pass;
+  3,893 joined cycles contain no normal-mode empty list. Qualify memory,
+  lifetime, motion and broader scenes before retaining it or restarting the
+  stopped comparison. Preserve the earlier trace coverage/cap failures. See
+  [prototype evidence](B_EPIC_EXECUTION.md#hud-admission-prototype-passes-bounded-correctness-checks).
+  No production HUD fix or B3 producer bypass is retained.
 - [ ] **B4 — Qualify a lower-cost visual profile.** Test individually measured
   AA, shadow/reflection, scene-scale or postprocessing changes; combine only retained
   settings. Mark an effect inapplicable if attribution shows no worthwhile opportunity.

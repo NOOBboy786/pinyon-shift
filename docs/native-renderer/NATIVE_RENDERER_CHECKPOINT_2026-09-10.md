@@ -815,3 +815,45 @@ directly verified. No game/build/replay remains active; the complete 1x pack
 stays staged. Main source before this documentation checkpoint is `ab6757f`,
 SDK `202247a`. Unrelated SDK dirt and saves are preserved. A6 remains 1x-only,
 recycling stays off, and the complete B1-B4 goal remains active.
+
+## Latest handoff: HUD admission prototype awaits retention
+
+The local `hud-keep-profile` prototype postpones producer-side HUD job discards
+until the existing worker's render/drain decision. It tracks a checked renderer
+owner within matching begin/finalize recording markers, without changing the
+dispatcher skip rules or replaying old HUD data. This is an experimental
+behavior change; **the production source and staged runtime are restored**.
+
+Session `20260910T120707Z-p30068` completes the 94-second 1x route, all 21 inputs,
+32 capture-clock checks and 27 stationary Recaro HUD/pose checks. Decoder, IB,
+CPU/queue, dispatcher, lifecycle and enqueue-outcome checks pass. The corrected
+diagnostic covers every capture and no longer hits the enqueue trace cap.
+
+Of 3,893 matched producer cycles, 356 render normally with no empty normal-mode
+list; 3,537 still produce short lists while draining. 506,175 selected jobs
+are recorded despite the old discard inputs. All 8,421 checked slot generations
+close and wait successfully with matching object metadata. This supports the
+proposed correction for the sampled case, not full HUD/lifetime correctness.
+The run has 51 present drops and two invalid simulation deltas, so it provides
+no clean performance or memory-retention claim. GPU timestamp drops and
+GPU-category errors are zero; the known startup device-path error remains.
+
+[B execution](B_EPIC_EXECUTION.md#hud-admission-prototype-passes-bounded-correctness-checks)
+records the helper's exact admission policy, counts, complete hashes, checks
+and next qualification. Local evidence is `b2/hud-keep-profile/`, including
+`run-1x/enqueue-outcomes-report.json`, lifecycle reports, source patches,
+candidate/binary manifests and the reviewed six-image contact sheet. Helpers
+are in the enclosing `b2` directory. All earlier failures remain preserved.
+
+**Resume:** use a clean candidate to measure queued payload/node lifetime,
+memory pressure and frame-time tails; check other HUD/menu states and motion,
+then qualify repeated 1x/2x comparisons. Reuse existing runners and OS sampling.
+The stopped v2 comparison remains stopped. No production HUD fix, recycling
+setting or B-item completion follows from this diagnostic.
+
+All nine retained runtime files and nine instrumented sources are directly
+verified restored. Retained EXE `372161...`, GPU `27B486...`, runtime `955BDC...`;
+complete 1x pack staged. No game/build/replay is active. Source before this
+checkpoint is main `9a03911`, SDK `202247a`; unrelated SDK dirt and saves remain
+preserved. A6 stays symmetric-1x-only, recycling stays off, and the complete
+B1-B4 goal remains active. This checkpoint does not publish a preview release.

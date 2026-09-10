@@ -2212,3 +2212,106 @@ active. Unrelated SDK dirt and saves remain intact. A6 remains symmetric-1x-only
 recycling remains off, retention v2 stays stopped, and every B1-B4 requirement
 remains open. Next work is a correction to the producer/consumer frame policy
 with bounded diagnostics, followed by the full outstanding qualification.
+
+### HUD admission prototype passes bounded correctness checks
+
+Local prototype `b2/hud-keep-profile/`, session `20260910T120707Z-p30068`,
+changes producer admission at `823F4C10`. It retains jobs for a checked HUD
+renderer between matching begin/finalize recording markers. The existing
+dispatcher still decides whether to execute or drain those recorded jobs.
+This is a behavior-changing experiment, not another read-only probe, and it
+is **not retained in the production source or staged runtime**.
+
+The checked policy path is queue publication `82C0D070`: a remaining tail or
+counter 128 exceeding threshold 132 sets byte 149 through `82C0D3EC`; otherwise
+it clears the byte. That producer policy can discard drawings before the later
+worker chooses normal mode. The prototype postpones that discard opportunity
+for the HUD recording span only. It preserves node flags, guest allocation,
+payload ownership and dispatcher skip branches. It does not replay old HUDs.
+
+The local helper uses one thread-local `{queue, recording_list, owner}` span:
+
+- At begin callback `82472A68`, reset the span. Set it only for a nonzero
+  recording list and an owner whose retail vtable is `820033FC`.
+- At finalize callback `823E6620` for the same queue and owner, clear it.
+- For intervening jobs matching all three fields, branch to normal recording
+  at `823F4C3C`; all other admissions keep the original policy.
+- Both boundary callbacks retain their original admission. The hook runs after
+  the existing invalid-state/null/direct-execution paths. No fixed live owner
+  address is used. Nested/interleaved producers, list reuse and other HUD states
+  still require qualification before this can become a permanent hook.
+
+The Release build and geometry-cache checks pass. The 94-second 1x route exits
+normally with all 21 inputs and 32 capture-clock checks; origin bounds are
+3,617–19,388 microseconds. All 27 stationary Recaro poses and automated HUD
+checks pass. A six-image review at 72/76/77/81/84/92 seconds confirms visible
+race HUDs, including the two times that failed in the earlier lifecycle probe.
+This sampling does not establish continuous visibility or complete race motion.
+
+The diagnostic chain passes decoder, IB, list-head, CPU-submit, queue,
+dispatcher, lifecycle and selected enqueue-outcome checks:
+
+| Evidence | Result |
+| --- | --- |
+| Profiled source frames / IB records | 1,264 / 1,795,234 |
+| Ordered list heads / CPU records | 22,820 / 13,131 |
+| Complete slot generations / joined queue submissions | 8,421 / 10,137 |
+| Lifecycle records / ordinary work decisions | 58,947 / 1,549,312 |
+| Selected enqueue outcomes | 856,366 appended; no discards or cap error |
+| Complete producer cycles / fully joined cycles | 4,071 / 3,893 |
+| Jobs recorded despite old discard inputs | 506,175 |
+| Matched drain cycles still submitting 16 words | 3,537 |
+| Matched normal cycles / empty normal cycles | 356 / 0 |
+
+The selected enqueue stream covers 13.9581872 seconds within its 70–84 second
+window. It logs one outcome per selected callback, removing redundant entry
+and decision records that saturated the prior probe. Lifecycle coverage now
+starts earlier and includes every capture. Exact node/callback/owner/payload,
+recording-list and node-reuse checks join producer cycles to dispatcher,
+slot lifetime and CPU submission. All checked closes and waits succeed, and
+object metadata agrees across the handoff. The dispatcher-wide queue join has
+5,769 short mode-1 submissions and 4,368 full mode-0 submissions; none is short
+in mode 0. The narrower enqueue cycle counts above have a different window.
+
+Present-drop deltas total **51**, invalid simulation deltas 2 and GPU timestamp
+drops 0. The existing startup `ResolvePath(\Device)` error persists, with no
+GPU-category errors. These heavily instrumented results cannot establish a
+performance improvement or acceptable queue/memory pressure. Longer payload
+and node lifetime is the main new risk; no clean tail or memory claim is made.
+
+Exact SHA256 identities:
+
+- EXE: `AFBFBE9977E36D30E95394962F461FDAEEB6038DAA54D11B9E734DF76DB61B2D`.
+- GPU DLL: `E02CBB8579D2F58F15E22CD735F6066E40D3D33938759955EE68DFD220DE0C0D`.
+- Runtime: `0558BADA33DB85F57C27C8404F3A0A3076A846BF22378E6E58F00282B2C7A52E`.
+- Enqueue stream, 164,422,272 bytes:
+  `42044D017E37EF6E0E72388946F7DAD857539A5E36CBF1596369F4F802F6657B`.
+- Lifecycle stream, 16,976,736 bytes:
+  `7C04F3930666D2EB7BC783423E320243A98A9C0563BA201E0151CB1BC8310886`.
+- IB stream, 129,256,848 bytes:
+  `4852BEFDA6C3279812C93362D1D060B2E3263B3E55E57E46328634DC0E68BAE8`.
+
+The route remains `0154B43D...`, complete 1x pack `1636179B...`, with the same
+catalog pins. Local `make/build/run-hud-keep-profile` scripts preserve source
+snapshots, patches, manifests and binary evidence. Run the existing
+`analyze-hud-{decode,indirect,submit,queue,dispatch,lifecycle}.py` stages in that
+order, followed by `analyze-hud-enqueue-prefix.py <run-directory> --outcomes`.
+The latter mode requires complete lifecycle/HUD coverage and an unsaturated
+stream; the older rejected-prefix mode and its failed evidence remain intact.
+The lifecycle report's inherited read-only description was corrected, with
+all evidence and qualification fields verified unchanged. These local tools
+and generated/binary artifacts remain outside the public repository boundary.
+
+**Resume:** qualify a clean version of this admission change for queue/payload
+lifetime and memory, other HUD/menu states, representative motion and repeated
+1x/2x comparisons. Reuse the existing OS memory/CPU sampling and route gates.
+Keep retention v2 stopped; this new design needs its own prospective protocol.
+No optimization, B item or production HUD fix is retained by this one run.
+
+All nine retained runtime files and nine instrumented source files are restored
+and directly hash-verified. EXE remains `372161...`, GPU `27B486...`, runtime
+`955BDC...`; the complete 1x pack is staged. No game/build/replay remains active.
+Source before this checkpoint is main `9a03911`, SDK `202247a`. SDK kernel and
+libmspack dirt and saves remain preserved. A6 stays symmetric-1x-only; recycling
+stays off. Full B1 scenes, B2 mutation/streaming/tails, B3 actual pre-packet
+bypass and B4 measured visual/NPC/UI timing remain open.
