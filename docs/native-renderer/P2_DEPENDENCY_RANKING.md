@@ -4102,3 +4102,20 @@ for removal decisions; follow actual command bindings. See
 [cube history and cost](B_EPIC_EXECUTION.md#cube-history-and-import-cost-complete-diagnostic-low-priority)
 for exact identities, corrected diagnostic gaps and retained failure evidence.
 The qualified runtime is restored, complete 1x pack staged, and B1-B4 stay open.
+
+The follow-up CPU diagnostic measures isolated cube backend-load medians of
+0.0045 ms at 1x and 0.00595 ms at 2x. Wider texture requests include other
+resources and instrumentation; their 1x 1.9895 ms sampled-frame maximum remains
+unattributed. Deprioritize the isolated cube import, without claiming all
+cube-related CPU preparation is negligible.
+
+A stronger reflection lead is the 48 single-draw mip pass spans per sampled
+frame: medians of 0.892928 ms at 1x and 1.073152 ms at 2x over 13 sampled frames
+per scale. A complete replay exports all 48 draws and following resolves,
+checking six eight-step reduction patterns. The timings include preparation
+and resolves inside the spans; they are not shader-only or removable savings.
+Establish guest-range continuity, filtering, consumers/lifetime and the actual
+producer before implementation. This joins the larger depth/transfer priorities;
+no quality policy or native mip replacement is retained. See
+[CPU and mip attribution](B_EPIC_EXECUTION.md#cube-cpu-cost-and-reflection-mip-pass-attribution).
+The retained runtime and complete 1x pack are verified restored, and B1-B4 remain open.

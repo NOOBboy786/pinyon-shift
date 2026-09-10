@@ -1024,3 +1024,47 @@ runtime files/backups are verified restored; EXE `372161...`, GPU `27B486...`,
 runtime `955BDC...`, complete 1x pack staged. No game/build/replay is active.
 Main before this checkpoint is `8910b24`, SDK `202247a`; unrelated dirt and
 saves are preserved. A6 stays symmetric-1x-only, and the B1-B4 goal stays active.
+
+## Latest handoff: checkpoint CPU and reflection mip attribution
+
+The new cube CPU diagnostic completes at both scales. Isolated backend-load
+medians are **0.0045 ms at 1x** and **0.00595 ms at 2x**. Containing texture
+requests include other textures and nested logging; their cost is not wholly
+attributable to the cube. Preserve the unattributed 1x mixed-request outlier.
+No renderer change or new performance setting is retained.
+
+The stronger lead is the mip-generation pass sequence. Same-session native
+records contain exactly 48 single-draw spans per sampled frame for pair
+`2C53E1A563484076` / `21937679208E59A5`. Across 13 sampled frames per scale,
+their summed medians are **0.892928 ms at 1x** and **1.073152 ms at 2x**.
+These include preparation and resolves within the GPU spans, not just shader
+execution, and do not establish removable time or retained FPS gains.
+
+The active-world replay has now terminated successfully with descriptors,
+VS/PS constants and following resolve state for all 48 draws. Its checked 2x
+pattern consists of six eight-step reductions with input sides 512 through 4
+and output sides 256 through 2. Full guest-range continuity, filter/quantization,
+consumers/lifetime and producer-side effects remain unproven.
+
+[B execution](B_EPIC_EXECUTION.md#cube-cpu-cost-and-reflection-mip-pass-attribution)
+records sessions, exact diagnostic identity, checks and limitations. Evidence
+is local under `b2/cube-timing-profile-cpu/` and
+`b2/glass-reflection-capture/mip-contract/`, with runnable CPU nesting and
+mip-cost/pattern checks in the enclosing `b2` folder. CPU-run capture clocks
+pass; separate manual screenshot review remains pending. The prior GPU timing
+runs have already received their bounded screenshot review.
+
+**Resume:** decode the complete mip chain and trace its actual guest producer
+before choosing a native replacement or reflection policy. Keep larger
+depth/transfer chains in the ranking. The measured isolated cube import offers
+little headroom. Preserve the green windshield/headlight failure, 1x
+acceleration/startup findings and both stopped comparisons; do not resume them
+unchanged. Required scenes, mutation/streaming/tails, true pre-packet bypass
+and correct NPC/UI timing keep all B1-B4 items open.
+
+Preflight verifies all nine retained runtime files/backups, eleven restored
+sources and the complete staged 1x pack. Retained EXE `372161...`, GPU
+`27B486...`, runtime `955BDC...`; no game/build/replay is active. Main before
+this checkpoint is `a2a587a`, SDK `202247a`. Unrelated SDK dirt and saves remain
+preserved. A6 remains symmetric-1x-only, recycling stays off, and the B goal
+stays active. This checkpoint is for remote `dev`; no preview release is made.

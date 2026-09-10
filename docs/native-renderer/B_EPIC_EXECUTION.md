@@ -2738,3 +2738,85 @@ not establish a correction. All nine retained runtime files/backups and eleven
 touched source files are directly verified restored, with the complete 1x pack
 staged and no active game/build/replay. Main before this checkpoint is `8910b24`,
 SDK `202247a`; unrelated SDK dirt and saves remain preserved. B1-B4 stay open.
+
+### Cube CPU cost and reflection mip pass attribution
+
+A local CPU probe now isolates the backend cube load and its containing
+`RequestTextures` call. It reuses the existing cube GPU diagnostic and
+one-in-60 source-frame sampler. Every backend return records success and
+elapsed time; the checker requires a unique same-thread, same-submission,
+same-internal-frame containing request, then joins the corresponding GPU
+sample by source frame and base. Missing, duplicate and wrong-thread parents
+are rejected by runnable negative checks. Nested intervals are not added.
+
+Diagnostic GPU SHA256 is
+`08C3F5EA8E1FFB4917B7CF8FD10C88E841A6821676999B33D048F204FDB7C157`.
+Both scales use EXE `20EE2F...`, runtime `6B97FB...`, the same pinned 25-second
+world route as the prior GPU probe, complete matching shader packs and disabled
+HUD admission. Both launch handles terminate normally, including restoration;
+all ten inputs, three capture clocks, binary/route identities and timing/corpus
+checks pass. These runs have not received a separate manual screenshot review
+and do not qualify representative motion or a performance setting.
+
+| Scale / session | Backend samples | Backend CPU median / p95 / p99 / max ms |
+| --- | --- | --- |
+| 1x / `20260910T143729Z-p1512` | 14 | 0.004500 / 0.005230 / 0.006166 / 0.006400 |
+| 2x / `20260910T143829Z-p5428` | 12 | 0.005950 / 0.006690 / 0.006778 / 0.006800 |
+
+The backend excludes its own reporting overhead. Its containing requests have
+medians of 0.0588 / 0.0551 ms, but include other requested textures and the
+nested backend log. They cannot be attributed entirely to cube preparation.
+Summing all cube-bound requests in a sampled frame gives median/max
+0.14345 / 1.9895 ms at 1x and 0.25595 / 0.3394 ms at 2x. The 1x outlier remains
+unattributed; these mixed requests must not be presented as removable cube cost.
+Together with the previous GPU import result, the isolated backend work is a
+low-priority target. The scope excludes full cache lookup and earlier producers.
+
+The prior native GPU sessions provide a stronger mip-generation lead. Joining
+pass `first_draw` identities to their same-session corpus selects pair
+VS `2C53E1A563484076` / PS `21937679208E59A5`. At each scale, all 13 sampled
+frames from 1260 through 1980 contain exactly 48 selected spans, each with one
+draw: 624 records across 16 families. All first-draw identities resolve, and
+the existing session, duplicate-record and zero-loss checks remain in force.
+
+| Scale / session | Sum of selected pass spans per sampled frame: median / max ms |
+| --- | --- |
+| 1x / `20260910T142302Z-p17484` | 0.892928 / 1.116160 |
+| 2x / `20260910T142350Z-p11296` | 1.073152 / 1.293312 |
+
+These GPU spans include work such as incoming texture preparation and the
+following resolve. They are not shader-only durations, fully removable time,
+retained FPS gains or gameplay frame-time percentiles. Do not add overlapping
+cube-load timings to these spans.
+
+The active-world frame-1506 replay completes all 48 matching draws and their
+following resolves. The checked 2x pattern has six groups of eight reductions:
+single-mip R10G10B10A2 inputs decrease from 512x512 to 4x4; viewport/scissor
+outputs decrease from 256x256 to 2x2. Each draw uses 24 indices, one instance
+and float target 7984, followed by `Resolve Copy Full 32bpp`. Descriptors,
+VS/PS constants, resolve constants and shader disassembly are exported. This
+pattern is consistent with six face mip chains, but guest-range continuity,
+filter/quantization behavior, all consumers, lifetime and producer side effects
+still require proof. Resource bindings alone do not authorize skipping work.
+
+Local evidence is `b2/cube-timing-profile-cpu/` (`cpu-report.json`,
+`timing-report.json`, per-run logs/clocks, source/binary manifests and
+`restoration-check.json`) and `b2/glass-reflection-capture/`
+(`mip-contract/report.json`, shader exports and `mip-cost-check.json`). Helpers
+`make-cube-cpu-profile.py`, `check-cube-cpu.py`, `inspect-reflection-mips.py`
+and `check-reflection-mip-cost.py` reuse the existing build/run/ranking tools.
+All diagnostics and GPU captures remain local.
+
+**Resume:** decode the complete mip resource chain and trace the actual guest
+producer before designing a native replacement or changing reflection policy.
+Prioritize this measured lead alongside the larger depth/transfer chains;
+avoid spending more unchanged experiments on the small cube import itself.
+Keep the green windshield failure and both stopped comparisons preserved.
+No production renderer change is retained and no B item is complete.
+
+Checkpoint preflight directly verifies all nine retained runtime files and
+backups, eleven restored source files and the complete staged 1x pack. EXE
+`372161...`, GPU `27B486...`, runtime `955BDC...`; no game/build/replay is active.
+Main before this checkpoint is `a2a587a`, SDK `202247a`; unrelated SDK dirt and
+saves remain preserved. A6 stays symmetric-1x-only, recycling stays off, and
+B1-B4 remain active. This checkpoint publishes no preview release.

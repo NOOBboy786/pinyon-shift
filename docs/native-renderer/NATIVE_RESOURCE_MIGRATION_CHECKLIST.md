@@ -183,9 +183,13 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   missing streamed content, higher memory pressure or worse frame-time tails.
   Latest ranking: cube GPU conversion/copy measures 0.023 ms at 1x and
   0.051 ms at 2x in the bounded native timing diagnostic. Deprioritize that
-  GPU work; attribute CPU preparation, reflection producers and larger chains.
-  This does not qualify a retained optimization. See
-  [cube history and cost](B_EPIC_EXECUTION.md#cube-history-and-import-cost-complete-diagnostic-low-priority).
+  GPU work. A later CPU probe measures backend load medians of 0.0045 ms
+  at 1x and 0.00595 ms at 2x; wider texture requests include other resources
+  and diagnostic overhead. The 48 single-draw mip pass spans per sampled
+  frame total medians of 0.892928 ms / 1.073152 ms. Prioritize their full
+  producer/resource contract alongside larger depth/transfer chains before
+  implementing a replacement. These diagnostic costs qualify no retained
+  optimization. See [CPU and mip attribution](B_EPIC_EXECUTION.md#cube-cpu-cost-and-reflection-mip-pass-attribution).
 - [ ] **B3 — Bypass obsolete guest command generation.** For covered chains,
   replace the producer path before packet emission where its contract permits.
   **Done:** less command generation/decoding is measured, and queries, fences,
