@@ -118,10 +118,18 @@ was implemented and archived after its bounded avoided bytes measured below
 0.4%. Neither experiment completes or retains a B item; see B execution.
 Latest source-linked diagnostic attributes about 22.47 ms/frame of early-race
 CPU work to geometry allocation/eviction and maps two HUD gaps to frames with
-148 absent UI-associated draws. Measure the existing recycler under that churn
-and trace upstream HUD generation next; no cause fix or speedup is retained.
+148 absent draws. Their correlation with the HUD gap does not yet establish HUD
+production. Measure recycler work and trace the actual HUD resource chain next;
+no cause fix or speedup is retained.
 Broader scene coverage, mutation/streaming, clean comparisons and timing remain
 required. GPU sampling is sparse and unsampled cost remains unavailable.
+Follow-up: the recycler now searches for a completed exact-size victim beyond
+the oldest entry. Production-cache checks and strict 1x/2x HUD/hold/motion smoke
+runs pass. A larger-capacity experiment is archived after increased cache
+rejections and late recurring work. The matching-victim option remains off;
+actual GPU copy/consumer checks, matched tails/memory, sustained streaming and
+the full scene set remain required before retention. See B execution for all
+identities and the unresolved HUD/thumbnail defects.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.

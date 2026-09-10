@@ -3930,9 +3930,24 @@ capacity reuse path; the latter remains unimplemented. The 64 KiB invalidation
 lead and full mutation/streaming/retention requirements remain open.
 
 Output-resource joins map two missing-HUD captures to source frames lacking all
-148 draws from three UI-associated shader pairs present in passing neighbors.
-This narrows the next correctness investigation to upstream draw generation;
-the omission's cause and host-visible behavior remain unproven. GPU timings are
+148 draws from three shader pairs present in passing neighbors. Their correlation
+with the missing HUD does not establish HUD production; two are cataloged as
+world-lit specializations. Resource-chain/producer attribution and host-visible
+behavior remain unproven. GPU timings are
 sampled every 60 source frames, so missing records cannot be counted as zero
 cost. See [B execution](B_EPIC_EXECUTION.md) for exact identities, intervals and
 limits. Qualified binaries/defaults and all B1-B4 completion criteria are unchanged.
+
+Follow-up: **matching-victim exact-size recycling** is now the next B2 candidate
+for GPU-content and matched performance qualification. SDK `acd222c` searches
+the existing bounded cache for the oldest completed matching allocation, with
+no new pool, capacity field or budget increase. The larger-capacity experiment
+was implemented, measured and archived after sharply higher native-cache
+rejections and late recurring work. Both designs' evidence is preserved.
+
+The exact-size search observes about five early-race creations/frame and no
+late allocations/evictions in its diagnostic, then passes clean 1x/2x strict HUD,
+hold and motion smoke checks. It remains default-off and unretained; these are
+not matched performance or sustained streaming results. See
+[B execution](B_EPIC_EXECUTION.md) and the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md)
+for binary identities, known defects and the unchanged full B1-B4 scope.

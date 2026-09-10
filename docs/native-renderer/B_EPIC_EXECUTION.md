@@ -1116,7 +1116,7 @@ Use this reproducible early-race interval for UI/geometry/pass attribution while
 preserving the separate Outpost, town, junction and highway requirements.
 See `hud-gap-diagnostic/{cadence-observations,early-phase-context,runtime-review}.json`.
 
-### Early-race attribution: buffer churn and absent UI-associated draws
+### Early-race attribution: buffer churn and draws absent with the HUD
 
 Session `20260910T072547Z-p23496` completes the 88-second stationary Recaro
 diagnostic and exits 0. It records 23 captures, including 19 race captures with
@@ -1185,11 +1185,12 @@ for any of these pairs:
 | `79034645B1CB882B / CAE1DB68AFFA9D3C` | 42 | 0 |
 | `984DBF6AF14DBEBD / 6FDA0F1CDE67D12F` | 7 | 0 |
 
-Thus these 148 UI-associated draws are absent from the attributed source frames;
-the evidence does not show normally issued HUD draws simply disappearing during
-capture. It still does not identify why the guest producer omits them, prove an
-animation/cadence cause, or independently establish host-visible presentation.
-Trace that producer/packet boundary before claiming the HUD defect fixed.
+These 148 draws are absent from the attributed source frames, correlated with
+the missing HUD. **Classification correction:** this alone does not prove they
+are HUD producers. The shader catalog names the second and third pairs world-lit
+specializations and the first gradient-fade. Establish the actual output/resource
+chain and producer before concluding that HUD generation was omitted. The omission's
+cause, animation/cadence connection and host-visible presentation remain unproven.
 
 GPU timing retains `IsFh1GpuWorkTimingSampleFrame`'s every-60-source-frame gate.
 Only two early sources (4740/4800, 190/184 records) and two late sources
@@ -1223,3 +1224,93 @@ kernel profiling edits remain byte-preserved and excluded from this build and
 commit. No game/compiler/replay is active. B1-B4 remain open with the full scene,
 mutation/streaming, producer-bypass and visual/timing scope; no new optimization,
 release or higher-resolution A6 admission is retained.
+
+### B2: select a matching completed victim; oversized reuse archived
+
+The next three diagnostics implement the preselected work attribution. All
+reuse the 88-second Recaro route, EXE `372161...`, diagnostic runtime `411CF4...`,
+1x resolution, and the CPU/draw/output probe above. Narrow invalidation,
+containment and tile ownership stay off. All exit 0 and verify 19 stationary
+race captures; missing HUDs are preserved, not converted into passes.
+
+| Design / session | Early frames | Creations/frame | Recycles/frame | Rejected cache requests/frame | Allocation + eviction CPU ms/frame | Late imports/frame | Missing HUD times (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Existing oldest-victim exact-size, `20260910T073938Z-p27040` | 116 | 57.543 | 34.931 | 38.353 | 26.306 | 6.945 | 68.5, 69.5, 70, 71, 73 |
+| Smallest fitting capacity, `20260910T074608Z-p18104` | 209 | 0.254 | 56.321 | 638.694 | 0.285 | 40.309 | 67.5, 68 |
+| Oldest matching exact-size, `20260910T075207Z-p27464` | 209 | 5.014 | 52.967 | 48.378 | 2.939 | 5.922 | None sampled |
+
+These are separate instrumented runs with changing race stage/draw mixes, not
+matched performance results. Early/late windows use the same output clock as
+the preceding table. The eviction timer excludes blocked early returns; total
+`IssueDraw` CPU still includes their cost. The exact-size search records early
+median draw CPU 19.493 ms and late 12.258 ms; the capacity probe records
+19.384/15.331 ms. Neither comparison establishes a retained speedup. Raw means,
+sample coverage and identities are in `matching-recycle/diagnostic-comparison.json`
+under `.local/native-renderer/b2/`.
+
+The capacity experiment tracks resource width separately from logical ownership,
+keeps actual allocation bytes charged, and imports only the new logical window.
+Its production-body checks pass, including partial writes, fence selection,
+old-watch removal, failed imports and unexposed extra capacity. Nevertheless,
+native-cache rejections and late recurring work rise sharply. Retaining oversized
+storage is a cache-pressure suspect, not independently isolated causality.
+**Archive this experiment:** its field and production changes are removed.
+Source, patch, extended checker, binary and run remain in `race-capacity-profile/`.
+Its renderer SHA256 is
+`6D1DCB9EEA60C8EA0AA2D6F4C4967D34B42BF12280F6DE9F7F81768512D4FEEF`.
+
+The replacement is smaller: search the existing bounded cache for the oldest
+completed owner with exactly matching logical size **and** allocation bytes,
+then use the existing full import and metadata reset. If no match exists, retain
+the original oldest-victim eviction/allocation path. No new pool, capacity field,
+budget increase or ownership broadening remains. The existing
+`fh1_recycle_geometry_buffers` flag stays **false by default**.
+
+SDK implementation: `acd222caa04adcc9e2ad8aabf99c09a9a8e12f0e`.
+The extended `tools/check-fh1-geometry-cache.py` exercises this production body
+in exact and contained modes: it must skip a differently sized oldest owner,
+reuse the oldest matching completed buffer without calling allocation, protect
+an in-flight matching owner, reset snapshots/bounds/watches, preserve the budget,
+handle partial writes and recover from a failed import. The existing no-match,
+all-in-flight, destruction and invalidation cases still pass. Its fake GPU
+objects do not establish new actual D3D12 copy/consumer qualification.
+
+Diagnostic renderer SHA256:
+`6603C44A14C68371CE4596FE53E631E34CA9F8E9D694CDE0D4596B5FDEF00583`.
+The clean Release build, with temporary instrumentation removed, is
+`3A0B434AFA297315469B4A122AE72A3DE60DB2940B132057AD90B3FABACB21A1`.
+Its source and binary are archived in `.local/native-renderer/b2/matching-recycle/`;
+the diagnostic sources and run are in `race-matching-profile/`. The original
+oldest-victim run remains under `race-cost-profile/run-1x-recycle/` on renderer
+`37B02E...`. All diagnostics use the same `411CF4...` runtime hash; unrelated
+kernel profiling edits were excluded and restored byte-for-byte.
+
+The 19 passing HUD captures in the matching-victim diagnostic are encouraging,
+but one run does not fix or explain the baseline HUD defect. The other two
+probes still show missing-HUD frames. Gradient-fade call counts also vary with
+scene state, so the preceding 148-call observation must not become a universal
+HUD detector. Continue resource-chain/producer attribution and strict HUD gates.
+Actual GPU reuse, sustained changing/streamed content, matched 1x/2x tails/memory
+and all difficult-scene requirements remain open before retention.
+
+Clean candidate smoke checks also pass at both scales, on retained EXE
+`372161...` and runtime `955BDC...`, recycling on and the other candidates off:
+
+| Scale / session | Moving distance | Stopped distance | Last periodic creations / recycles |
+| --- | ---: | ---: | ---: |
+| 1x `20260910T075538Z-p10180` | 16.852 m | 50.245 m | 3,631 / 29,445 |
+| 2x `20260910T075817Z-p1204` | 17.060 m | 49.507 m | 2,860 / 29,375 |
+
+Both complete the 130-second route and exit 0, with all six early/late race HUD
+checks, stationary hold and motion passing. Sampled race images retain the car,
+road, crowd and HUD (32/31 km/h in moving captures). The existing patterned
+car-selection thumbnails remain at both scales. Both have zero GPU errors and
+timing drops, the two known invalid simulation-delta samples and the known
+startup `ResolvePath(\Device)` error. Last periodic recycling counters are not
+exact session totals. These runs are bounded smoke qualification, not clean
+matched performance, continuous UI timing or sustained streaming proof.
+
+Evidence: `matching-recycle/exact-{1,2}x/`, `contact.png` and
+`runtime-review.json`. Both staged renderer/runtime paths and the EXE are restored
+to the qualified `27B486...` / `955BDC...` / `372161...` hashes. All build, game
+and replay processes are terminal. B1-B4 remain active and open.

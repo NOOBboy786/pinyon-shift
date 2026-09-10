@@ -1,7 +1,7 @@
 """Exercise production geometry cache control flow with fake GPU and one-shot watches.
 
-Run in the release build environment. GPU bytecode/copy parity is covered by
-pinyon_shift_fh1_owned_geometry_tests; this checks invalidation and fence policy.
+Run in the release build environment. This checks cache bytes, invalidation and
+fence policy with fake GPU objects; actual D3D12 copies need separate validation.
 """
 import argparse
 from pathlib import Path
@@ -307,6 +307,49 @@ int main(int argc,char**){
     assert(c.provider.device.creations==3 && c.fh1_geometry_recycles_==0);
     assert(c.fh1_geometry_bytes_==2*unit && c.memory.watches.size()==1);
     c.ClearFh1OwnedGeometry();
+  }
+  {
+    // Prefer the oldest exact match; preserve newer in-flight owners and budget.
+    fh1_recycle_geometry_buffers=true;
+    D3D12CommandProcessor c;c.memory.cpu=true;
+    constexpr uint32_t unit=4*1024*1024;
+    auto oldest=c.GetFh1OwnedGeometry(0,4*unit,true);assert(oldest);
+    c.submission_current_=2;
+    auto fitting=c.GetFh1OwnedGeometry(4*unit,2*unit,true);assert(fitting);
+    auto& victim=c.fh1_geometry_.at((uint64_t(4*unit)<<32)|2*unit);
+    victim.depth_bounds.emplace_back();victim.terrain_bounds.emplace_back();
+    c.submission_current_=3;
+    auto held=c.GetFh1OwnedGeometry(6*unit,2*unit);assert(held);
+    c.submission_current_=4;c.submission_completed_=2;
+    c.provider.device.fail=true; // Creation cannot accidentally satisfy the test.
+    std::fill_n(c.memory.source.bytes.begin()+8*unit,2*unit,0xC7);
+    auto replacement=c.GetFh1OwnedGeometry(8*unit,2*unit,true);
+    assert(replacement==fitting && replacement!=held && replacement!=oldest);
+    auto& entry=c.fh1_geometry_.at((uint64_t(8*unit)<<32)|2*unit);
+    assert(entry.allocation_bytes==2*unit && entry.last_submission==4);
+    assert(c.fh1_geometry_bytes_==8*unit && c.fh1_geometry_.size()==3);
+    assert(entry.cpu_snapshot.size()==2*unit && entry.depth_bounds.empty() && entry.terrain_bounds.empty());
+    assert(!std::memcmp(reinterpret_cast<void*>(replacement),c.memory.source.bytes.data()+8*unit,2*unit));
+    assert(c.GetFh1OwnedGeometryCpuRange(8*unit,2*unit+1).empty());
+    auto watch=entry.watch;
+    c.memory.invalidate(4*unit+64,false); // Old owner's watch is gone.
+    c.memory.invalidate(10*unit+64,false); // Beyond new logical ownership.
+    assert(entry.watch==watch);
+    c.memory.source.bytes[8*unit+64]=0xD8;c.memory.invalidate(8*unit+64,false);
+    assert(!entry.watch && c.GetFh1OwnedGeometry(8*unit,2*unit,true)==replacement);
+    assert(reinterpret_cast<uint8_t*>(replacement)[64]==0xD8);
+    assert(c.fh1_geometry_bytes_==8*unit && c.provider.device.creations==3);
+    c.submission_current_=5;c.submission_completed_=4;
+    c.memory.cpu=false;c.memory.fail=true;
+    assert(!c.GetFh1OwnedGeometry(10*unit,2*unit,true)); // Reused storage, failed import.
+    auto& failed=c.fh1_geometry_.at((uint64_t(10*unit)<<32)|2*unit);
+    assert(failed.buffer->GetGPUVirtualAddress()==held && !failed.watch && failed.cpu_snapshot.empty());
+    c.memory.fail=false;c.memory.cpu=true;c.memory.source.bytes[10*unit]=0xE9;
+    auto retry=c.GetFh1OwnedGeometry(10*unit,2*unit,true);assert(retry==held);
+    assert(reinterpret_cast<uint8_t*>(retry)[0]==0xE9);
+    assert(c.fh1_geometry_bytes_==8*unit && c.provider.device.creations==3);
+    c.submission_completed_=5;c.ClearFh1OwnedGeometry();
+    assert(c.memory.watches.empty() && c.fh1_geometry_.empty() && !c.fh1_geometry_bytes_);
   }
   fh1_recycle_geometry_buffers=false;
   {

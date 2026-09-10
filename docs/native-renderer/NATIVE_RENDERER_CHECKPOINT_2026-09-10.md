@@ -307,9 +307,10 @@ instrumented observations prioritize work; they are not retained speedups.
 
 Two missing-HUD images at scheduled 69.5/70.5 seconds map to source frames
 4758/4770 through the actual captured output resource, with no pending-resource
-conflict. Each lacks all 148 calls from three UI-associated shader pairs found
-in every passing neighboring capture. The guest producer's reason for omitting
-them and actual host-visible behavior remain unresolved. Strict HUD gates stay.
+conflict. Each lacks 148 calls from three shader pairs present in every passing
+neighbor. This correlation does not prove they produce the HUD: two are world-lit
+specializations in the catalog. Resource-chain/producer attribution and actual
+host-visible behavior remain unresolved. Strict HUD gates stay.
 
 Native GPU pass sampling still occurs every 60 source frames: only two early
 and two late source frames have samples. Unsampled frames do not have zero GPU
@@ -330,3 +331,51 @@ paths `955BDC...` (full values above). SDK remains `75c3880`, with unrelated
 local kernel profiling edits preserved and excluded. No game, compiler or replay
 is active. This checkpoint adds findings only; no new retained optimization,
 preview release, save change or A6 2x expansion is made.
+
+## Follow-up: matching-buffer recycler implemented and smoke-tested
+
+SDK `acd222caa04adcc9e2ad8aabf99c09a9a8e12f0e` changes the default-off
+recycler to prefer the oldest completed buffer with matching logical size and
+allocation bytes anywhere in the bounded cache. It preserves the existing
+imports, ownership reset, fences and 32 MiB budget. The production cache check
+passes exact/contained ownership, partial writes, failed imports and lifetime
+cases, including selection beyond a differently sized oldest victim.
+
+The intermediate larger-capacity design nearly eliminates allocation cost but
+increases rejected native-cache requests and late recurring imports sharply.
+Its production code/field are removed and the experiment is archived. The
+smaller exact-size search records about five creations and 53 recycles per
+early-race frame, with no late-phase allocations, evictions or cache rejections
+in its diagnostic. These separate instrumented observations do not establish
+matched performance or retention. [B execution](B_EPIC_EXECUTION.md) records
+every design, session, measurement boundary and failed HUD image.
+
+Clean renderer `3A0B434AFA297315469B4A122AE72A3DE60DB2940B132057AD90B3FABACB21A1`
+passes the strict six-HUD hold/motion smoke checks at 1x and 2x in sessions
+`20260910T075538Z-p10180` and `20260910T075817Z-p1204`, both exit 0. Known menu
+thumbnail corruption, two invalid simulation deltas and the startup device-path
+error remain. There are zero GPU errors/timing drops. The preceding matching
+diagnostic also passes all 19 sampled race HUD images, which does not prove the
+baseline HUD defect fixed. Shader-group/HUD correlation needs actual resource-
+chain attribution; two correlated pairs are named world-lit in the catalog.
+
+**Resume:** obtain fresh actual GPU copy/consumer evidence for matching-victim
+reuse, qualify race stage/capture timing and the HUD resource chain, then run
+preselected matched 1x/2x comparisons with memory/tail checks. Preserve the full
+ordinary/difficult-area scene set and changing/streamed-content requirements,
+and continue B1 native chains, B3 pre-packet bypass and B4 visual/timing work.
+No B item completes here. No new renderer setting is retained or enabled.
+
+Clean and diagnostic archives are `.local/native-renderer/b2/matching-recycle/`
+and `race-matching-profile/`; the rejected capacity variant is in
+`race-capacity-profile/`. The main pin matches SDK `acd222c`. Direct hashes
+verify restored EXE `372161...`, both renderer paths `27B486...` and both runtime
+paths `955BDC...`. All processes are terminal; unrelated SDK profiling edits
+and saves are preserved. The active goal's old EXE `882D92...` remains stale;
+use the verified staged `372161...` identity above.
+
+Validation: production geometry-cache checks, Release renderer builds, the 23
+release-contract tests, tracked Markdown links and repository boundary check
+(506 files) pass. Fresh GPU byte/consumer replay and matched performance gates
+remain outstanding; no unavailable counter or passing smoke test substitutes
+for them.
