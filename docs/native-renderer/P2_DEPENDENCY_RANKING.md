@@ -4086,3 +4086,19 @@ The retained runtime and complete 1x pack are verified restored. See the
 [pending diagnostic](B_EPIC_EXECUTION.md#glass-texture-history-diagnostic-built-live-capture-pending)
 for exact build identity, remaining controller checks and the next command.
 Both comparisons remain stopped and all B1-B4 requirements remain open.
+
+Reflection cube GPU conversion/copy is now a **low-priority** target: the final
+native timestamp diagnostic measures medians of 0.022912 ms at 1x and
+0.051200 ms at 2x, with 13 valid samples per scale and zero reported timing
+losses. The active-world GPU capture verifies all 54 face/mip copies. These
+operation costs exclude CPU preparation and earlier reflection rendering/mip
+construction. They do not qualify a quality profile, memory shortcut or FPS
+gain. Attribute those costs next; preserve the broader depth/transfer priorities.
+
+The startup cube history has complete preceding publication-range coverage
+for all 722 loads but does not reproduce the green artifact. `GetUsage` omits
+known shader reads in the new capture, so resource-use absence is insufficient
+for removal decisions; follow actual command bindings. See
+[cube history and cost](B_EPIC_EXECUTION.md#cube-history-and-import-cost-complete-diagnostic-low-priority)
+for exact identities, corrected diagnostic gaps and retained failure evidence.
+The qualified runtime is restored, complete 1x pack staged, and B1-B4 stay open.

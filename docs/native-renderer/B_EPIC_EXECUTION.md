@@ -2626,3 +2626,115 @@ complete 1x pack pass direct identity checks. No game, build or replay is
 active. Main before this checkpoint is `2690045`, SDK `202247a`; unrelated SDK
 dirt and saves remain preserved. Both comparisons stay stopped, A6 remains
 symmetric-1x-only, and B1-B4 remain open. No preview release is published.
+
+### Cube history and import cost: complete diagnostic, low priority
+
+The startup history run `20260910T135620Z-p30568` exits normally and passes
+all 18 input steps and 14 capture-clock checks. The controller finishes and
+captures two frames at its 62-second fallback. All ten green-region samples
+are clear, and manual prestart review shows no green windshield artifact.
+This is another clean reference, not a replacement for failed 2x B1.
+
+The complete history has 171,821 records: 151,839 resolve API observations,
+six selected texture creations, 6,419 paired load beginnings/completions and
+7,138 watch invalidations. There are no trace-cap/write errors, retries,
+unfinished load pairs or sequence gaps. History SHA256 is
+`C8C3DA07D19841B7A432067783C71144BED531E01058DBBA3BE0D8AB8093276F`.
+Creation generations, stable keys and base/mip flags are checked explicitly.
+
+The glass cube at base `1C879000`, mips `1C9F9000`, loads 722 times over source
+frames 1199–3207. All requested base and mip ranges have full union coverage
+from preceding resolve calls: before the first load, and since the previous
+load began thereafter. Its 721 base and 721 mip invalidations are GPU-originated.
+Slot-13 texture `1CE2D000` has 4,148 loads, also with full publication coverage
+in those windows. This does **not** prove GPU completion, unchanged allocation
+lifetime, valid padding or valid contents after intervening CPU writes.
+The clean run does not support a missing-publication explanation for the cube.
+Another selected 2D texture has 539 partial-publication windows; partial writes
+are not themselves corruption, since untouched contents may remain valid.
+
+Pipeline-command mapping verifies all 2,628 draws in the first capture and
+finds six draws using the known glass pair. At event 15372, decoded fetches
+and shader Boolean word 529 join the cube and slot-13 resource to this run's
+history. **`GetUsage` reports no cube accesses despite the bound descriptor
+and selected shader branch.** Both captured frames show this limitation.
+Missing usage entries cannot establish that a consumer is absent. Two failed
+inspectors that selected draws through that usage list remain preserved;
+the corrected inspector follows actual command-list pipeline bindings.
+
+Local history evidence is `b2/glass-history-profile-v2/`: `history-report.json`,
+`glass-bindings.json`, `frame-workloads/`, `reference-glass-material-v3/`,
+the two earlier failed material reports and `test/`. Its captures are:
+
+- `frame_frame3901.rdc`, 532,132,851 bytes, SHA256
+  `CD04B30587121037D4709CEF1BED87E934E81C98964D617C1A93F37825AE744C`.
+- `frame_frame3902.rdc`, 487,085,398 bytes, SHA256
+  `972B50EB364BA131CDFA5918A2C2AC2086039ED4C752F9E7565F0962BABC87EE`.
+
+A separate prospective 25-second world-view route captures active reflection
+production at 20 seconds. Session `20260910T140940Z-p4000` exits normally,
+passes all ten inputs and three capture-clock checks, and visibly reaches the
+stopped car by the Recaro Rush signup. It uses clean EXE `20EE2F...`, runtime
+`6B97FB...`, retained GPU `27B486...` and enabled local HUD admission. This
+metadata diagnostic is not a retention benchmark. Route SHA256 is
+`19A53072C258EDFC2B05F5ECA3F263656A9D335C3EBB272B89B25ECAA00BA3E5`.
+
+Frame 1506 contains 5,224 actions. Its actual cube copy commands at events
+9528–9581 cover every one of the 54 face/mip subresources exactly once, from
+scratch buffer 1905 into cube 8097. Checked source footprints do not overlap:
+8,388,576 logical bytes, with padding extending to byte 8,451,072. Evidence
+is `b2/glass-reflection-capture/chain/` and `copy-chain-check.json`. Rendering,
+resolves and mip construction precede these imports and are separate costs.
+
+The existing native timestamp heap now has a local diagnostic extension for
+full scaled **and unscaled** 256x256 format-7 cube loads. Query allocation,
+completion and retirement guards are unchanged; interrupted/invalid samples
+remain rejected. The conversion interval includes later scaled mip-source
+setup, and the copy interval covers all face/mip copies. Dimension, slice,
+mip and scale fields identify each sample without relying on guest addresses.
+No RenderDoc duration-counter retry or OS setting change is needed.
+
+The corrected diagnostic GPU is
+`F615DFF6C5FC259DB0F98BEBD28D40750E2D282961D7FE97D3ACE874FA79946A`.
+Both runs use EXE `20EE2F...`, runtime `6B97FB...`, explicit complete packs,
+the same 25-second route and **disabled HUD admission**. Both exit normally,
+pass input/capture-clock and identity checks, have zero reported timing losses
+and corpus overflows/collisions, and produce 13 cube samples at source frames
+1260–1980 in steps of 60. Manual review of all six world screenshots confirms
+the stopped car and visible scene/HUD. Camera framing, traffic and NPC poses
+vary; these images do not establish correct animation timing.
+
+| Scale / session | Median conversion / copy ms | Total median / p95 / p99 ms |
+| --- | --- | --- |
+| 1x / `20260910T142302Z-p17484` | 0.010240 / 0.012032 | 0.022912 / 0.024205 / 0.024911 |
+| 2x / `20260910T142350Z-p11296` | 0.025600 / 0.025056 | 0.051200 / 0.053050 / 0.053925 |
+
+These are small sampled-operation distributions from one diagnostic run per
+scale, **not gameplay frame-time percentiles, retained savings or total
+reflection cost**. The GPU conversion/copy work is now a low-priority target.
+Removing it would address little of the observed GPU budget; CPU preparation
+has not been isolated. Earlier face rendering/mip generation and larger
+depth/transfer chains remain unqualified opportunities. No quality setting or
+mirror shortcut is adopted.
+
+Preserve two earlier timing limitations: `cube-timing-profile/run-2x/` exits
+normally but fails clock verification because retained EXE `372161...` lacks
+`trigger_output_frame`; `cube-timing-profile-v2/` has valid 2x samples but no
+unscaled cube queries at 1x. Neither verifier is weakened. The final run/report
+is in `b2/cube-timing-profile-v3/`, including `timing-report.json`, per-run
+`texture-ranking.json`, source/binary manifests, `world-review.json` and
+`restoration-check.json`. Helpers `check-cube-timing.py`,
+`check-reflection-copy-chain.py`, `check-glass-history-bindings.py` and
+`analyze-glass-history.py` provide runnable checks in the enclosing `b2` folder.
+The builder/launcher reuse existing helpers; all diagnostics remain local.
+
+**Next:** attribute CPU preparation and the earlier reflection face-rendering
+and mip-generation work from the active-world capture and native records before
+changing its update policy. Mip draw pair `2C53E1A563484076` /
+`21937679208E59A5` and the small float-color targets are anchors, not yet a
+complete producer contract. Preserve the unresolved green artifact, the
+stopped comparisons and 1x tail/startup findings. Another clean prestart does
+not establish a correction. All nine retained runtime files/backups and eleven
+touched source files are directly verified restored, with the complete 1x pack
+staged and no active game/build/replay. Main before this checkpoint is `8910b24`,
+SDK `202247a`; unrelated SDK dirt and saves remain preserved. B1-B4 stay open.

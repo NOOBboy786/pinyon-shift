@@ -990,3 +990,37 @@ Three PowerShell script syntax checks pass. Retained EXE `372161...`, GPU
 this checkpoint is `2690045`, SDK `202247a`. Unrelated SDK dirt and saves are
 preserved. No new performance setting or production fix is retained; A6 stays
 symmetric-1x-only, recycling stays off, and B1-B4 remain active.
+
+## Latest handoff: measure reflection cube GPU import cost
+
+The startup texture-history capture completes without reproducing the green
+artifact. All 722 cube loads have full preceding base/mip publication-range
+coverage, but CPU call order does not prove valid GPU contents. Corrected GPU
+inspection joins the glass bindings to the history through actual pipeline
+commands: `GetUsage` omits shader reads here and cannot prove absent consumers.
+Both stopped comparisons and their failures remain preserved.
+
+A separate active-world capture verifies all 54 cube face/mip copies, about
+8 MiB at 2x. A local extension of the existing native timestamp sampler then
+measures full cube imports at both scales. Thirteen valid samples per scale
+give total medians of **0.022912 ms at 1x** and **0.051200 ms at 2x**, with zero
+reported timing losses. This makes the GPU conversion/copy work a low-priority
+target; CPU preparation, reflection rendering and mip construction remain
+unmeasured individually.
+These are diagnostic operation costs, not retained FPS gains or frame-time tails.
+
+[B execution](B_EPIC_EXECUTION.md#cube-history-and-import-cost-complete-diagnostic-low-priority)
+records exact sessions, hashes, checks and preserved diagnostic failures.
+Local evidence is `b2/glass-history-profile-v2/`, `b2/glass-reflection-capture/`
+and final `b2/cube-timing-profile-v3/`. Earlier timing output lacked capture
+metadata or unscaled query coverage and remains preserved. No production
+renderer change is retained.
+
+**Resume:** attribute CPU preparation and reflection face/mip producers using
+the active-world capture and native records before changing update frequency or
+choosing another chain. Do not restart the stopped comparisons unchanged or
+treat another clean prestart as a fix. Eleven touched sources and all nine
+runtime files/backups are verified restored; EXE `372161...`, GPU `27B486...`,
+runtime `955BDC...`, complete 1x pack staged. No game/build/replay is active.
+Main before this checkpoint is `8910b24`, SDK `202247a`; unrelated dirt and
+saves are preserved. A6 stays symmetric-1x-only, and the B1-B4 goal stays active.

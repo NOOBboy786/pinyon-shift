@@ -181,6 +181,11 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   mirrors. Move conversion earlier only when it improves measured first-use cost.
   **Done:** imports, allocations or conversion recurrence fall without stale data,
   missing streamed content, higher memory pressure or worse frame-time tails.
+  Latest ranking: cube GPU conversion/copy measures 0.023 ms at 1x and
+  0.051 ms at 2x in the bounded native timing diagnostic. Deprioritize that
+  GPU work; attribute CPU preparation, reflection producers and larger chains.
+  This does not qualify a retained optimization. See
+  [cube history and cost](B_EPIC_EXECUTION.md#cube-history-and-import-cost-complete-diagnostic-low-priority).
 - [ ] **B3 — Bypass obsolete guest command generation.** For covered chains,
   replace the producer path before packet emission where its contract permits.
   **Done:** less command generation/decoding is measured, and queries, fences,
