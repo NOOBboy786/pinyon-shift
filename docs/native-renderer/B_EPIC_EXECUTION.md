@@ -2315,3 +2315,112 @@ Source before this checkpoint is main `9a03911`, SDK `202247a`. SDK kernel and
 libmspack dirt and saves remain preserved. A6 stays symmetric-1x-only; recycling
 stays off. Full B1 scenes, B2 mutation/streaming/tails, B3 actual pre-packet
 bypass and B4 measured visual/NPC/UI timing remain open.
+
+### Clean HUD admission: both preflights pass, 1x comparison remains unqualified
+
+`b2/hud-keep-clean/` contains the exact previously traced HUD-span helper,
+without per-job logging. Its single EXE switches admission off/on with
+`PINYON_SHIFT_EXPERIMENT_HUD_KEEP_RECORDING=0/1` and logs that choice once.
+The generated-source edit remains local; the production hook is not retained.
+An executable assertion check compiles that helper directly and exercises
+begin/end boundaries, wrong owner/list/queue, absent list, wrong vtable,
+replacement begin and thread isolation. It and the Release build pass.
+
+Exact EXE SHA256 is
+`20EE2F2D48BD2B83124D4812104F57631B53FB4794658CBA75B97E1419C0F319`.
+All following runs use retained GPU
+`27B486FD5BBD928B90186AF2778D8489F364B3C78993FDB7818CC8514E318B50`
+and presentation-diagnostic runtime
+`6B97FB8B1CF15DBBB1C6A0AD762399F40F3AAFAC1E4D0CB8B818D82DFB8E24CC`.
+Recycling, narrow invalidation, containment, owned clear and D3D12 debug are
+off. The complete 1x/2x packs, catalogs and widened-pulse route `B8D8D835...`
+are pinned. Existing OS CPU/private/working/fault/GPU-memory sampling is reused;
+no per-job traces or competing compilation are active during gameplay.
+
+Two enabled preflights under `b2/hud-keep-preflight/` pass normal exit, all
+23 inputs, 12 captures/clock checks, seven HUD/pose checks and the acceleration,
+braking and settling gates. Manual contacts confirm signup/prestart state,
+visible race HUDs and matching race clocks. These have no matched controls:
+
+| Scale / session | Early median / p95 / p99 ms | Hold median / p95 / p99 ms | Peak private / working MiB | Whole-session GPU ms |
+| --- | --- | --- | --- | --- |
+| 1x / `20260910T122310Z-p21644` | 50.342 / 109.044 / 117.828 | 16.539 / 18.536 / 21.211 | 2726.86 / 2210.96 | 12.136 |
+| 2x / `20260910T122642Z-p26996` | 79.785 / 110.241 / 113.604 | 16.842 / 20.460 / 23.708 | 4973.66 / 2238.46 | 14.281 |
+
+Each preflight has two invalid simulation deltas, zero GPU timing drops and
+only the known startup device-path error. Present-drop totals are 21/9.
+The 1x GPU-memory sampler preserves one error and 350 valid counter records;
+2x has no errors and 355 valid records. These are bounded motion/pressure
+observations, not a leak test or proof of acceptable overhead.
+
+A new prospective **A-B-B-A** comparison under `b2/hud-keep-retention/` isolates
+HUD admission: A off, B on, identical EXE/GPU/runtime and sampling. It is separate
+from the stopped matching-recycler v2 block, which remains stopped. All four
+1x runs pass the same input/capture/HUD/motion, identity and contention gates:
+
+| Run | Session | Peak private / working MiB | Whole-session GPU ms | Process CPU seconds / wall second |
+| --- | --- | --- | --- | --- |
+| A1 | `20260910T123100Z-p7224` | 2719.04 / 2193.63 | 12.171 | 3.0233 |
+| B1 | `20260910T123403Z-p30152` | 2716.96 / 2202.55 | 12.557 | 3.0317 |
+| B2 | `20260910T123716Z-p3280` | 2679.02 / 2179.13 | 12.304 | 3.0450 |
+| A2 | `20260910T124020Z-p21684` | 2737.93 / 2220.75 | 12.337 | 3.0262 |
+
+Every timing cell below is median / p95 / p99 in milliseconds. Percentages
+compare equally weighted run statistics, keeping both repetitions rather than
+pooling their frames or selecting the better run.
+
+| Phase | A1 | B1 | B2 | A2 | B vs A p99 |
+| --- | --- | --- | --- | --- | --- |
+| Early race | 85.191 / 113.377 / 122.034 | 60.335 / 108.380 / 113.073 | 62.080 / 122.309 / 126.473 | 54.407 / 110.105 / 113.001 | +1.92% |
+| Hold | 16.802 / 20.825 / 21.906 | 16.771 / 18.559 / 20.332 | 16.683 / 18.791 / 21.262 | 16.617 / 18.603 / 20.735 | -2.46% |
+| Acceleration | 16.446 / 18.284 / 18.985 | 16.747 / 21.348 / 30.026 | 16.483 / 17.846 / 18.324 | 16.283 / 18.065 / 18.534 | **+28.87%** |
+| Handbrake | 16.296 / 18.290 / 19.427 | 16.407 / 18.242 / 18.719 | 16.335 / 18.623 / 20.853 | 16.283 / 18.620 / 21.005 | -2.13% |
+| Settled | 16.312 / 17.941 / 18.798 | 16.727 / 18.424 / 19.840 | 16.352 / 18.242 / 18.732 | 16.351 / 18.276 / 19.867 | -0.24% |
+
+Early median changes -12.31%, but the two controls themselves differ widely.
+Whole-session GPU changes +1.44%, process CPU +0.45%, peak private -1.12%
+and peak working -0.74%. These observations do not establish retention.
+GPU times remain asynchronous whole-session statistics, not CPU-row timings.
+Per-phase draws/vertices differ by less than 0.2% in these aggregate comparisons.
+Race-clock spreads at 76/88/92 seconds are 0.058/0.043/0.037 seconds.
+All four runs have two invalid simulation deltas and zero GPU timing drops.
+A1 preserves one GPU-memory sampling error; every run has 355 valid counter
+records and valid samples in each measured phase. Per-phase memory, faults,
+geometry counters, exact clocks and every run's statistics remain in the reports.
+
+Two unresolved findings prevent adoption:
+
+- Present-drop totals are A1 **1**, B1 **52**, B2 **42**, A2 **2**. Localization
+  puts every notification within the first ten seconds of startup, with none
+  in the race windows. `Presenter::RefreshGuestOutput` increments this counter
+  when a newly published image replaces an unacquired mailbox image. It is not
+  a device-loss counter. Why admission changes startup output cadence, and
+  whether that affects visible UI timing, still require qualification. CSV
+  notification intervals are not exact identities of the discarded images.
+- B1's acceleration tail includes five consecutive 28.975–37.763 ms frames
+  around 119.34–119.48 seconds. B2 does not repeat that burst. The recorded
+  cache-miss, command-stall, memexport-wait and resolve/query-wait counters do
+  not identify a cause. Disabled texture CPU timing cannot be read as zero
+  actual cost, and coarse OS samples cannot attribute a five-frame burst.
+  Preserve the +28.87% aggregate p99 result and investigate it; do not replace
+  B1 with another unchanged run.
+
+Local checks/helpers are `make/build-hud-keep-clean`, `check-hud-span.cpp`,
+`run/summarize-hud-keep-preflight`, `run/summarize-hud-keep-retention` and
+`summarize-hud-keep-block.py`, plus `localize-hud-keep-tails.py`. Evidence includes `comparison-1x.json`,
+`present-drop-localization.json`, `acceleration-tail-localization.json`,
+per-run metrics, manual stage reviews and source/binary manifests.
+
+**Resume:** the preplanned matched 2x A1/B1/B2/A2 runs are all unexecuted.
+Complete them with individual stage review, preserving the 1x result. Also
+qualify the startup UI cadence and acceleration burst, queued payload/node
+lifetime, other HUD/menu states and broader scene/motion coverage. The two
+preflights cannot replace either control or either matched repetition.
+No HUD fix, optimization or B item is retained. A6 remains 1x-only and
+recycling remains off. Every B1-B4 requirement remains in scope.
+
+All nine retained runtime files and nine previously instrumented sources are
+restored and directly verified. EXE `372161...`, GPU `27B486...`, runtime
+`955BDC...`; complete 1x pack staged. No game/build/replay remains active.
+Source before this checkpoint is main `bc2062e`, SDK `202247a`. Unrelated SDK
+kernel/libmspack edits and saves remain preserved.

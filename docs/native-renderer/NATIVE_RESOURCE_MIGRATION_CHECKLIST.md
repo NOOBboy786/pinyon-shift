@@ -196,6 +196,12 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   stopped comparison. Preserve the earlier trace coverage/cap failures. See
   [prototype evidence](B_EPIC_EXECUTION.md#hud-admission-prototype-passes-bounded-correctness-checks).
   No production HUD fix or B3 producer bypass is retained.
+  Clean enabled preflights now pass at 1x/2x, and a full 1x off/on/on/off
+  comparison passes HUD/motion gates. Its acceleration p99 is +28.87%, driven
+  by one enabled run, and both enabled runs have more startup mailbox drops.
+  Adoption remains unqualified; preserve those results while completing the
+  pending matched 2x block and investigating timing/lifetime. See
+  [clean comparison](B_EPIC_EXECUTION.md#clean-hud-admission-both-preflights-pass-1x-comparison-remains-unqualified).
 - [ ] **B4 — Qualify a lower-cost visual profile.** Test individually measured
   AA, shadow/reflection, scene-scale or postprocessing changes; combine only retained
   settings. Mark an effect inapplicable if attribution shows no worthwhile opportunity.

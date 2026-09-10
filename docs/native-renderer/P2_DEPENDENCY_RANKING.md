@@ -4040,3 +4040,12 @@ Memory pressure, full scenes/motion and clean repeated comparisons remain next.
 See [prototype evidence](B_EPIC_EXECUTION.md#hud-admission-prototype-passes-bounded-correctness-checks)
 and the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md#latest-handoff-hud-admission-prototype-awaits-retention).
 The production path is restored, recycling stays off, and B1-B4 remain open.
+
+The clean HUD candidate now passes enabled 1x/2x motion preflights and all four
+1x A-B-B-A workload checks. Memory observations do not show higher peak private
+use, but acceleration p99 rises 28.87% across the two enabled repetitions due
+to one five-frame burst. Both enabled runs also report more startup mailbox
+replacement drops; localization places all drops before ten seconds, outside
+the race windows. Keep those findings explicit and adoption unqualified.
+All matched 2x runs, broader lifetime/scenes and UI/NPC timing remain open. See
+[clean comparison](B_EPIC_EXECUTION.md#clean-hud-admission-both-preflights-pass-1x-comparison-remains-unqualified).

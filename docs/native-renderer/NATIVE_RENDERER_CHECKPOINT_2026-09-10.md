@@ -857,3 +857,45 @@ complete 1x pack staged. No game/build/replay is active. Source before this
 checkpoint is main `9a03911`, SDK `202247a`; unrelated SDK dirt and saves remain
 preserved. A6 stays symmetric-1x-only, recycling stays off, and the complete
 B1-B4 goal remains active. This checkpoint does not publish a preview release.
+
+## Latest handoff: clean HUD preflights and 1x comparison
+
+The HUD-span helper now has a clean local build without per-job diagnostics.
+EXE `20EE2F2D48BD2B83124D4812104F57631B53FB4794658CBA75B97E1419C0F319`
+supports off/on through `PINYON_SHIFT_EXPERIMENT_HUD_KEEP_RECORDING=0/1`.
+It uses retained GPU `27B486...` and presentation-diagnostic runtime `6B97FB...`
+for every comparison, with recycling and owned clear off. The direct helper
+assertion check and Release build pass. This remains a local unretained change.
+
+Enabled preflights at 1x and 2x pass all inputs, captures/clocks, HUD/pose and
+acceleration/braking/settling checks. The subsequent prospective 1x A-B-B-A
+block also passes all four workload/identity gates and manual stage reviews.
+Race-clock spreads are at most 0.058 seconds. Peak private-memory observations
+do not show an increase. However, adoption remains **unqualified**:
+
+- Acceleration p99 changes +28.87%, driven by a five-frame burst in B1 around
+  119.34–119.48 seconds. B2 does not repeat it; existing counters do not establish
+  its cause. Preserve the burst and both repetitions.
+- Present drops total A1 1, B1 52, B2 42, A2 2. Every notification is within
+  startup's first ten seconds, with none in the race windows. The counter means
+  replacement of an unacquired presentation-mailbox image. Startup UI cadence
+  and any visible timing effect need qualification before adoption.
+
+[B execution](B_EPIC_EXECUTION.md#clean-hud-admission-both-preflights-pass-1x-comparison-remains-unqualified)
+records every session, binary identity, per-run timing/memory, failures and
+measurement limits. Local evidence is `b2/hud-keep-clean/`,
+`b2/hud-keep-preflight/` and `b2/hud-keep-retention/`. The latter contains the
+prospective plan, four 1x runs, comparison and drop/tail localization reports.
+
+**Resume:** all four matched 2x runs remain unexecuted; use
+`run-hud-keep-retention.ps1 -Scale 2 -Labels a1` first, then B1/B2/A2 with
+normal per-run analysis and manual stage review. Do not replace the existing
+1x B1 or restart matching-recycler v2. Also qualify startup UI cadence, the
+acceleration burst, queued payload lifetime and other scenes/motion. All
+B1-B4 requirements remain open; the short race route cannot replace them.
+
+All nine retained runtime files and nine instrumented sources are directly
+verified restored. Retained EXE `372161...`, GPU `27B486...`, runtime `955BDC...`;
+complete 1x pack staged. No game/build/replay is active. Main source before this
+checkpoint is `bc2062e`, SDK `202247a`; unrelated SDK dirt and saves remain
+preserved. A6 stays symmetric-1x-only, recycling stays off, and the goal is active.
