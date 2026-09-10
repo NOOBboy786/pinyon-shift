@@ -54,8 +54,13 @@ foreach ($path in @($publish, $payloadRoot)) {
     [void](New-Item -ItemType Directory -Force -Path $path)
 }
 
+$release = Get-Content (Join-Path $root 'config/release.json') -Raw | ConvertFrom-Json
+# Keep AssemblyVersion (the existing installation directory) stable so updates
+# retain user state, while Windows file/product metadata identifies this release.
+$fileVersion = ($release.version -split '-', 2)[0] + '.0'
 & dotnet publish (Join-Path $root 'launcher/PinyonShift.Launcher/PinyonShift.Launcher.csproj') `
-    -c $Configuration -r win-x64 --self-contained true -o $publish
+    -c $Configuration -r win-x64 --self-contained true -o $publish `
+    "-p:Version=$($release.version)" "-p:FileVersion=$fileVersion"
 if ($LASTEXITCODE -ne 0) { throw 'Launcher publish failed.' }
 
 $include = @(
