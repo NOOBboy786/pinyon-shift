@@ -4154,3 +4154,13 @@ range-query access; no live replacement or new savings are retained. See
 [tiled mip and publication evidence](B_EPIC_EXECUTION.md#tiled-reflection-mips-and-publication-contract)
 for the exact next step, hashes, failed build and verified runtime restoration.
 All B1-B4 gates and the larger depth/transfer priorities remain unchanged.
+
+The revised native mip integration now runs in-game. One 2x capture verifies
+eight native dispatches, exact CPU/native output over 8,847,360 bytes, all 54
+imported cube subresources and a later bound consumer. Base/padding/clears are
+preserved; the original 48 mip draws and resolves still run, so no work removal
+or retained gain is established. This frame's maximum legacy/native RGB error
+is 3/1,023 in one channel. The adjacent capture contains presentation only and
+does not establish changing-content behavior. See
+[in-game publication evidence](B_EPIC_EXECUTION.md#native-mip-publication-reaches-the-in-game-cube)
+for the revised diagnostic, exact identity and next gates. All B1-B4 items remain open.

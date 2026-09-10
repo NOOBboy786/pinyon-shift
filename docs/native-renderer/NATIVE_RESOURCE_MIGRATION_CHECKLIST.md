@@ -235,6 +235,11 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   integration has not run: the first diagnostic build fails on private range-query
   access. Original mip resolves also clear color, which any replacement must
   preserve. See [publication contract and resume point](B_EPIC_EXECUTION.md#tiled-reflection-mips-and-publication-contract).
+  The revised integration subsequently builds and runs: one 2x GPU capture
+  verifies native output, all imported cube subresources and a later bound consumer.
+  Its maximum observed legacy/native RGB error is 3/1,023 in one channel. Original
+  mip work still runs; changing-input/1x/motion and removal remain unqualified. See
+  [in-game publication evidence](B_EPIC_EXECUTION.md#native-mip-publication-reaches-the-in-game-cube).
 
 B1 follow-up: the 2x owned-clear optimization failed North Carson tail retention
 (short p99 +24.46%, longer p99 +90.09%). Keep the 1x-only guard until actual

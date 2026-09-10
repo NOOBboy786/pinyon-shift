@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Tiled mip proof and integration build](#latest-handoff-tiled-mip-proof-and-integration-build).
+**Latest handoff:** [In-game native mip publication](#latest-handoff-in-game-native-mip-publication).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
@@ -1185,3 +1185,38 @@ comparisons stay stopped, and all B1-B4 gates remain open. This checkpoint
 adds evidence and a concrete resume point, with no retained renderer change.
 The tiled CPU content check, tracked Markdown links, 509-file repository
 boundary check and `git diff --check` pass at checkpoint.
+
+## Latest handoff: in-game native mip publication
+
+The revised integration builds and completes a normal 2x run plus a separate
+GPU capture. It records 761 and 367 native publications respectively. The first
+capture proves eight native dispatches write the existing scaled buffer; all
+8,847,360 bytes match the CPU reference and all 54 subsequently imported cube
+subresources match those bytes. A later draw binds the resulting cube. Base,
+padding and existing resolve clears are preserved. **Original mip work still
+executes**, so this is an output/publication proof with no retained speedup.
+
+The native filter's largest observed RGB difference from legacy output is now
+3/1,023 in one channel of the captured frame; the earlier 2/1,023 result was
+frame-specific. Both reviewed 20-second images show the stopped Recaro car/HUD
+scene without an obvious new artifact. Motion remains unqualified. The second
+capture contains presentation only, so changing-input coverage is still absent.
+
+Candidate GPU `2A200172...`, producer EXE `7EA829...`, runtime `955BDC...`.
+[B execution](B_EPIC_EXECUTION.md#native-mip-publication-reaches-the-in-game-cube)
+records complete hashes, sessions, events, checks and preserved failures.
+Local evidence is `b2/reflection-mip-publication-v2/` and
+`b2/reflection-mip-publication-capture-v3/`; the failed initial build and older
+runtime capture-preparation rejection remain in their original directories.
+
+**Resume:** capture another active workload at a separated trigger to test changed
+base contents, then qualify 1x/native identity and preserve clear/state effects
+while removing the obsolete mip work and recurring guest submissions. Do not
+count duplicate-work output proof as B3 or performance retention. The full
+B1-B4 scene, mutation/lifetime, motion/timing and tails/memory gates remain open.
+
+Preflight verifies all nine retained runtime files/backups, fourteen restored
+sources and the complete 1x pack. Retained EXE `372161...`, GPU `27B486...`,
+runtime `955BDC...`; no game/build/replay is active. Main before checkpoint is
+`dfd82b2`, SDK `202247a`. Unrelated SDK dirt and saves are preserved; A6 remains
+symmetric-1x-only and both stopped comparisons remain stopped.
