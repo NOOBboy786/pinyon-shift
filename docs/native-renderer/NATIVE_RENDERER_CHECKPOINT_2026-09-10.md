@@ -216,3 +216,36 @@ all 600 tooling tests, tracked Markdown links and repository boundary check
 
 Source fix: `d36af3d`; SDK remains `261dd6a`. Unrelated local SDK kernel
 profiling changes remain uncommitted and excluded from this checkpoint.
+
+
+## Follow-up: B2 recurring imports and 64 KiB invalidation
+
+SDK `75c3880` adds default-off `fh1_narrow_cpu_invalidation`. The candidate
+reduces speculative invalidation around writes while preserving actual writes,
+GPU-history guards and physical-heap protection. It builds and passes 1,500
+range cases plus the CPU-source and texture-watch checks. Candidate DLL is
+`BE32EE5D5923BA0D942C6AFA7D26E0E4C01BF8DE3BE61A124DD3D96DA38DE820`.
+
+Two candidate-on 1x race runs reduce steady-hold imports from about 405/s in
+the first off control to 183/182/s, with similar medians and lower observed
+p99. **No retention:** the planned comparison stops on A2's missing early HUD;
+C2 and 2x are unrun. A screenshot also falls inside the original acceleration
+window. All records and limitations remain explicit in [B execution](B_EPIC_EXECUTION.md).
+
+The separate CPU-page diagnostic found about 1.09 GB of fingerprint-equal
+reimports in its exact-window run. It skips no work and is not an equality
+admission rule. Fixtures and summaries remain in `b2/geometry-mutation-trace/`;
+the clean candidate, comparison and unexecuted bookend-protocol draft are in
+`b2/narrow-invalidation/` below `.local/native-renderer/`.
+
+Next: verify the stronger prospective workload protocol and finish 1x/2x and
+streaming qualification. Investigate the separate watch-valid CPU-snapshot
+upgrade opportunity before adding data mirrors. Preserve early-HUD and menu
+thumbnail defects, all failed evidence and the entire B1-B4 scope. Retained
+EXE `372161...`, renderer `27B486...` at both paths and runtime `955BDC...`
+remain staged. No game/compiler/replay remains active; unrelated SDK profiling
+edits remain local. No new release or B-item completion is claimed.
+
+Validation: all 600 tooling tests, tracked Markdown links and the repository
+boundary check (506 files, zero violations) pass. Draft route grammar and
+capture/window separation pass; its live workload checker is still pending.

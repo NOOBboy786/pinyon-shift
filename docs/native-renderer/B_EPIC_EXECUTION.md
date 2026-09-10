@@ -927,3 +927,90 @@ no rendering speedup or B-item completion. Continue B1's full chain inventory,
 B2 mutation/streaming and work reduction, B3 producer bypass, and B4 profile/
 timing qualification. Before using the corrected EXE for performance claims,
 preselect and record it as a distinct baseline.
+
+
+## B2: page mutation attribution and narrower invalidation candidate
+
+The temporary CPU-page fingerprint diagnostic runs on corrected CRT EXE
+`C24D88...`, with renderer
+`C1DC16ABAFB0AEDEE010EB8B2E9C3D3141D879FC51B5FB6CC4722ECAA6BBA8E4`.
+It reads ordinary cached CPU memory, never write-combined upload memory, and
+keeps every original import. Per-owner versions and 4 KiB fingerprints identify
+repeat work; matching fingerprints are not a byte-equality admission rule.
+The production-body cache checks also exercise unchanged pages, partial changes,
+snapshot upgrades and the transition through GPU-owned/unknown data.
+
+Two separate 1x Recaro probes exit 0 and pass arrival/HUD/motion checks:
+
+| Mode | Session | Imports | Imported bytes | Comparable CPU versions | Fingerprint-equal versions / bytes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Exact | `20260910T055718Z-p28404` | 48,170 | 4,573,560,832 | 24,374 | 11,508 / 1,087,045,632 |
+| Contained | `20260910T060006Z-p25844` | 26,406 | 2,590,507,008 | 16,961 | 10,654 / 1,220,476,928 |
+
+These are instrumented work observations, not a performance comparison or
+retention of containment. The exact run has 12,451 snapshot upgrades. Most
+fingerprint-equal recurring race imports do not retain CPU snapshots, so merely
+comparing existing snapshots would cover little of this repeated race work.
+Evidence and source snapshots: `.local/native-renderer/b2/geometry-mutation-trace/`;
+reproduce summaries with `b2/summarize-geometry-mutation.py <run-directory>`.
+
+The existing shared-memory invalidation callback may widen a CPU write to a
+256 KiB block at 4 KiB host pages. New default-off, restart-required
+`fh1_narrow_cpu_invalidation` limits that speculative excess to 64 KiB windows.
+It preserves the actual write range and existing GPU-written-page guards, fires
+watches over the resulting range, and returns that same range to the physical
+heap. The heap intersects callback ranges before unprotecting memory. No hash,
+new mirror, allocation budget increase, packet suppression or OS setting is used.
+
+SDK source commit: `75c3880`. Clean candidate DLL:
+`BE32EE5D5923BA0D942C6AFA7D26E0E4C01BF8DE3BE61A124DD3D96DA38DE820`.
+Release build, 1,500 production-function cases at 4/16/64 KiB host pages,
+CPU-source ownership and texture-watch tests pass. The range test checks
+exact/speculative modes, cross-window writes, GPU-history guards, validity bits,
+watch notifications and returned ranges against a separate per-page model.
+
+### Incomplete clean 1x comparison: no retention
+
+The preselected C-A-B-B-A-C plan uses EXE `372161...` throughout: C is retained
+DLL `27B486...`; A/B use `BE32EE...` with the limit off/on. Containment, recycling
+and tile ownership remain off. No fingerprint trace, compiler or replay runs
+alongside the benchmark. Process CPU/memory and all-cause page faults are sampled;
+the latter do not isolate guest write-protection exceptions.
+
+The 82..102-second hold observations from the first four valid route runs are:
+
+| Run | Geometry imports/s | Median ms | p95 ms | p99 ms | Steady private MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| C1 | 424.24 | 16.741 | 18.766 | 21.093 | 2699.82 |
+| A1 | 404.56 | 16.9155 | 21.050 | 22.261 | 2693.74 |
+| B1 | 182.90 | 16.739 | 18.539 | 20.748 | 2688.95 |
+| B2 | 182.02 | 16.703 | 18.529 | 20.809 | 2690.20 |
+
+This is a repeatable work-reduction lead in two B runs, **not a completed
+retention result**. A2 exits 0 but fails the HUD check at the 68-second
+`race-ready` capture. Its scene/car are intact and later race captures have
+the HUD; the cause is unproven. The driver stops there: C2 and 2x do not run.
+Separately, the original 106..110-second acceleration window includes the
+109-second screenshot and cannot support clean tail claims. Do not repair
+either limitation by omitting data or declaring this block retained.
+
+Sessions C1/A1/B1/B2/A2: `20260910T061100Z-p28252`,
+`20260910T061314Z-p19156`, `20260910T061529Z-p8728`,
+`20260910T061744Z-p30608`, `20260910T061959Z-p27244`.
+An earlier setup attempt, `20260910T061007Z-p23172`, was rejected before gameplay
+because the driver precreated the output directory. That setup defect is fixed
+and its record preserved; it supplies no benchmark data.
+
+The complete raw record, explicit failed-HUD report, partial summary, plan and
+review are under `b2/narrow-invalidation/`. A prospective, unexecuted protocol
+draft adds HUD bookends at 80/129 seconds and moves acceleration measurement
+to 106..108 seconds. Implement and verify its checks before fresh comparisons;
+keep the early HUD observation explicit, and do not equate bookends with
+continuous UI/timing correctness. Broader 1x/2x ordinary, difficult-area and
+streaming/mutation qualification remain required. The candidate stays off.
+
+Another bounded B2 lead is the clean snapshot upgrade: the current cache
+reimports GPU bytes when adding a CPU snapshot even if its existing watch
+still proves the previous owner unchanged. Investigate a CPU-only upgrade
+using that watch and authoritative CPU copy, with invalidation-during-copy
+fallback; no implementation or saving from this separate lead is claimed.

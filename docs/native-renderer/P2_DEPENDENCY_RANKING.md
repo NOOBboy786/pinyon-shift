@@ -3888,3 +3888,19 @@ chain to B1's unresolved menu coverage. This is a correctness observation, not
 cost attribution or evidence for widening native admission. All B items remain
 open; the prior containment rejection and small clear-producer CPU opportunity
 still determine the next implementation choices.
+
+
+## B2: narrower CPU invalidation lead (2026-09-10 UTC)
+
+CPU-page fingerprints identify substantial repeated imports. A new default-off
+64 KiB invalidation limit passes range/ownership checks and two bounded 1x
+on-runs reduce hold-phase imports to about 183/182 per second versus 405 in
+the first off control. The full clean comparison is incomplete: A2 lacks its
+early race HUD, C2/2x are unrun, and the old acceleration window overlaps a
+capture. **No retention or general FPS gain.** See
+[B execution](B_EPIC_EXECUTION.md) and the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md).
+
+Qualify actual measurement-phase HUD bookends with captures outside timed
+windows, preserving the early-HUD issue explicitly. A separate unimplemented
+lead is avoiding the GPU reimport for a CPU-snapshot upgrade while the existing
+owner watch remains valid. Retained DLL `27B486...` and the full B scope remain.
