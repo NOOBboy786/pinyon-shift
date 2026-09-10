@@ -101,3 +101,40 @@ pass. The held-owner negative control fails at the intended snapshot assertion.
 Detailed test logs and capture audits remain under `.local/native-renderer/b2/`.
 The stale release-contract expectation of 256 timing slots now matches the
 existing 512-slot implementation. No runtime behavior changed for this fix.
+
+
+## Follow-up checkpoint: 2x evidence and B3 producer anchor
+
+This updates the earlier resume order above. The original two failed capture
+runs remain preserved and their causes are unproven. A revised diagnostic
+fixture now provides usable 2x captures: it fingerprints cached CPU import
+bytes instead of scanning upload memory. Production source is unchanged, and
+the retained `27B486...` DLL is verified at both runtime paths. No game,
+compiler or replay remains active at this checkpoint.
+
+- The diagnostic `0D7577CB79E5B683EE9F7D266FB56EA8E31D49A53D302AACBFD3D3EF147437E3`
+  session `20260910T041226Z-p10576` completes normally. Frames 2674/3032 validate
+  18/19 owners, 24/25 representative IB/VS consumers, and one actual 65,536-byte
+  copy each. All checked values match; zero unverified contained versions.
+  The 18 common owners are unchanged, so mutation/streaming remains unqualified.
+- The longer 1x containment comparison stops at B2 because the car moves
+  20.03 m before planned acceleration. A2 and 2x do not run. No ABBA performance
+  verdict or optimization is retained. Qualify a more stable stationary workload
+  before another preselected comparison; do not repeat unchanged for better data.
+- B3 now has a static CPU producer anchor: `sub_8240E130` emits the known clear
+  shader from `0x820C5FD0`; copy callsite `0x8240E4A8`, direct caller callsite
+  `0x824019D0`. Live cost, full side-effect tracing and an actual pre-packet
+  bypass remain required. Device dirty state, clipping/scissors and buffer
+  refill/flush behavior prevent simply skipping this function.
+
+[B execution](B_EPIC_EXECUTION.md) records exact capture hashes, all control/run
+identities, the incomplete-comparison report and reproducible local checks.
+The cached-fixture production-body suite, capture audits, cross-frame summary
+and static producer-anchor checks pass. These findings change qualification
+coverage, not the retained renderer or default flags. B1-B4 stay open.
+
+Resume with live producer attribution and remaining mutation/streaming coverage,
+then matched 1x/2x retention including qualified-DLL controls. Continue the full
+B1 scene/family inventory and B4 visual/timing work; the prior scope is intact.
+The source checkpoint remains `6605268` with SDK `261dd6a`; this follow-up adds
+documentation only. No new preview release or tag is made.

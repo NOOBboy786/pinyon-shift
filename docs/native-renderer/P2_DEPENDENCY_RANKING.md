@@ -3820,3 +3820,23 @@ Both 2x instrumented attempts failed before usable capture/route completion;
 the candidate logs a guest null read, while the feature-off control does not.
 Containment, recycling and tile-clear experiments remain default-off and
 unretained. A6 retains its 1x scope. B1-B4 remain active and incomplete.
+
+
+## 2026-09-10 follow-up: containment proof and guest clear producer
+
+See [B execution](B_EPIC_EXECUTION.md) and the
+[current checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md). The revised
+capture fixture provides bounded 2x GPU validation: 18/19 checked owners,
+24/25 representative consumers and one actual 65,536-byte copy per frame all
+match. The 18 common owners are unchanged; live mutation/streaming remains open.
+The longer 1x comparison is incomplete after a 20.03 m stationary displacement;
+no ABBA verdict or retention follows. Preserve the failed workload and qualify a
+changed stationary route before further comparison. Retained DLL `27B486...`
+is restored at both runtime paths, and all experimental flags remain default-off.
+
+B3 now has a checked static upstream anchor: `sub_8240E130` emits the known
+clear shader from `0x820C5FD0` via copy callsite `0x8240E4A8`; the direct wrapper
+calls it at `0x824019D0`. This establishes where to measure obsolete guest work,
+not that it can all be skipped. Device dirty state, rectangle/scissor handling
+and command-buffer refill/flush still need a live contract. No producer bypass
+or CPU saving is claimed. B1-B4 remain open with their full original criteria.

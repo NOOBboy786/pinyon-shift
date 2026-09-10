@@ -631,3 +631,95 @@ Production source stays unchanged; see `b2/check-stable-containment-negative.*`.
 The earlier `check-containment-owner-stability.py` is historical evidence tied
 to the earlier harness layout; use the current production cache suite when
 resuming. No B experiment is retained. All B1-B4 requirements remain open.
+
+
+#### Revised 2x capture fixture and incomplete retention block
+
+The original `DAD406...` instrumentation completes the 2x free local route
+without RenderDoc injection, containment off (`20260910T040450Z-p12616`).
+The retained `27B486...` DLL also completes a 2x RenderDoc control with two
+captures (`20260910T040638Z-p29364`). These controls narrow the investigation;
+they do not establish the cause of the original null read or separate timeout.
+Thread-stack sampling is diagnostic, so these runs are not clean benchmarks.
+
+A revised capture-only fixture fingerprints cached CPU bytes instead of reading
+mapped upload memory byte by byte. It uses the existing CPU snapshot when
+available; otherwise it copies guest bytes through a temporary CPU vector before
+upload. It does not force persistent CPU snapshots or change cache admission.
+The actual production-body suite also passes with this fixture. The diagnostic
+DLL is `0D7577CB79E5B683EE9F7D266FB56EA8E31D49A53D302AACBFD3D3EF147437E3`.
+Instrumentation is removed afterward; production source still matches the
+`15FB392...` candidate. This is no measured performance gain or proven root-cause
+fix for the earlier startup failures.
+
+The revised 2x session `20260910T041226Z-p10576` completes normally with intact
+car, road, crowd and HUD during short local driving. No access violation is
+logged. Both GPU audits pass:
+
+| Frame | Checked owners / bytes | Representative IB/VS consumers | Actual copies |
+| --- | --- | ---: | --- |
+| 2674 | 18 / 2,686,976 | 24 | 1 / 65,536 bytes |
+| 3032 | 19 / 2,883,584 | 25 | 1 / 65,536 bytes |
+
+All checked values match, with zero unverified contained versions. Owners and
+representative consumers match import fingerprints; actual copy source and
+destination bytes compare directly. The 18 shared owners have unchanged size
+and fingerprint; frame 3032 adds owner serial 318. This is bounded GPU evidence,
+not live mutation/streaming or every-consumer qualification. Frame SHA256s are
+`9435ECBC34732C294F6CB2848D394A64424D364AA3284D2C8B5B0255872876FC`
+and `2FBAAF5EA710519BF1B4D0407FEC503A16B62B3F756DCF8C0F9B99D63510ACAC`.
+Audits, cross-frame comparison, screenshots and controls remain under
+`.local/native-renderer/b2/containment-cached-capture-2x-*` and
+`retained-capture-2x-startup-control-rdc/`. Reproduce the evidence summary with
+`b2/summarize-containment-checkpoint.py` under the local native-renderer directory.
+
+The preselected longer clean comparison uses the same `15FB392...` DLL with
+containment off/on, recycling/tile ownership off, and stationary, accelerating,
+braking and settled windows. **The 1x ABBA block is rejected and incomplete.**
+A1 (`20260910T041653Z-p30028`) and B1 (`20260910T041828Z-p24996`) pass the
+route checks. B2 (`20260910T042002Z-p23720`) exits normally but moves 20.03 m
+between its 30-second start image and 63-second stationary image, before planned
+acceleration at 65 seconds. The images also show this displacement; its cause
+is unproven. All three runs have no recorded compiler/replay contention.
+
+The runner stops at that failed workload gate. A2 and the entire 2x block are
+not run; no matched ABBA performance percentages or retention verdict are
+published. Preserve `b2/stable-containment-long-local-incomplete.json`, the plan,
+scoped logs, images and process samples. Do not repeat the unchanged route until
+favorable: first qualify a stationary brake hold or a clear parked position.
+This proposed route adjustment has not yet been tested. Qualified `27B486...`
+is restored at both paths, with no game or replay running.
+
+### B3 static guest producer anchor (2026-09-10 UTC)
+
+The exact 108-byte vertex microcode for the known clear shader
+`1E6883FCCDE1F688` has a unique word-endian-adjusted match at guest address
+`0x820C5FD0`. The local `default-image.bin` is a loaded-image extraction:
+addresses use `0x82000000 + offset`, not PE raw-section relocation. An initial
+raw-PE address guess is discarded; the instruction bytes and generated code
+confirm the addresses below.
+
+`sub_8240E130` constructs the clear command stream. At `0x8240E480..0x8240E4A4`
+it selects the shader header at `0x820C5FA8`, code at header +40, and byte count
+108, then prepares `IM_LOAD_IMMEDIATE` (`0xC01C2B00`, 27 shader dwords).
+The call at `0x8240E4A8` copies those exact bytes through `sub_82A7D730` into
+the guest command buffer. A direct caller is `sub_824018B0`, with its call at
+`0x824019D0`. The producer has a common epilogue at `0x8240E7A4` and calls
+`sub_82407C08` for rectangle work, which in turn calls `sub_82460C50`.
+The latter helper still needs a complete packet/side-effect trace.
+
+This is an actual upstream producer anchor, but **no bypass or measured CPU
+saving exists yet**. The function clips rectangles, handles colour/depth paths,
+refills/flushes the command buffer, updates device dirty state and restores
+scissors. Device cursor +48 and end +56 may change through refill/flush;
+subtracting entry/exit cursor values is not a valid general emitted-byte count.
+Do not skip the function based solely on the shader match. Next, use read-only
+producer observation to establish live call frequency/cost and the full contract,
+then bypass only proven obsolete emission while preserving state, ordering,
+queries, fences, memory export and guest-visible behavior.
+
+Local reproducible evidence is `b3/check-clear-producer-anchor.py` and its JSON
+report; it checks the unique shader match, loaded-image instructions and both
+relative branch targets. Guest image/generated-code excerpts remain local.
+All B1-B4 completion criteria remain open; neither this anchor nor a rejected
+B2 comparison completes an item.

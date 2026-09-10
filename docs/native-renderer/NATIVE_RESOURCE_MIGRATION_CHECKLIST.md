@@ -97,7 +97,9 @@ has a HUD workload mismatch. B2 now has measured allocation-churn attribution,
 opt-in buffer recycling and a bounded GPU copy proof, but the mixed Outpost/local
 comparisons do not establish retention. Paid Outpost travel is unavailable until
 normal play replenishes credits; free routes remain usable. Stable containment
-has bounded 1x GPU validation, while 2x capture startup and retention remain open.
+has bounded 1x/2x GPU validation, but live mutation/streaming and retention remain
+open. The longer comparison stops on a stationary workload mismatch. B3 now has
+a static guest clear-producer anchor; live attribution and bypass remain open.
 See the [current checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md).
 All B items remain open.
 
