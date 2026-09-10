@@ -51,8 +51,8 @@ foreach ($file in @('fh1-gpu-prewarm-v3.txt', 'fh1-native-pipelines-v1.bin', 'sh
             environment.update(PINYON_TEST_ROOT=str(root), PINYON_TEST_DRIVER="one")
             command = r'''
 $ErrorActionPreference = 'Stop'
-Import-Module Microsoft.PowerShell.Utility
-Import-Module Microsoft.PowerShell.Management
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1')
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1')
 function Get-CimInstance { [pscustomobject]@{ PNPDeviceID = 'test GPU'; DriverVersion = $env:PINYON_TEST_DRIVER } }
 function Get-Process { return $null }
 & (Join-Path $env:PINYON_TEST_ROOT 'tools/prepare-fh1-shaders.ps1') -StateRoot (Join-Path $env:PINYON_TEST_ROOT 'state') -JsonEvents
