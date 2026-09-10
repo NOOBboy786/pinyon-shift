@@ -1595,3 +1595,179 @@ clock and workload tools. Resume with label `b2` at scale 1, review its gates
 and images, then A2/C2 and the planned 2x block. No processes remain active;
 all nine retained runtime files are restored and verified. Defaults, saves and
 unrelated SDK work are unchanged.
+
+### Repeated block stopped; bounded 1x GPU proof from a crashed capture
+
+The remaining 1x B2 and A2 runs complete normally and pass delivered-input,
+clock, seven HUD/pose/motion and manual race-stage checks. Their race clocks
+at 76/88/92 seconds are 5.575/17.608/21.599 and 5.541/17.599/21.592 seconds.
+These are run labels, not completion of checklist items.
+
+| Additional 1x run | B2 recycling on | A2 recycling off |
+| --- | ---: | ---: |
+| Session | `20260910T092319Z-p9692` | `20260910T092608Z-p25588` |
+| Early 78..86 s frames | 340 | 138 |
+| Early median / p95 / p99, ms | 23.895 / 26.442 / 28.388 | 56.534 / 104.565 / 132.827 |
+| Hold median / p95 / p99, ms | 16.824 / 18.909 / 21.311 | 16.835 / 19.829 / 21.343 |
+| Acceleration median / p95 / p99, ms | 16.742 / 18.757 / 20.266 | 16.758 / 18.591 / 19.858 |
+| Handbrake median / p95 / p99, ms | 16.777 / 18.311 / 20.502 | 16.792 / 18.702 / 20.561 |
+| Settled median / p95 / p99, ms | 16.813 / 18.714 / 20.315 | 16.828 / 20.596 / 24.195 |
+| Last periodic allocations / recycles | 2,665 / 24,609 | 24,557 / 0 |
+| Whole-session async GPU interval mean, ms | 12.329 | 12.624 |
+| Process CPU seconds/wall second | 3.097 | 3.034 |
+| Sampled peak private / working memory, MiB | 2,701.07 / 2,165.52 | 2,757.45 / 2,249.03 |
+
+The preceding table and measurement boundaries still apply; preserve all five
+passing runs. Each additional run has 355 valid GPU-memory counter records,
+zero sampling errors, two known invalid simulation deltas and the startup
+device-path error. There are no GPU errors/timing drops in these clean runs.
+
+Final retained control C2 (`20260910T092856Z-p27056`) exits 0 but delivers only
+22 of 23 scheduled inputs. Step 7, the A press at frame 720 (12 seconds), is
+absent; the next observed step is its release at frame 726. The shared input
+driver selects the latest state using `upper_bound`, so the 100 ms state is
+not queued for later delivery. Telemetry establishes the skipped pulse, not
+whether title polling or output-clock advancement caused that particular gap.
+
+C2 independently passes clock alignment (3.624..18.713 ms origin bounds),
+all seven HUD/pose/motion checks and manual race-stage review. Its clocks are
+5.417/17.600/21.608 seconds. These do not override the preselected input gate:
+**the block is stopped, no qualified six-run aggregate exists, and its 2x
+block is unexecuted.** Raw C2 data and the failing check remain in
+`matching-retention/race-1x-cabbac-c2/`; no passing substitute overwrites it.
+
+A prospective route widens all eight 100 ms menu A pulses to 500 ms, retaining
+their start times, the existing 500 ms signup X, braking, motion, capture and
+measurement times. It is a different protocol requiring fresh qualification.
+Local `matching-retention/wide-menu-pulses.fh1test` SHA256:
+`B8D8D835C2A928888C10DADCD7E599AF3A5B221A2DC757D00894C1CC6BBAEC3C`.
+No input-driver or production-renderer semantics change.
+
+The first independent 1x two-frame RenderDoc probe uses that route, EXE
+`EC2E5F...`, marker-only renderer `43E59C...` and runtime `955BDC...`.
+Session `20260910T093402Z-p28600` reaches the race, then reports graphics-device
+loss after writing one capture. The child result is a crash, exit `0xC0000409`,
+ID `pscrash-v1-bcb03ba59c806a67c5bf`. It produces only six of twelve route images
+and cannot pass a complete workload check. The capture wrapper is corrected
+to inspect the injected game's result as well as RenderDoc's exit code; the
+new check rejects this crash and accepts the archived normal 2x run.
+
+Saved `matching-capture/1x-rdc/frame_frame4705.rdc` is 379,760,806 bytes, SHA256
+`89EAE5DA93CC9A13B791768D779FE4517C13ACCDFAF5411C71ADE1B2931FCDEF`.
+Its replay nevertheless completes a bounded byte/consumer audit:
+
+- 40 actual copies, 3,866,624 bytes, 37 unique reused buffers; sizes are 64 KiB
+  (22), 128 KiB (17) and 192 KiB (one). Twenty-two select a completed matching
+  victim beyond the oldest cache entry.
+- Every nonzero CPU upload source matches the entire destination after the
+  copy, and every destination changes from its previous contents. The first
+  bound draw consumer still sees those bytes: 18 index and 22 vertex reads.
+- Each marker satisfies `retired <= completed < current`; observed ranges are
+  15,898..15,902 retired, 15,901..15,904 completed and 15,902..15,905 current.
+  These are per-copy relationships, not interchangeable range endpoints.
+
+This is actual 1x GPU evidence for these CPU-sourced copies, **not** a passing
+live session, a device-loss fix, GPU-written-source proof or streaming
+qualification. The crash is not exonerated by matching bytes in its saved frame.
+`matching-capture/1x-audit-4705/report.json` preserves every copy, consumer and
+the successful bounded replay result.
+
+The same-setup recycling-off control `20260910T093857Z-p8640` exits 0 and
+writes both frames, 4525/4526. All 23 input steps, 12 route images and seven
+HUD/pose/motion checks pass; capture-clock bounds are 2.772..22.709 ms. However,
+it logs eight missing precompiled vertex-shader variants during menu prewarm
+and seven invalid simulation deltas (zero GPU timing drops). It is neither an
+error-free renderer qualification nor a performance control. Its normal exit
+does not establish the cause of the recycling-on device loss. Preserve the
+following missing keys as additional B1 coverage evidence:
+`C44D26511712ACE0/7F`, `5B4289DDC7A64126/1FF`, `DAB93405F7249276/FF`,
+`C4C6C4C536B7DEE7/7F`, `6F14A5029254F49D/1FF`, `B2C2DBC2FE68CD0F/7F`,
+`364F8F67D6911DC7/FF` and `A1A31010058755BD/1FF`.
+
+These control captures are `matching-capture/1x-off-rdc/frame_frame4525.rdc`
+(368,788,955 bytes, SHA256
+`7C0310929F29BCFF24EFA1AD7FA9E83202CE3BB0239D93FD8AB0DCB69219E72E`)
+and `frame_frame4526.rdc` (325,191,416 bytes, SHA256
+`DF915450B89BA87591A382642576191B6501F7796731151CEDCC4F4F66B26674`).
+Neither is a recycled-copy proof. Raw results, clock/workload checks, manual
+review and an explicitly preserved initial wrong-path tooling invocation are
+under `matching-capture/1x-off-test/`.
+
+Source inspection identifies a diagnostics gap: `D3D12Presenter` can return
+GPU loss and trigger the fatal callback before the command processor logs
+`GetDeviceRemovedReason`. Its two device-loss result paths now log both the
+Present HRESULT and device-removal reason, and flush before returning. Success,
+other failures and loss classification are unchanged. The executable
+`tools/check-d3d12-present-loss.py` exercises those production branches,
+including log/flush order and both HRESULT values; it passes.
+
+The Release runtime build passes. Verified diagnostic runtime SHA256 is
+`6B97FB8B1CF15DBBB1C6A0AD762399F40F3AAFAC1E4D0CB8B818D82DFB8E24CC`,
+archived under `b2/present-loss-verified/`; source presenter SHA256 is
+`4F52A5E7BF900226708DD2DB7113017340D8F4F9E906C27F68D89E539815F458`.
+The first build's archive incorrectly copied the old top-level DLL; its unchanged
+`955BDC...` hash exposed that error. The verified build forces recompilation and
+archives the actual `rexglue-artifacts/rexruntime.dll` target before restoring
+all retained runtime files. Unrelated kernel source bytes are preserved.
+
+Initial attribution session `20260910T094848Z-p23300` enables the existing
+`d3d12_debug` option, but fails DRED setup and DXGI factory creation under
+injection before any gameplay or capture. It does not reproduce the earlier
+in-race failure. Its two verified owned RenderDoc helper processes are stopped
+after the game's terminal crash. No OS/debug-mode setting is changed. Continue
+with the new error logging and debug explicitly off; capture diagnostics remain
+separate from clean retention and every earlier failure stays archived.
+
+The debug-disabled attribution probe `20260910T095025Z-p28636` then exits 0,
+records all 23 delivered inputs and 12 images, and passes the seven HUD/pose/
+motion checks. Capture-clock bounds are 2.816..24.798 ms; reviewed race clocks
+are 5.559/17.200/21.217 seconds. It has six invalid simulation deltas, zero GPU
+timing drops, no GPU errors and the known startup device-path error. The earlier
+device loss does not recur; this does not prove it fixed or attribute its cause.
+
+Replay of `matching-capture/1x-reason-rdc/frame_frame4634.rdc` checks 12 actual
+recycled copies (1,179,648 bytes, 12 buffers), including four non-oldest matching
+victims. All CPU sources are nonzero, destinations change to exactly match and
+all first draw consumers retain those bytes (seven index, five vertex). Six
+copies are 64 KiB and six are 128 KiB. This supplies bounded 1x byte/consumer
+evidence from a normally completed live run. Sustained streaming, GPU-written
+sources, full scenes and clean repeated performance remain outstanding.
+
+The capture is 379,454,509 bytes, SHA256
+`E6E4DE8C55B2680ABF6516DF935365752C5B30EFFE7459CFD933E10DCE053806`.
+The adjacent frame 4635 is 338,631,713 bytes, SHA256
+`C604E2982A8F81FE42CA79592D0B0617FEED113CDC0D39BC512CA6CD0450E023`;
+it contains no marked recycled copies and its audit explicitly fails that
+coverage assertion. It is not another passing proof. Reports are under
+`matching-capture/1x-audit-4634/` and `1x-audit-4635/`; inspect their JSON results
+because the replay process itself returns 0 even on a script assertion.
+
+The presentation diagnostics are committed in SDK
+`202247a233bad7d1cbd93d5b541521f9747132eb`. The candidate/marker GPU DLLs still
+come from the preceding `acd222c` renderer source, whose bytes are unchanged.
+All nine retained runtime files are restored after every probe. No B setting
+is retained or enabled, no OS/debug setting changes, and all failed captures
+and incomplete comparisons remain part of the evidence.
+
+### B4 existing postprocessing hooks: static anchors
+
+The existing default-off `disable_motion_blur` and `disable_depth_of_field`
+settings already enter the generated guest code through
+`config/rexglue/analysis/fh1-post-processing.toml`. An exact loaded-image check
+verifies all four substituted instructions and their generated owners:
+
+| Hook address | Original instruction | Generated owner / immediate behavior |
+| --- | --- | --- |
+| `82D7894C` | `D1030050`, store float f8 to r3+80 | `sub_82D78810`; motion-blur flag skips this store |
+| `8245B494` | `817F18FC`, load r11 from r31+6396 | `sub_8245AEF8`; forcing zero selects the mode-not-2 branch |
+| `8245846C` | `817F18FC` | `sub_82457E98`; forcing zero makes the mode-is-1 boolean false |
+| `8245849C` | `817F18FC` | `sub_82457E98`; forcing zero selects the mode-not-2 branch |
+
+Motion blur's initialization path loads f8 from `8201F194`, whose stored float
+is 500.0. Skipping its later store does not itself prove pass suppression or
+even zero prior field contents. Trace the destination's lifetime/consumers and
+dynamic calls before attributing savings. Depth-of-field callers, skipped
+side effects and actual GPU work also remain unqualified. Local evidence is
+`b4/post-processing-static-anchors.json`, including generated-source hashes.
+These anchors identify existing controls to test individually; they add no
+profile/default, B3 bypass claim, B4 completion or NPC/UI timing qualification.

@@ -3981,3 +3981,15 @@ GPU/lifetime and full scene-set requirements pass. See
 [B execution](B_EPIC_EXECUTION.md#repeated-recycler-comparison-with-process-and-gpu-memory-sampling)
 for all completed results and the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md)
 for the exact next run. No B item or hardware-requirement claim completes here.
+
+The final 1x retained control subsequently skips a scheduled menu pulse, so
+the repeated block is stopped rather than qualified. Wider pulses are a new
+prospective protocol. A normal 1x injected run verifies 12 actual recycled
+copies and first consumers; a preceding capture crash and an adjacent frame
+without marked copies remain explicit limitations. The off control also adds
+eight missing precompiled variants to B1 coverage. SDK `202247a` now logs and
+flushes both presentation/device-loss HRESULTs before the fatal callback.
+This improves attribution, not speed or retention. Static B4 postprocessing
+anchors are checked; actual cost, side effects and NPC/UI timing remain open.
+See the latest B execution/checkpoint for source/binary identities and resume
+order. The full B1-B4 goal is active and experimental recycling stays off.

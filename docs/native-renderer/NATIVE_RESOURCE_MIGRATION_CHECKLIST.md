@@ -148,6 +148,13 @@ with passing input/race-stage/HUD gates and valid process/GPU-memory samples.
 The remaining 1x repeats and all 2x runs are pending at the requested checkpoint.
 Early recycling results remain promising, but later tails and the incomplete
 comparison prevent retention. See the latest checkpoint for exact resume state.
+Follow-up: the final 1x control skips a 100 ms menu pulse, stopping that block.
+A widened-pulse route passes bounded injected checks; one normal 1x capture
+now verifies 12 recycled GPU copies and first consumers. Earlier capture
+device loss remains unresolved, and its control exposes eight precompiled
+shader-variant gaps. Presentation-loss HRESULT logging is added; no renderer
+setting is retained. B execution/checkpoint preserve all failures, new B4 static
+postprocessing anchors and the unchanged full B1-B4 requirements.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.

@@ -4,9 +4,9 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Partial repeated comparison with memory sampling](#latest-handoff-partial-repeated-comparison-with-memory-sampling).
+**Latest handoff:** [Input failure, 1x GPU evidence and device-loss logging](#latest-handoff-input-failure-1x-gpu-evidence-and-device-loss-logging).
 Earlier sections preserve the sequence of experiments; their resume orders and
-source pins are historical. Current SDK pin: `acd222caa04adcc9e2ad8aabf99c09a9a8e12f0e`.
+source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
 ## Retained behavior and current source
 
@@ -545,3 +545,76 @@ EXE `372161...`, both renderer paths `27B486...` and both runtime paths
 saves remain untouched. This documentation checkpoint needs no rebuild;
 validation covers the three completed runs' existing gates, direct runtime
 hashes, tracked Markdown links, repository boundary and `git diff --check`.
+
+## Latest handoff: input failure, 1x GPU evidence and device-loss logging
+
+The repeated 1x block reaches its final retained control, which exits normally
+but skips the 100 ms A pulse at 12 seconds. Five preceding runs pass, including
+the second recycling-on run's early median/p95/p99 of 23.895/26.442/28.388 ms.
+**The preselected block fails its input gate:** keep all six runs under
+`.local/native-renderer/b2/matching-retention/`; do not substitute a passing C2
+or call the incomplete comparison retained. Its 2x block remains unexecuted.
+Detailed results and the skipped input index are in [B execution](B_EPIC_EXECUTION.md#repeated-block-stopped-bounded-1x-gpu-proof-from-a-crashed-capture).
+
+The prospective `wide-menu-pulses.fh1test` in that directory widens all eight
+menu A pulses to 500 ms, preserving their start times, signup, captures and
+motion. Its SHA256 is
+`B8D8D835C2A928888C10DADCD7E599AF3A5B221A2DC757D00894C1CC6BBAEC3C`.
+Two subsequent injected runs deliver every input and pass all seven HUD/pose/
+motion checks. These diagnostic runs are not new clean retention comparisons.
+
+Fresh actual 1x GPU evidence now exists, with important limits:
+
+- First two-frame recycling-on capture `20260910T093402Z-p28600` crashes with
+  graphics-device loss after one saved frame. Its replay checks 40 copies and
+  first consumers, but that does not make the live run pass or explain the crash.
+- Recycling-off control `20260910T093857Z-p8640` completes and writes both
+  frames, but logs eight missing precompiled vertex variants during menu prewarm
+  and seven invalid simulation deltas. Track those keys in B1; this is not an
+  error-free renderer control. The local capture wrappers now require the child
+  game's normal-exit result as well as RenderDoc's exit status.
+- A diagnostic `d3d12_debug`/DRED attempt fails at DXGI factory creation before
+  gameplay. Its owned capture helpers are stopped after the game exits; no OS
+  setting is changed. This startup failure differs from the in-race device loss.
+- With debug disabled and new presentation-error logging, session
+  `20260910T095025Z-p28636` exits normally and passes all input/clock/HUD/motion
+  gates. Frame 4634 verifies 12 nonzero CPU-source copies and first consumers
+  (seven index, five vertex), including four matching victims beyond the oldest.
+  Frame 4635 has no marked copies and adds no reuse proof. The run has six invalid
+  simulation deltas and zero GPU errors/timing drops. The earlier crash remains
+  unresolved; successful repetition with diagnostics is not a cause fix.
+
+SDK `202247a` adds seven lines to the present-result path: log the Present
+HRESULT and `GetDeviceRemovedReason`, then flush before returning GPU loss.
+The presenter can otherwise abort before command-processor diagnostics run.
+The production-path executable check passes success/other-failure classification
+and both loss cases' values/log-flush order. Release runtime build passes;
+the verified diagnostic DLL is
+`6B97FB8B1CF15DBBB1C6A0AD762399F40F3AAFAC1E4D0CB8B818D82DFB8E24CC`
+under `b2/present-loss-verified/`. No renderer default or GPU algorithm changes.
+The initial archive copied the stale top-level DLL; its unchanged hash exposed
+the mistake before use. The corrected build archives the actual build target.
+
+All capture reports, exact source/binary hashes, failures and cleanup evidence
+are in `b2/matching-capture/` and B execution. Captures use EXE `EC2E5F...`,
+marker renderer `43E59C...` and either retained runtime `955BDC...` or the
+explicitly identified diagnostic `6B97FB...`. Clean candidate `3A0B434A...`
+remains the same renderer built from `acd222c`.
+
+**Resume:** resolve the newly observed shader-pack misses and preserve the
+capture-loss investigation. Use the widened-pulse route for fresh prospective
+clean 1x/2x comparisons with one pinned EXE/runtime, all input/stage/HUD gates,
+all phases, memory and every failed run recorded. Do not resume the failed old
+block as if C2 were still pending. Continue changing/streamed/GPU-written
+resource checks and the full B1 scene set. Existing motion-blur/depth-of-field
+hooks now have verified static instruction/owner anchors in
+`b4/post-processing-static-anchors.json`; dynamic cost and side effects still
+need attribution before B4 profile work. B3 pre-packet bypass and NPC/UI timing
+remain open. A6 stays restricted to symmetric 1x; B1-B4 and the goal stay active.
+
+The retained nine-file runtime is restored: EXE `372161...`, both renderer
+paths `27B486...`, both runtime paths `955BDC...`. No game/build/replay remains
+active, and unrelated SDK kernel edits and saves are preserved. New validation
+covers the presentation-path check, Release runtime, bounded replay reports,
+live route gates, release-contract tests, Markdown links, repository boundary,
+direct runtime hashes and whitespace. No preview release or B retention occurs.
