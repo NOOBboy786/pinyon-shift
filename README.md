@@ -135,6 +135,27 @@ disc locally, generates the translation locally, and compiles the executable
 locally. Administrator permission is requested only if Visual Studio Build
 Tools must be installed.
 
+To build on another drive, start the packaged launcher from PowerShell with an
+installation root (use the same setting on subsequent launches):
+
+```powershell
+$env:PINYON_SHIFT_INSTALL_ROOT = 'D:\Games\PinyonShift'
+.\PinyonShiftLauncher.exe
+```
+
+Source, downloaded tools, extracted game data and the default save/cache tree
+will live beneath that folder. Existing installations and saves are not moved;
+an existing `PINYON_SHIFT_STATE_ROOT` override still takes precedence for saves
+and caches. Launchers inside a repository checkout continue to use that checkout.
+This is a custom build location, not a portable binary distribution: Microsoft
+Build Tools still need system-drive space, and generated CMake paths are tied to
+the build location.
+
+If setup fails, `.local/logs/setup-error.json` now includes the failed command's
+exit code, build-log path and last 80 output lines. The complete configure/build
+logs are in the same folder. Include the first actual compiler or CMake error
+when reporting a failure; the final "build failed" line alone cannot identify it.
+
 Supported today: the USA retail base disc, serial `MS-2505`, title ID
 `4D5309C9`. Windows 10/11 x64 and a DirectX 12-capable GPU are required.
 The launcher includes 2× and experimental 3× (4K-class) internal-resolution

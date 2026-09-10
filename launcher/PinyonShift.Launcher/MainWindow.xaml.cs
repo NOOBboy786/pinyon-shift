@@ -415,8 +415,10 @@ public partial class MainWindow : Window
             throw new FileNotFoundException("Keep pinyon-shift-source.zip beside the launcher, or run the launcher from a repository checkout.");
 
         var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "dev";
-        var destination = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PinyonShift", "source", version);
+        var installRoot = Environment.GetEnvironmentVariable("PINYON_SHIFT_INSTALL_ROOT");
+        if (string.IsNullOrWhiteSpace(installRoot))
+            installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PinyonShift");
+        var destination = Path.Combine(Path.GetFullPath(installRoot), "source", version);
         var payloadHash = await Task.Run(async () =>
         {
             await using var stream = File.OpenRead(payload);
