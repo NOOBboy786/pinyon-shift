@@ -1,5 +1,9 @@
 # Combined C1/C2 qualification gate
 
+This is a bounded historical qualification contract, not the current migration
+status. See [current findings](../DEVELOPMENT.md) and the
+[consolidated research](RESEARCH.md) before using its milestone gates.
+
 Status: implementation complete; first clean AppData batch incomplete
 
 The combined gate turns one exact runtime session into a single promotion

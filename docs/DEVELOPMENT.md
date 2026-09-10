@@ -10,17 +10,18 @@ older binary hashes in individual experiment reports describe those experiments.
 | Need | Read |
 | --- | --- |
 | Build or recover an installation | [Building](BUILDING.md), [troubleshooting](TROUBLESHOOTING.md) |
-| Configure experimental graphics | [Graphics settings](experimental-graphics.md) |
+| Configure experimental graphics | [Graphics recovery/settings](TROUBLESHOOTING.md) |
 | Current findings and remaining work | This document and the [resource migration checklist](native-renderer/NATIVE_RESOURCE_MIGRATION_CHECKLIST.md) |
 | Reproduce retained renderer changes | [Owned depth](native-renderer/A6_OWNED_DEPTH_RETENTION.md), [reflection mips](native-renderer/REFLECTION_MIPMAP_REPLACEMENT.md), [Carson cache fix](native-renderer/CARSON_GEOMETRY_CACHE_FIX.md) |
 | Produce and validate artifacts | [Artifact production](native-renderer/P1_ARTIFACT_PRODUCTION.md), [shader pack contract](native-renderer/SHADER_PACK_FORMAT.md), [render tests](native-renderer/FH1_RENDER_TEST_AUTOMATION.md) |
-| Investigate user reports | [September 10 issue review](GITHUB_ISSUE_TRIAGE_2026-09-10.md) |
+| Investigate user reports | [September 10 issue review (historical)](https://github.com/arcanite24/pinyon-shift/blob/53f9bf91b470f37cf7efb21c64dc1f8cce50c4c5/docs/GITHUB_ISSUE_TRIAGE_2026-09-10.md) |
 | Release behavior and distribution | [Changelog](../CHANGELOG.md), [preview notes](releases/0.1.2-preview.3.md), [legal](LEGAL.md) |
 
-The other files in `native-renderer/` are focused contracts or historical
-implementation references. They are not additional active roadmaps. In
-particular, earlier replay/provenance prototypes may describe code since removed
-or moved into ShiftGlue. Check the current source before following their commands.
+The [renderer research reference](native-renderer/RESEARCH.md) consolidates the
+retired replay, provenance, world, vehicle and batching investigations. Exact
+historical documents remain accessible through its Git checkpoint. The remaining
+renderer files describe current formats/procedures, retained changes or explicitly
+bounded historical qualification contracts; they are not competing roadmaps.
 
 ## What the renderer actually does
 

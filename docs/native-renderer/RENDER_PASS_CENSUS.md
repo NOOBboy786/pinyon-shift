@@ -1,5 +1,9 @@
 # Forza Horizon renderer census
 
+This is a bounded historical qualification contract, not the current migration
+status. See [current findings](../DEVELOPMENT.md) and the
+[consolidated research](RESEARCH.md) before using its milestone gates.
+
 This document is the tracked evidence ledger for NR-00. It records facts about
 the supported USA retail MS-2505 executable only. Unknowns stay explicit until
 a trace or disassembly proves them.
@@ -113,7 +117,7 @@ read or serialize guest memory.
 
 The ten proved wrapper entries, all 72 static direct calls, one proved tail-
 forwarded correlation edge, and explicit semantic unknowns are recorded in
-[`HIGH_LEVEL_RENDER_HOOKS.md`](HIGH_LEVEL_RENDER_HOOKS.md).
+[`HIGH_LEVEL_RENDER_HOOKS.md`](https://github.com/arcanite24/pinyon-shift/blob/93742f2a7d2faff399b95c3e0c99e61eb1c25c1e/docs/native-renderer/HIGH_LEVEL_RENDER_HOOKS.md).
 
 Resolve-to-texture dependency tracking is documented in
 `GUEST_VISIBLE_RENDER_DEPENDENCIES.md`. The evidence-based classifier and scene
@@ -140,7 +144,7 @@ festival scene and remain explicitly unclassified pending repeated marked
 scene coverage.
 
 Candidate-specific index, vertex-layout, blend, depth, and raster metadata is
-documented in [`CANDIDATE_DRAW_SELECTION.md`](CANDIDATE_DRAW_SELECTION.md).
+documented in [`CANDIDATE_DRAW_SELECTION.md`](https://github.com/arcanite24/pinyon-shift/blob/93742f2a7d2faff399b95c3e0c99e61eb1c25c1e/docs/native-renderer/CANDIDATE_DRAW_SELECTION.md).
 It is a local NR-02 shortlist only and does not change the NR-00 classifier or
 open Gate B.
 
@@ -152,13 +156,13 @@ Title-side candidate aggregation preserves minimum/maximum index counts and
 minimum index allocation length across census windows. The deterministic
 contract builder independently decodes and validates the captured declaration
 without reading guest payloads. Qualification details are in
-[`GEOMETRY_CONTRACT.md`](GEOMETRY_CONTRACT.md); Xenos remains authoritative.
+[`GEOMETRY_CONTRACT.md`](https://github.com/arcanite24/pinyon-shift/blob/93742f2a7d2faff399b95c3e0c99e61eb1c25c1e/docs/native-renderer/GEOMETRY_CONTRACT.md); Xenos remains authoritative.
 
 ## NR-02C draw-state extension
 
 Used shader constants plus texture-fetch and sampler state are captured by the
 bounded NR-02C observer and decoded as described in
-[`DRAW_STATE_CONTRACT.md`](DRAW_STATE_CONTRACT.md). This state remains
+[`DRAW_STATE_CONTRACT.md`](https://github.com/arcanite24/pinyon-shift/blob/93742f2a7d2faff399b95c3e0c99e61eb1c25c1e/docs/native-renderer/DRAW_STATE_CONTRACT.md). This state remains
 register-only; the census still performs no guest resource payload reads.
 The deterministic inventory also retains every emitted resolve target so the
 candidate selector can reject any captured base or mip address inside a known

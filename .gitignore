@@ -24,14 +24,10 @@ private/
 !/docs/LEGAL.md
 !/docs/TROUBLESHOOTING.md
 !/docs/DEVELOPMENT.md
-!/docs/GITHUB_ISSUE_TRIAGE_2026-09-10.md
-!/docs/experimental-graphics.md
 !/docs/releases/
 !/docs/releases/*.md
 !/docs/native-renderer/
 !/docs/native-renderer/**
-!/docs/upstream/
-!/docs/upstream/*.md
 
 # Build output and tooling state.
 build/

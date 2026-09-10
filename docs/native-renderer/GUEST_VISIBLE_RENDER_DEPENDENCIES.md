@@ -1,5 +1,9 @@
 # Guest-visible render dependencies
 
+This is a bounded historical qualification contract, not the current migration
+status. See [current findings](../DEVELOPMENT.md) and the
+[consolidated research](RESEARCH.md) before using its milestone gates.
+
 This is the evidence ledger for NR-00D on the supported USA retail MS-2505
 executable. It describes what the renderer census proves, what remains unknown,
 and which unknowns block future draw or resolve suppression.
@@ -161,7 +165,7 @@ that may be inferred from the absence of a texture-fetch match.
 ## Exact-family follow-up
 
 The retained sky/horizon pair now has a family-specific resolve-to-consumer
-inventory in [PASS_CONSUMER_GRAPH.md](PASS_CONSUMER_GRAPH.md). The latest
+inventory in [PASS_CONSUMER_GRAPH.md](https://github.com/arcanite24/pinyon-shift/blob/93742f2a7d2faff399b95c3e0c99e61eb1c25c1e/docs/native-renderer/PASS_CONSUMER_GRAPH.md). The latest
 qualified open-world run linked six rotating resolve destinations to 63
 distinct prepared later-draw signatures across 38 shader families without
 overflowing the bounded signature table or missing prepared metadata. This
@@ -170,12 +174,12 @@ because those consumers have not yet been replaced.
 
 The same session armed all 348 exact-family resolve generations and observed
 zero guest CPU reads or writes. This promotes the scene-bounded CPU visibility
-gate to `pass`; [GUEST_CPU_VISIBILITY.md](GUEST_CPU_VISIBILITY.md) records the
+gate to `pass`; [GUEST_CPU_VISIBILITY.md](https://github.com/arcanite24/pinyon-shift/blob/93742f2a7d2faff399b95c3e0c99e61eb1c25c1e/docs/native-renderer/GUEST_CPU_VISIBILITY.md) records the
 full boundary and hashes. It does not convert absence in this route into a
 global claim about other scenes.
 
 NR-04D evaluates these unknowns per exact pass family with the fail-closed
-admission contract in [SUPPRESSION_ADMISSION.md](SUPPRESSION_ADMISSION.md).
+admission contract in [SUPPRESSION_ADMISSION.md](https://github.com/arcanite24/pinyon-shift/blob/93742f2a7d2faff399b95c3e0c99e61eb1c25c1e/docs/native-renderer/SUPPRESSION_ADMISSION.md).
 Neither this aggregate census nor a visually correct native output can bypass
 those family-specific gates.
 
