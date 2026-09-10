@@ -180,3 +180,39 @@ setjmp/longjmp addresses are scoped inside a hook table, so the root-only SDK
 parser ignores them. No fix or renderer-crash causality is claimed. A corrected
 scope needs a non-local-jump contract/regression and a newly qualified EXE;
 do not merge that change silently into renderer measurements.
+
+
+## Follow-up: CRT configuration correction and visual coverage gap
+
+The CRT addresses are corrected to TOML root scope. Release code generation
+now emits the existing semantic helpers at nine setjmp and eight longjmp sites.
+The parsed-config regression and optimized helper/state-restoration check pass.
+Replacement is at callers; retaining raw CRT definitions in generated output
+does not mean the configuration is ignored. See [B execution](B_EPIC_EXECUTION.md)
+for the checked contract and uncovered cases.
+
+Corrected EXE `C24D88DCF4C3F6564BE40A4B63046BACBBFB1E0BD7329983617DEF8ED8CD4CC8`
+passes bounded Recaro race entry/hold/motion smoke checks at 1x and 2x, with
+retained renderer `27B486...`, runtime `955BDC...` and producer tracing off.
+Both runs exit 0. Two invalid simulation-delta samples and one startup device
+path error recur in the earlier retained control too; they remain explicit.
+These runs do not qualify performance, full-race streaming or NPC/UI timing.
+
+Image review adds a concrete B1 gap: corrupted car-selection thumbnails at
+`event-step-1`, also visible in the earlier retained control. Race images pass
+their bounded checks; menu correctness remains open. Attribute this thumbnail
+resource chain instead of treating race HUD checks as whole-route visual proof.
+
+Candidate, logs, images, source/caller audits and test results are preserved
+under `.local/native-renderer/b3/crt-scope/`. Retained EXE `372161...` and both
+retained renderer DLL paths are restored. No renderer defaults change, and no
+new speedup, release or B-item completion is claimed. The full B1-B4 scope and
+prior rejected evidence remain authoritative. Use an explicitly pinned EXE for
+the next matched comparison; this correctness fix changes generated call sites.
+
+Validation for this follow-up: Release build, generated CRT round-trip check,
+all 600 tooling tests, tracked Markdown links and repository boundary check
+(505 files, zero violations) pass. No game, compiler or replay remains active.
+
+Source fix: `d36af3d`; SDK remains `261dd6a`. Unrelated local SDK kernel
+profiling changes remain uncommitted and excluded from this checkpoint.

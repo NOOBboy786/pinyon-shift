@@ -104,6 +104,9 @@ live clear-producer attribution (about 0.03-0.045 ms/frame median in the local
 scene); downstream decode attribution and actual pre-packet bypass remain open.
 See the [current checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md).
 All B items remain open.
+B1 also tracks corrupted car-selection thumbnails, present in the retained
+control and corrected-CRT probes. The separate CRT configuration correction
+passes bounded 1x/2x race smoke checks; it completes no B item.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.

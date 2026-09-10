@@ -3871,3 +3871,20 @@ it completes with a fixed 68..103-second pose and verified race HUD/motion.
 One probe is not matched performance or sustained streaming evidence. Use it
 to establish representative cost/repeatability, while preserving the entire
 B1 scene set and every B2/B3/B4 completion requirement.
+
+
+## B follow-up: CRT correction and thumbnail coverage (2026-09-10 UTC)
+
+The separate CRT scope defect is corrected and bounded 1x/2x race smoke checks
+pass on candidate EXE `C24D88...`. Existing simulation-delta observations and
+startup errors remain documented; no performance or renderer-crash fix is
+claimed. Baseline EXE `372161...` and retained DLL `27B486...` remain staged.
+See [B execution](B_EPIC_EXECUTION.md) and the
+[checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md) for exact identities.
+
+The Recaro car-selection screen has visibly corrupted thumbnails in both the
+retained 1x control and corrected 1x/2x runs. Add its producer/upload/consumer
+chain to B1's unresolved menu coverage. This is a correctness observation, not
+cost attribution or evidence for widening native admission. All B items remain
+open; the prior containment rejection and small clear-producer CPU opportunity
+still determine the next implementation choices.

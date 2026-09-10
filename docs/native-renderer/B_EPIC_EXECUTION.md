@@ -860,9 +860,10 @@ script, logs, images, hashes and contact sheet are in
 
 The existing `setjmp_address` / `longjmp_address` entries in `main-xex.toml`
 parse inside the scene-observer `[[midasm_hook]]`, rather than at the TOML root.
-The SDK parser reads these scalar keys only at the root. The current generated
-CRT functions therefore still contain raw guest instruction bodies instead of
-the configured semantic context hooks. Parsed data at checkpoint `f613ed0` and
+The SDK parser reads these scalar keys only at the root. Before the correction
+below, generated direct callers still invoke the raw CRT functions instead of
+the semantic helpers. Replacement happens at call sites; the original CRT
+definitions may remain in generated output. Parsed data at `f613ed0` and
 the current source confirm this predates the clear trace; new hook blocks were
 placed after the old metadata to preserve its existing scope during the probe.
 Evidence: `b3/crt-config-scope-observation.json`.
@@ -872,3 +873,57 @@ of the earlier renderer null read or timeout. It is not fixed in the trace
 experiment. Before broad new qualification, verify the target contract and add
 a parsed-config/non-local-jump round-trip regression, then qualify any rebuilt
 EXE. Preserve the existing renderer evidence and exact binary identities.
+
+
+#### CRT scope correction and bounded runtime checks
+
+The two CRT addresses now precede all tables in `main-xex.toml`, enabling the
+existing SDK implementation. This changes nine direct setjmp sites and eight
+longjmp sites in six caller functions. Each observed setjmp caller has one
+site. No new jump implementation or renderer setting is introduced.
+
+`tools/tests/test_nonlocal_jump_config.py` fails on the old table scope and
+passes on the corrected root scope. After Release code generation,
+`tools/check-nonlocal-jumps.py --compiler <clang++>` checks all 17 transformed
+sites and compiles their actual emitted sequences and generated SDK helpers
+against the SDK PPCContext at `-O2`. It passes initial/nonzero returns,
+zero-to-one normalization, negative values, stack/nonvolatile GPR, FPR, vector,
+CR/XER/LR/CTR restoration, nested frames, guest-memory side effects, key reuse
+and thread isolation. This bounded contract does not establish indirect raw
+CRT entry, guest jump-buffer byte compatibility, every unwind path or host
+profiling-scope unwinding. The normal build has guest-function Tracy zones off.
+
+Candidate EXE SHA256:
+`C24D88DCF4C3F6564BE40A4B63046BACBBFB1E0BD7329983617DEF8ED8CD4CC8`.
+The Release build succeeds; source hashes and generated caller audit are in
+`.local/native-renderer/b3/crt-scope/`. Both live runs use retained renderer
+`27B486...` and runtime `955BDC...`, with clear-producer tracing explicitly off.
+They complete the 130-second Recaro race entry/hold/motion route and exit 0:
+
+| Scale | Session | Stationary drift | Moving distance | Stopped distance |
+| --- | --- | ---: | ---: | ---: |
+| 1x | `20260910T054251Z-p20300` | 0.000122 m | 16.73 m | 49.97 m |
+| 2x | `20260910T054530Z-p25316` | 0 m | 16.99 m | 49.32 m |
+
+All race HUD checks pass. Sampled race scenery, car and HUD are intact; moving
+images show 32/31 km/h. This is bounded smoke qualification, not a completed
+race, sustained streaming test, matched performance result or NPC/UI timing
+qualification. Both sessions have zero GPU errors and timing drops, but two
+invalid simulation-delta samples and a startup `ResolvePath(\Device)` error.
+Retained control `20260910T051524Z-p27136` has the same counts/message; invalid
+samples occur at approximately 7.14/43.69 seconds of summed frame time in all
+three runs. Preserve these observations; do not report wholly clean timing.
+
+**B1 visual defect:** car-selection thumbnails show patterned corruption in
+`event-step-1` at both scales. The earlier retained 1x control has the same
+defect, confirmed in `crt-scope/car-select-control.png`; it predates this CRT
+scope correction. Track the thumbnail producer/upload/consumer chain explicitly.
+Passing race HUD checks do not establish menu visual correctness.
+
+The corrected EXE is archived; baseline EXE `372161...` and retained renderer
+remain staged for continuity with existing performance evidence. The CRT
+correction has no established connection to earlier renderer crashes and earns
+no rendering speedup or B-item completion. Continue B1's full chain inventory,
+B2 mutation/streaming and work reduction, B3 producer bypass, and B4 profile/
+timing qualification. Before using the corrected EXE for performance claims,
+preselect and record it as a distinct baseline.
