@@ -111,7 +111,7 @@ class BuildFh1GpuPrewarmTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "creation_threads_.size() < creation_thread_needed_count", source
+            "StartCreationThreads(creation_thread_needed_count)", source
         )
         self.assertIn(
             "blocking && creation_threads_busy_ != 0", source

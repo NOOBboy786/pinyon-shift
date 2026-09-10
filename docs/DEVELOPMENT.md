@@ -2,7 +2,7 @@
 
 Consolidated from the development records at `53f9bf9` (2026-09-10).
 This is the current starting point for development, not a release announcement.
-The source pins ShiftGlue `d3fc988bd428e4c7e115f45fe6afa42dfa9e0464`;
+The source pins ShiftGlue `7349a0951ebf2bb55720f8bf2e855bb1677ec990`;
 older binary hashes in individual experiment reports describe those experiments.
 
 ## Documentation map
@@ -86,6 +86,25 @@ comparison hoping for a better result:
 - A scaled accumulator presentation experiment is preserved on
   `arcanite24/scaled-accumulator-presentation` at `0e0a42b`, explicitly not for
   merge. It is not a missing production fix.
+
+## Startup correctness: AUD-01 and AUD-02
+
+- AUD-01: queue signaling and event registration check their HRESULTs separately.
+  Fence waits recheck completion after stale wakes/timeouts, check device loss,
+  and respect worker cancellation. Failed waits propagate to callers without
+  retiring pending submissions; shutdown explicitly drains outstanding work.
+- AUD-02: prewarm uses the selected pipeline set, saturates the background-worker
+  subtraction, and respects CPU/configured worker limits. Empty selections skip
+  work without skipping storage finalization. Thread-creation failure uses the
+  remaining workers/processor thread; cancellation stops adding work. An empty
+  requested set is distinguished from missing requested pipeline hashes.
+- Validation: `python tools/check-fh1-startup.py` compiles the actual production
+  methods/selection block with deterministic failure fakes. Release renderer
+  build and installed-AppData startup/shutdown pass (session
+  `20260910T224536Z-p3184`, exit 0, one scheduled capture, 452 PSOs created).
+  Tested renderer SHA256: `C681D4A4660F08A29C4DCDD88547BA54709E08D868A104CD2336D1063F27162E`.
+  No gameplay-performance or full device-loss lifecycle claim is made; AUD-03
+  remains separate. Raw evidence is local under `.local/aud-01-02/`.
 
 ## Non-renderer findings
 
