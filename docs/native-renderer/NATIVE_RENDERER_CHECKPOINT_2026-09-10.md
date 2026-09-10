@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Mip history proof and measured work reduction](#latest-handoff-mip-history-proof-and-measured-work-reduction).
+**Latest handoff:** [1x mip proof and failed 2x admission](#latest-handoff-1x-mip-proof-and-failed-2x-admission).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
@@ -1310,3 +1310,49 @@ source baselines and the complete 1x shader pack. Retained EXE `372161...`, GPU
 `27B486...`, runtime `955BDC...`; unrelated SDK dirt and saves are preserved.
 Main before checkpoint is `b63723a`, SDK `202247a`. This is another evidence
 checkpoint, with no retained B setting, preview release or tag.
+
+## Latest handoff: 1x mip proof and failed 2x admission
+
+The native mip prototype now passes a bounded 1x shared-memory publication
+check. A legacy control establishes the actual 256-square, six-face, nine-mip
+layout. The optimized standalone 1x kernel matches the complete CPU fixture,
+preserves base/padding/guards and responds to changed input. Its isolated
+eight-dispatch median is 0.014336 ms on RTX 4080, excluding gameplay costs.
+
+The combined 1x/2x candidate builds successfully. Normal 1x session
+`20260910T180734Z-p32316` records 634 complete frames, 3,804 face lists and
+30,432 removed mip draws plus 30,432 removed resolve copies. Separate capture
+`20260910T180849Z-p30408`, frame 1493, proves 48 native dispatches, zero legacy
+mip draws, CPU-exact output over 2,211,840 bytes, all 54 imported subresources
+and a subsequent cube binding. Base and non-mip bytes are unchanged.
+This does not extend the earlier 2x scratch-history proof to 1x.
+
+**The new candidate's 2x admission check fails.** Session
+`20260910T181130Z-p27232` reaches the stopped Recaro scene and exits normally,
+but records zero native admissions while legacy mip work remains. The proposed
+follow-up capture stops at its admission gate before launching or creating a
+capture. No new 2x GPU proof exists. Preserve this run and diagnose actual
+submitted lists and rejection guards; neither changed command contents nor
+a particular guard has been established as the cause. Do not rerun unchanged
+until favorable or count earlier binaries' passing captures as this regression
+check. Existing content-checker regression tests on old captures still pass.
+
+Candidate GPU `62B7F109...`, EXE `7EA829...`, runtime `955BDC...`.
+[B execution](B_EPIC_EXECUTION.md#1x-native-mip-publication-and-failed-dual-scale-admission)
+records full identities, sessions, local tools, evidence and review gaps.
+The local captured-list prototype remains diagnostic; all 2,352 original
+packets per cube still decode. No new B setting is retained.
+
+**Resume:** diagnose the new 2x admission failure, qualify 1x scratch history,
+then establish semantic/external-data/lifetime admission and actual pre-packet
+producer bypass. Full scene coverage, mutation/streaming/reuse/destruction,
+sustained motion, NPC/UI timing and clean matched tails/memory remain required.
+All B1-B4 items stay open; A6 stays symmetric-1x-only and both stopped
+comparisons remain stopped.
+
+Fresh checkpoint validation confirms nine retained runtime files and backups,
+eighteen restored source baselines and the complete staged 1x pack. EXE
+`372161...`, GPU `27B486...`, runtime `955BDC...`; no game/build/replay remains
+active. Main before checkpoint is `89ff2cb`, SDK `202247a`; unrelated SDK dirt
+and saves are preserved. This checkpoint goes to remote `dev` without a new
+preview release or tag. The B goal is paused at this checkpoint.

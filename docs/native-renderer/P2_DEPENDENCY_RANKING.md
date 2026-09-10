@@ -4187,3 +4187,16 @@ mip replacement; it is not whole-frame or clean retention evidence. Native
 preparation, remaining packet decoding/clears, 1x, production lifetime admission
 and every broader B gate remain open. See
 [captured history and live cost](B_EPIC_EXECUTION.md#mip-scratch-history-proven-and-live-work-cost-measured).
+
+A new 1x kernel/publication check now proves 48 native dispatches, CPU-exact
+output over 2,211,840 shared-memory bytes, all 54 imported cube subresources
+and a later consumer binding. Its normal run removes 30,432 mip draws and
+resolve copies over 634 complete frames. The same combined candidate's first
+2x run reaches the scene but admits **zero native work**, so its 2x regression
+check fails and the planned capture does not launch. Diagnose actual lists
+and admission guards before proceeding; earlier binaries' passing 2x captures
+do not qualify this one. See
+[1x proof and 2x failure](B_EPIC_EXECUTION.md#1x-native-mip-publication-and-failed-dual-scale-admission).
+1x scratch history, production admission/lifetime, upstream packet removal,
+motion and clean matched retention remain open. No new setting is retained;
+the broader depth/transfer priorities and all B1-B4 gates are unchanged.

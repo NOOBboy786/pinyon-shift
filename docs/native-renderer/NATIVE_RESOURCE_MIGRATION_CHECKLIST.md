@@ -197,9 +197,14 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   explain the outside-clear differences and prove those captured transfers.
   One same-binary 2x diagnostic pair reduces median six-list GPU cost from
   1.075200 to 0.100352 ms and CPU cost from 0.4011 to 0.1980 ms. This is not
-  frame-time retention. Production lifetime admission, 1x and clean matched
+  frame-time retention. Production lifetime admission and clean matched
   qualification remain open. See
   [history and cost evidence](B_EPIC_EXECUTION.md#mip-scratch-history-proven-and-live-work-cost-measured).
+  A later 1x check proves exact native shared-memory output, all 54 cube imports
+  and a bound consumer. Its normal run removes 30,432 mip draws/resolve copies.
+  The combined candidate's 2x run admits zero native work; preserve and diagnose
+  that failed check. 1x scratch history and all broader retention gates remain
+  open. See [1x proof and 2x failure](B_EPIC_EXECUTION.md#1x-native-mip-publication-and-failed-dual-scale-admission).
 - [ ] **B3 — Bypass obsolete guest command generation.** For covered chains,
   replace the producer path before packet emission where its contract permits.
   **Done:** less command generation/decoding is measured, and queries, fences,
