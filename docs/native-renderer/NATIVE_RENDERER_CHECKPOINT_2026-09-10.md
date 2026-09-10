@@ -964,3 +964,29 @@ two corrected diagnostic failures. All replays have terminated; no game run or
 production behavior change occurred. Runtime/source hashes and the complete
 1x pack remain retained. Main before this checkpoint is `900c9bc`, SDK
 `202247a`; unrelated dirt and saves are preserved. B1-B4 remain active.
+
+## Latest handoff: checkpoint before glass texture history capture
+
+A local texture-history diagnostic now builds successfully. It records all
+resolve publications and selected cube/2D creation, load and invalidation
+events from startup, to investigate whether the glass inputs' required ranges
+are available before import. CPU event order cannot establish GPU completion
+or explain the failed image by itself. The earlier failed build is preserved.
+
+Diagnostic GPU SHA256 is
+`F4E08085CE577B202D383FE99139B128440246322C83BF6D989C64C2F8C00871`.
+Evidence and the prospective route/plan are local under
+`.local/native-renderer/b2/glass-history-profile-v2/`. **No live run has started.**
+Finish the capture controller's partial-image/result checks, then use the
+existing `run-hud-glass-capture.ps1 -History` runner for a separate diagnostic.
+[B execution](B_EPIC_EXECUTION.md#glass-texture-history-diagnostic-built-live-capture-pending)
+records the source path, event scope, exact identities, validation and resume
+requirements. Both stopped comparisons and their failures remain preserved.
+
+Checkpoint preflight verifies all nine retained runtime files and backups,
+ten restored sources, the diagnostic binary/route and complete staged 1x pack.
+Three PowerShell script syntax checks pass. Retained EXE `372161...`, GPU
+`27B486...`, runtime `955BDC...`; no game/build/replay is active. Main before
+this checkpoint is `2690045`, SDK `202247a`. Unrelated SDK dirt and saves are
+preserved. No new performance setting or production fix is retained; A6 stays
+symmetric-1x-only, recycling stays off, and B1-B4 remain active.

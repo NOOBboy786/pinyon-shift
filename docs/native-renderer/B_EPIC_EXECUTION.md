@@ -2570,3 +2570,59 @@ copies, using the glass shader pair and fetch identities as diagnostic anchors.
 Obtain actual artifact contents before changing resource history or claiming a
 correction. Keep both stopped comparisons stopped and every B requirement open.
 The retained runtime, source hashes and complete 1x pack remain unchanged.
+
+### Glass texture history diagnostic built; live capture pending
+
+The next attribution question is whether the glass inputs have the required
+resolved face/mip contents before import. The shared texture cache marks
+overlapping 4 KiB pages as scaled-resolved and selects a scaled texture key
+when either its base or mip range overlaps. The D3D12 load then uses the full
+requested base/mip ranges, including cube slices. This is a path to inspect,
+not evidence that partial publication caused the failed 2x image.
+
+A local one-file diagnostic in `src/graphics/pipeline/texture/cache.cpp`
+records resolve publications from startup and creation, load, retry and watch
+invalidation events for canonical-format-7 256x256 cubes and format-6 1280x720
+2D textures. It selects all matching addresses and scales, rather than relying
+on the earlier session's guest addresses. Each 160-byte `<20Q` record includes
+resource/range identity, base/mip load flags, scaled state, sequence and source
+frame. Watch callbacks use submission zero to avoid reading GPU-thread state
+on a CPU callback. These observations establish CPU call order, not GPU
+completion or valid texture contents. A write failure or the one-million-record
+limit rejects the trace; pointer reuse requires a new creation generation.
+
+The corrected Release GPU build succeeds with SHA256
+`F4E08085CE577B202D383FE99139B128440246322C83BF6D989C64C2F8C00871`.
+The first build failed because a free helper named the protected nested
+`Texture` type; the corrected helper deduces its argument type. Both build
+outputs remain preserved. All modified source and runtime files were restored.
+No diagnostic gameplay run has started, so there is no new session, texture
+history, captured failure, performance result or retained renderer change.
+
+Local evidence under `.local/native-renderer/b2/glass-history-profile-v2/`
+contains the build log, source snapshot/patch, binary/source manifests, record
+format, plan, route and `checkpoint-preflight.json`. The failed build remains
+in `glass-history-profile/`. The existing capture runner and child/controller
+now accept the separate history output. Their PowerShell syntax checks pass;
+the controller's partial-image handling and result checks still need validation
+before the first launch. Reusable helpers are `make-glass-history-profile.py`,
+`build-glass-history-profile.ps1`, `run-hud-glass-capture.ps1` and
+`hud-glass-capture-{launch.ps1,control.py}` in the enclosing `b2` directory.
+Generated sources, binaries and capture evidence remain local.
+
+**Resume:** finish those controller checks, then run the separate diagnostic
+with `run-hud-glass-capture.ps1 -History`. Use its pinned 66-second route
+(`6E8DBADF6E66C008C4D1E6A9955CEB054A819591835AEE22824BD2316C53C0E9`),
+HUD-admission EXE `20EE2F...`, runtime `6B97FB...` and the new diagnostic GPU.
+Require terminal launch/controller results, normal game exit, input/clock
+checks and an uncapped complete history before analysis. Correlate range
+publication and selected texture generations with captured glass bindings;
+a clean reference still cannot replace the failed benchmark. Restore the
+retained runtime and stage the complete 1x pack after the diagnostic.
+
+At this checkpoint all nine retained runtime files and their backups, ten
+previously instrumented sources, the new diagnostic binary/route and the staged
+complete 1x pack pass direct identity checks. No game, build or replay is
+active. Main before this checkpoint is `2690045`, SDK `202247a`; unrelated SDK
+dirt and saves remain preserved. Both comparisons stay stopped, A6 remains
+symmetric-1x-only, and B1-B4 remain open. No preview release is published.

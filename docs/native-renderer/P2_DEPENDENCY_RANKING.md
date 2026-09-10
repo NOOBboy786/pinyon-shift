@@ -4077,3 +4077,12 @@ fetch 13 (`1CE2D000`). The clean frame has no cube writes, so earlier production
 and publication are the next resource-history targets. This adds diagnostic
 anchors, not a measured optimization or failed-frame attribution. See
 [reference glass inputs](B_EPIC_EXECUTION.md#reference-glass-inputs-and-fixed-function-renderer-scope).
+
+A follow-up texture-history diagnostic now builds and remains local. It will
+record resolve ranges and selected glass-input creation/load/invalidation from
+startup to inspect publication before import. No live history run has started;
+CPU event order alone cannot establish valid GPU contents or failure causality.
+The retained runtime and complete 1x pack are verified restored. See the
+[pending diagnostic](B_EPIC_EXECUTION.md#glass-texture-history-diagnostic-built-live-capture-pending)
+for exact build identity, remaining controller checks and the next command.
+Both comparisons remain stopped and all B1-B4 requirements remain open.
