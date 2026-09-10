@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [In-game native mip publication](#latest-handoff-in-game-native-mip-publication).
+**Latest handoff:** [Native mip work replacement](#latest-handoff-native-mip-work-replacement).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `202247a233bad7d1cbd93d5b541521f9747132eb`.
 
@@ -1220,3 +1220,54 @@ sources and the complete 1x pack. Retained EXE `372161...`, GPU `27B486...`,
 runtime `955BDC...`; no game/build/replay is active. Main before checkpoint is
 `dfd82b2`, SDK `202247a`. Unrelated SDK dirt and saves are preserved; A6 remains
 symmetric-1x-only and both stopped comparisons remain stopped.
+
+## Latest handoff: native mip work replacement
+
+A separated-trigger capture now proves native output changes with its base
+contents: 727,644 changed base bytes and 241,086 changed mip-storage bytes in
+one process. Both outputs match the CPU reference. Only the first capture
+contains the downstream cube import/consumer; the later one ends after native
+writes. Two intervening presentation-only captures remain explicit coverage gaps.
+
+A new bounded 2x prototype replaces the legacy mip rendering and resolve-copy
+work while executing the original state/event packets and resolve-clear path.
+Its normal run records 4,368 face lists, with 34,944 mip draws and 34,944 copies
+suppressed. A separate GPU capture confirms 48 native per-face dispatches,
+zero draws of the legacy mip pair, exact CPU/native output over 8,847,360 bytes,
+and all 54 imported cube subresources matching the native buffer. The first
+checked subsequent consumer binds the resulting cube.
+
+**History is not yet qualified.** All 48 scratch clears match the control in
+sequence, values and rectangles; the cleared pixels match. However, 8,192
+scratch pixels differ outside those rectangles, at x=256–319, y=32–255.
+These are different runs, so neither a regression nor harmless padding is
+established. Trace ownership and subsequent reads before claiming preservation.
+The shared `RenderTargetCache::PrepareHostRenderTargetsResolveClear` in
+`src/graphics/pipeline/render_target/cache.cpp` calls `ChangeOwnership` with
+the clear rectangle; the remaining question includes partial-tile transfers.
+
+Candidate GPU `FD91E36E...`, producer EXE `7EA829...`, runtime `955BDC...`.
+Exact identities, sessions, event/content checks, preserved inspector failure
+and local reproduction tools are in
+[B execution](B_EPIC_EXECUTION.md#native-mip-work-replacement-and-unresolved-scratch-history).
+The local fixture uses exact captured command lists and fixed diagnostic
+admission. Its sources/patches and game-derived data remain under
+`b2/reflection-mip-replacement-v1/`; this documentation checkpoint does not
+install or publish that prototype. Production identity/external-data/lifetime
+admission remains required. All 2,352 original packets are still decoded per
+full cube, so **B3 pre-packet producer bypass is still unimplemented**.
+
+**Resume:** resolve scratch ownership/history first, then establish semantic
+admission, 1x contents, lifetime and safe upstream producer bypass. The normal
+run's 20-second still has been reviewed; the new capture's still, sustained
+motion, NPC/UI timing, broader scenes and clean matched tails/memory remain
+unqualified. No in-game performance gain or lower requirement is claimed.
+Both stopped comparisons stay stopped; A6 remains symmetric-1x-only and all
+B1-B4 completion gates stay open.
+
+Checkpoint preflight verifies all nine retained runtime files and backups,
+eighteen restored source baselines and the complete staged 1x shader pack.
+Retained EXE `372161...`, GPU `27B486...`, runtime `955BDC...`; every build,
+game and replay handle is terminal. Main before checkpoint is `3c9b713`, SDK
+`202247a`; unrelated SDK dirt and saves are preserved. No preview release or
+tag is made. Validation is recorded in the checkpoint commit body.

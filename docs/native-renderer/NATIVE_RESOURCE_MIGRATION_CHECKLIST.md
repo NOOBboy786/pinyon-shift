@@ -190,10 +190,20 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   producer/resource contract alongside larger depth/transfer chains before
   implementing a replacement. These diagnostic costs qualify no retained
   optimization. See [CPU and mip attribution](B_EPIC_EXECUTION.md#cube-cpu-cost-and-reflection-mip-pass-attribution).
+  Follow-up: changing-input native publication passes a bounded 2x check.
+  An experimental replacement removes the 48 legacy mip draws/resolve copies
+  in a captured frame, with correct native buffer and cube import contents.
+  All 48 scratch clears match, but differing pixels outside their rectangles
+  require ownership/history investigation. Production lifetime admission, 1x
+  and clean performance retention remain open. See
+  [replacement evidence](B_EPIC_EXECUTION.md#native-mip-work-replacement-and-unresolved-scratch-history).
 - [ ] **B3 — Bypass obsolete guest command generation.** For covered chains,
   replace the producer path before packet emission where its contract permits.
   **Done:** less command generation/decoding is measured, and queries, fences,
   memory export and other guest-visible behavior remain correct.
+
+  The mip replacement still submits six cached guest lists and decodes all
+  2,352 packets per cube. Its downstream work removal does not complete B3.
 
   Current qualification blocker: matched slot lifetimes show HUD lists already
   empty before finalization. A rejected enqueue probe's checked prefix links

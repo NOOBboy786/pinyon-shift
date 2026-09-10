@@ -3178,3 +3178,121 @@ submission bypass; this duplicate-work publication diagnostic retains no speedup
 Broader scenes, streaming/partial writes/reuse/destruction, motion/NPC timing,
 matched tails/memory and every B1-B4 completion gate remain open. Both failed
 retention comparisons remain stopped, and A6 stays symmetric-1x-only.
+
+## Native mip work replacement and unresolved scratch history
+
+The separated-trigger publication session `20260910T165110Z-p18048` completes
+normally, with all ten inputs and three capture clocks passing. The unchanged
+publication candidate still runs the original mip work. Its two scheduled
+triggers, `glass-18.ppm,glass-22.ppm`, produce four captures, all inventoried:
+
+| Capture / index | Actions | Native dispatches | Cube copies | Checked scope |
+| --- | ---: | ---: | ---: | --- |
+| 1479 / 0 | 5,610 | 8 | 54 | Native buffer, imported cube and bound consumer |
+| 1480 / 1 | 5 | 0 | 0 | Presentation only |
+| 1481 / 2 | 4 | 0 | 0 | Presentation only |
+| 1482 / 3 | 1,077 | 8 | 0 | Native writes; capture ends before cube import |
+
+Between the two active captures, **727,644 base bytes and 241,086 mip-storage
+bytes change**. Both complete 8,847,360-byte outputs match an independent CPU
+reference. This is bounded changing-input evidence in one process, not proof
+of streaming, partial writes, allocation reuse/destruction or a second consumer.
+The observed maximum RGB difference from current legacy output is 3/1,023 in
+the first active capture and 2/1,023 in the later one. Full output SHA256 values:
+
+- `2D57B5FCF32E53905232DC7459106EEEA305C122896ECC39D7A67CAD261E307D`.
+- `B4B78478E65637289285A66D9E521F8699463E02621416746C939B9ED5848D84`.
+
+Evidence: `b2/reflection-mip-publication-capture-v4/`, including
+`capture-inventory.json`, `changing-input-check.json`, `chain/`, `chain-3/`,
+`native-publication/` and `native-publication-3/`. The native-only export/check
+explicitly requires that scope; presentation-only captures are not discarded.
+
+The new local `make-mip-replacement-profile.py` builds on the previous
+publication fixture. It admits only six exact captured 6,944-byte face lists,
+at 2x during frames 1200–2100, with bounded addresses, supported incoming
+mode/predicate/query state and no nested replacement. Each list is snapshotted
+before comparison/execution. The six templates match across the earlier 1x/2x
+join captures; a changed-byte control is rejected. This does **not** establish
+production allocation identity, external-data contents or lifetime admission.
+The captured arrays contain game-derived bytes and remain local.
+
+For an admitted face, eight native dispatches generate its mips. The original
+state, shader/external-load, invalidation and event packets still execute.
+Render draws and the resolve-copy branch are suppressed; the shared resolve
+clear/ownership-transfer path still executes. Native writes use existing
+resources, publication ranges, residency and barriers. Each list logs exactly
+eight removed draws/copies and checks its final mode. All six guest lists and
+their **2,352 packets per cube still reach decoding**. This is downstream work
+replacement, not B3's required pre-packet bypass or complete Xenos retirement.
+
+Candidate GPU SHA256:
+`FD91E36E1BA2EFA2F01C4F0AC263C02D057655499DA09275432DA1985221A649`.
+Producer EXE:
+`7EA8294116970A817CA3112E5E5229D5DE1249F124F054FA11E721ACF359D70E`.
+Runtime:
+`955BDC64AD9ABA356B162F1BD0B89E356ED45622F8F8C7D66CDB4213290F3500`.
+Main/SDK inputs are `3c9b713` / `202247a`; the route hash is
+`19A53072C258EDFC2B05F5ECA3F263656A9D335C3EBB272B89B25ECAA00BA3E5`.
+Exact plans, source snapshots/patches, template check, binaries and build log
+remain under `b2/reflection-mip-replacement-v1/`. No production change is retained.
+
+Normal 2x session **`20260910T171101Z-p29060`** exits normally and passes all
+ten inputs/three clocks. The producer check records 729 cycles, frames
+1201–1929, with 728 cached cycles and 4,368 face submissions. Native replacement
+counters cover 728 complete frames, 1203–1930: **34,944 mip draws and 34,944
+resolve copies suppressed**, with no sampled legacy mip spans in that interval.
+These source/GPU frame ranges differ; do not join them by row position.
+The reviewed 20-second still shows the stopped Recaro car/HUD without an
+obvious artifact. This is not motion or performance qualification.
+
+Separate capture session **`20260910T171350Z-p3420`** also exits normally and
+passes inputs/clocks. Frame 1538 contains **48 native dispatches and zero draws
+of VS `2C53E1A563484076` / PS `21937679208E59A5`**. Native work starts at event
+7541; copies 8019–8072 populate cube 8018. The complete 8,847,360-byte native
+buffer equals the CPU reference, with zero changes outside active mip pixels.
+All 54 imported subresources / 2,097,144 logical pixels match. Event 8104 binds
+all six faces/nine mips as `R10G10B10A2_UNORM`, with VS `C34795A841E7DEFF` /
+PS `21B70A5E4C9CFD11`. Actual native output SHA256:
+`1E66E8D368263AA354792B18501468CF0DDB909C8B00C58A4FC86EA6CAA759D8`.
+The replacement's before snapshot contains previous contents, not this frame's
+legacy result; its previous-content differences establish no legacy error bound.
+Adjacent frame 1539 and this run's 20-second still have not been reviewed.
+Evidence: `b2/reflection-mip-replacement-capture-v1/`.
+
+The scratch-history comparison is **incomplete**. Its first inspector grouped
+by floating-point format and accidentally included an unrelated world clear,
+finding 49 versus 48. That failed inspector/report remain under
+`reflection-mip-clear-history-v1/`. The revised inspector uses the actual scratch
+resource identity, excludes that separate target and checks all 48 clear calls:
+identical order, zero colors, and rectangles repeating sides 256, 128, 64, 32,
+16, 16, 16, 16 per face. All checked cleared pixels are zero in both captures.
+
+However, the complete 320×16384 `R16G16B16A16_FLOAT` scratch resources differ:
+**8,192 pixels at x=256–319, y=32–255**, entirely outside the cleared rectangle
+union. Control resource 7966 and replacement resource 7965 come from different
+runs, so this establishes neither a regression nor harmless unused padding.
+`reflection-mip-clear-history-v2/{report,difference-regions}.json` explicitly
+records `full_scratch_bytes_equal=false`. Trace partial-tile ownership,
+preservation transfers and later reads before claiming history equivalence;
+do not zero the differences to make the comparison pass. The common
+`RenderTargetCache::PrepareHostRenderTargetsResolveClear` implementation is in
+`src/graphics/pipeline/render_target/cache.cpp`, and calls `ChangeOwnership`
+with the clear rectangle.
+
+Local runnable checks reuse `check-mip-producer.py ROOT 2`,
+`check-reflection-copy-chain.py ROOT [INDEX]` and
+`check-native-mip-publication.py OUTPUT_ROOT [--native-only]`. Replay export
+uses the existing inspectors, with `PINYON_SHIFT_MIP_REPLACEMENT_INSPECT=1`
+for the replacement and `inspect-mip-clear-history-v2.py` for scratch history.
+The capture wrapper selects `-NativeMipProof -NativeMipProfile
+reflection-mip-replacement-v1`; diagnostic runtime and pack restoration remain
+mandatory. No diagnostic result is a clean benchmark or retained FPS gain.
+
+**Resume:** resolve scratch history, then prove semantic/external-data/lifetime
+admission, 1x contents and safe upstream generation/decoding removal. Continue
+the complete B1 scene inventory, streaming/partial-write/reuse/destruction,
+motion/NPC/UI timing and matched tail/memory gates. The unchanged failed
+comparisons remain stopped. Preflight verifies nine retained runtime files and
+backups, eighteen restored source baselines and the complete staged 1x pack;
+all game/build/replay handles are terminal. All B1-B4 items remain open.

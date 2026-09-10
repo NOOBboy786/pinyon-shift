@@ -4164,3 +4164,16 @@ is 3/1,023 in one channel. The adjacent capture contains presentation only and
 does not establish changing-content behavior. See
 [in-game publication evidence](B_EPIC_EXECUTION.md#native-mip-publication-reaches-the-in-game-cube)
 for the revised diagnostic, exact identity and next gates. All B1-B4 items remain open.
+
+Separated captures now prove native output follows changing base contents in
+one process. A subsequent bounded 2x prototype removes 48 legacy mip draws and
+resolve copies in a checked GPU frame; 48 native per-face dispatches produce
+CPU-exact bytes and all 54 imported cube subresources match. This advances the
+work-removal proof but retains no speedup. Scratch clear sequences/pixels match,
+while 8,192 pixels outside the clear rectangles differ across control/candidate
+runs; ownership and later-read preservation remain unresolved. Original guest
+lists and all 2,352 packets still execute/are decoded. See
+[replacement and history evidence](B_EPIC_EXECUTION.md#native-mip-work-replacement-and-unresolved-scratch-history)
+for exact scope and the next step. Production admission, 1x, full lifetime,
+pre-packet bypass and performance/motion qualification remain open alongside
+the larger depth/transfer opportunities and all B1-B4 completion gates.
