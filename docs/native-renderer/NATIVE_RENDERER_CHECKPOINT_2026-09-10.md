@@ -887,7 +887,8 @@ measurement limits. Local evidence is `b2/hud-keep-clean/`,
 `b2/hud-keep-preflight/` and `b2/hud-keep-retention/`. The latter contains the
 prospective plan, four 1x runs, comparison and drop/tail localization reports.
 
-**Resume:** all four matched 2x runs remain unexecuted; use
+**Historical next step, superseded below:** all four matched 2x runs were
+unexecuted at this checkpoint; the planned first command was
 `run-hud-keep-retention.ps1 -Scale 2 -Labels a1` first, then B1/B2/A2 with
 normal per-run analysis and manual stage review. Do not replace the existing
 1x B1 or restart matching-recycler v2. Also qualify startup UI cadence, the
@@ -899,3 +900,40 @@ verified restored. Retained EXE `372161...`, GPU `27B486...`, runtime `955BDC...
 complete 1x pack staged. No game/build/replay is active. Main source before this
 checkpoint is `bc2062e`, SDK `202247a`; unrelated SDK dirt and saves remain
 preserved. A6 stays symmetric-1x-only, recycling stays off, and the goal is active.
+
+## Latest handoff: stop 2x HUD qualification on prestart corruption
+
+The clean HUD comparison now stops after 2x A1 and B1. A1 passes, while B1
+(`20260910T125513Z-p8816`) shows bright green/white windshield and colored
+headlight artifacts at the 62-second prestart menu. Automated HUD/pose/motion
+checks passed; manual visual review fails. **B2/A2 stay unexecuted and there
+is no valid 2x comparison.** Preserve B1 alongside the existing 1x +28.87%
+acceleration-p99 result and startup mailbox-drop findings. No fix is retained.
+
+A separate diagnostic (`20260910T130420Z-p22000`) captures two clean GPU frames
+after its 62-second fallback; it does not reproduce the artifact. Reference
+inventory and pixel-history replay complete, but reused/tiled target coordinates
+are not yet mapped to the failing surface. Do not treat that capture as a
+passing replacement or its transient HDR colors as failure attribution.
+
+[B execution](B_EPIC_EXECUTION.md#clean-hud-admission-2x-comparison-stops-on-a-visual-failure)
+records both sessions, timing/memory observations, failed image hashes, capture
+hashes, diagnostics and limits. Local evidence is `b2/hud-keep-retention/` and
+`b2/hud-glass-capture/` under `.local/native-renderer/`. The runner, summarizer
+and review-writer now reject stopped/failed qualification; all three rejection
+checks pass and preserve the failure. GPU captures/generated sources remain local.
+
+**Resume:** trace whether vtable `820033FC` admits renderer instances beyond
+the sampled HUD owner, and establish the windshield/headlight material and
+resource history before a new correction or qualification protocol. Constructor
+`82C528A0` has a direct caller in generated unit 214 near line 21994. The current
+helper's predicate alone does not prove HUD-only scope. Do not continue the
+stopped 2x block or restart matching-recycler v2 unchanged. Full B1 scenes,
+B2 mutation/streaming/tails, actual B3 pre-packet bypass and B4 timing remain open.
+
+All nine retained runtime files and nine instrumented sources are directly
+verified restored. EXE `372161...`, GPU `27B486...`, runtime `955BDC...`;
+complete 1x pack staged. No game/build/replay remains active. Source before this
+checkpoint is main `ee6e20a`, SDK `202247a`; unrelated SDK dirt and saves remain
+preserved. A6 stays symmetric-1x-only, recycling stays off, and the B goal stays
+active. This checkpoint does not publish a preview release.

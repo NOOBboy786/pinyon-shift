@@ -2411,8 +2411,8 @@ Local checks/helpers are `make/build-hud-keep-clean`, `check-hud-span.cpp`,
 `present-drop-localization.json`, `acceleration-tail-localization.json`,
 per-run metrics, manual stage reviews and source/binary manifests.
 
-**Resume:** the preplanned matched 2x A1/B1/B2/A2 runs are all unexecuted.
-Complete them with individual stage review, preserving the 1x result. Also
+**Historical next step, superseded below:** the preplanned matched 2x
+A1/B1/B2/A2 runs were all unexecuted at this checkpoint. Also
 qualify the startup UI cadence and acceleration burst, queued payload/node
 lifetime, other HUD/menu states and broader scene/motion coverage. The two
 preflights cannot replace either control or either matched repetition.
@@ -2424,3 +2424,91 @@ restored and directly verified. EXE `372161...`, GPU `27B486...`, runtime
 `955BDC...`; complete 1x pack staged. No game/build/replay remains active.
 Source before this checkpoint is main `bc2062e`, SDK `202247a`. Unrelated SDK
 kernel/libmspack edits and saves remain preserved.
+
+## Clean HUD admission: 2x comparison stops on a visual failure
+
+The prospective 2x block runs A1 and B1 only, using the same clean EXE
+`20EE2F2D48BD2B83124D4812104F57631B53FB4794658CBA75B97E1419C0F319`,
+retained GPU `27B486...` and presentation-diagnostic runtime `6B97FB...`
+identified above. The 2x pack/catalogs, route, sampling and disabled renderer
+experiments are unchanged. A1 has admission off; B1 has it on.
+
+Both runs exit normally and pass automated input/capture-clock, HUD/pose,
+motion, identity and contention checks. A1 passes manual review. **B1 fails
+the prestart visual check at 62 seconds:** bright green/white glow appears
+along the windshield and reflective headlight parts have colored artifacts.
+The corresponding A1 image is clean. Cause and relation to the admission
+change remain unproven. Automated checks do not override this visual failure.
+
+| Run | Session | Manual stage review | Race clocks at 76 / 88 / 92 s | Peak private / working MiB | Whole-session GPU ms / process CPU cores |
+| --- | --- | --- | --- | --- | --- |
+| A1 | `20260910T125200Z-p7224` | Pass | 5.458 / 17.610 / 21.607 | 4998.68 / 2243.36 | 14.421 / 3.1101 |
+| B1 | `20260910T125513Z-p8816` | **Fail: prestart artifact** | 5.516 / 17.608 / 21.625 | 5037.45 / 2244.42 | 14.225 / 3.0923 |
+
+Preserved observations below are median / p95 / p99 milliseconds. They are
+not a qualified comparison: the second repetitions are intentionally absent.
+
+| Phase | A1 | B1 |
+| --- | --- | --- |
+| Early race | 79.943 / 112.340 / 113.507 | 83.404 / 113.564 / 120.673 |
+| Hold | 16.896 / 20.840 / 21.736 | 17.076 / 20.929 / 22.314 |
+| Acceleration | 16.872 / 20.136 / 20.405 | 16.590 / 18.436 / 20.018 |
+| Handbrake | 17.165 / 20.616 / 21.892 | 16.758 / 19.028 / 20.541 |
+| Settled | 16.947 / 20.917 / 21.761 | 16.789 / 20.206 / 20.990 |
+
+Both have zero GPU timing drops and only the known startup device-path error.
+All individual metrics and failed manual review remain in
+`b2/hud-keep-retention/race-2x-abba-{a1,b1}/`. The `before-confirm-62.ppm`
+SHA256 values are A1
+`A9E2A5AFB5103BF56F4891DE858DF2CD960238C7C73B68DDCFDD786FC9BC2D25`
+and B1 `E3E64E1A42894D5E57117D2C3865BAD403675FC213D8EF4E8F8302C2CF646135`.
+An archive screen ranks all 37 existing prestart images using one normalized
+windshield region. Only this B1 exceeds its green-pixel criterion. That aids
+review; it does not prove correctness of the other images or identify a cause.
+
+**The block is stopped. Do not run 2x B2/A2 or replace failed B1.** Local
+guards reject a stopped plan, reject failed manual review in the block summary
+and prevent overwriting that review. `check-hud-retention-stop.py` runs all
+three rejection paths successfully, preserves the review bytes, verifies the
+unexecuted outputs remain absent, and checks all nine retained runtime files
+and nine previously instrumented source hashes. Results are in
+`b2/hud-keep-retention/stop-guard-check.json`.
+
+A separate diagnostic holds the prestart menu and adds dense screenshots from
+52 to 65 seconds, with RenderDoc triggered by a green-region match or a
+62-second fallback. Session `20260910T130420Z-p22000` exits normally and passes
+its input/capture-clock checks. All ten inspected region samples are clear;
+the fallback captures two frames. **It does not reproduce the failure and
+cannot qualify or replace the failed benchmark.** Diagnostic route SHA256 is
+`6E8DBADF6E66C008C4D1E6A9955CEB054A819591835AEE22824BD2316C53C0E9`.
+
+Local evidence under `b2/hud-glass-capture/` includes controller results,
+screenshots, runtime logs, the route/plan and these clean reference captures:
+
+- `rdc/frame_frame3883.rdc`: 528,404,280 bytes, SHA256
+  `0BBFEC6AC0FE8F097E127F8D68B00C3EBD0217B21B1E8256C31E339546BA8907`.
+- `rdc/frame_frame3884.rdc`: 489,288,411 bytes, SHA256
+  `9F7D2256CC69270444B65BA8C584569CBB7743296937127F88301532BC6DF752`.
+
+Reference replay inventories 3,203 actions, 2,628 draws and 14 unique output
+targets. Target exports and pixel histories complete successfully. Some HDR
+targets are later cleared/resolved or reused, so a physical texture coordinate
+does not yet identify the windshield pixel across passes. A transient green
+HDR history value in the clean frame is not evidence of the failure's cause.
+Reports remain in `reference-inventory/` and `reference-pixel/`.
+
+**Resume:** establish the admission predicate's actual renderer-instance scope
+and trace the corrupted material/resource chain before changing the design.
+Vtable `820033FC` is initialized by `82C528A0`; its direct caller is in local
+generated unit 214 near line 21994. The sampled HUD owner does not establish
+that every matching instance is HUD-only. Map viewport/resolve coordinates
+before attributing the clean reference's pixel history, and capture the actual
+failure's GPU contents if needed. Preserve the stopped block, 1x acceleration
+tail, startup cadence findings and all earlier rejected experiments.
+
+No production correction or performance setting is retained. All nine runtime
+files and nine instrumented sources are directly verified restored: EXE
+`372161...`, GPU `27B486...`, runtime `955BDC...`. The complete 1x pack is staged;
+no game/build/replay remains active. Source before this documentation checkpoint
+is main `ee6e20a`, SDK `202247a`. Unrelated SDK dirt and saves are preserved.
+A6 remains symmetric-1x-only, recycling stays off, and B1-B4 remain active.

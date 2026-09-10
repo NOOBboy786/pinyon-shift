@@ -199,9 +199,12 @@ checkpoint/B execution preserve the results and the complete B1-B4 scope.
   Clean enabled preflights now pass at 1x/2x, and a full 1x off/on/on/off
   comparison passes HUD/motion gates. Its acceleration p99 is +28.87%, driven
   by one enabled run, and both enabled runs have more startup mailbox drops.
-  Adoption remains unqualified; preserve those results while completing the
-  pending matched 2x block and investigating timing/lifetime. See
-  [clean comparison](B_EPIC_EXECUTION.md#clean-hud-admission-both-preflights-pass-1x-comparison-remains-unqualified).
+  The subsequent 2x block stops at B1: manual review finds bright green/white
+  windshield and colored headlight artifacts absent from A1. B2/A2 remain
+  unexecuted; a separate GPU diagnostic captures a clean reference only.
+  Preserve the failed run and investigate resource/producer attribution before
+  a fresh qualification protocol. No HUD fix is retained. See
+  [stopped comparison](B_EPIC_EXECUTION.md#clean-hud-admission-2x-comparison-stops-on-a-visual-failure).
 - [ ] **B4 — Qualify a lower-cost visual profile.** Test individually measured
   AA, shadow/reflection, scene-scale or postprocessing changes; combine only retained
   settings. Mark an effect inapplicable if attribution shows no worthwhile opportunity.

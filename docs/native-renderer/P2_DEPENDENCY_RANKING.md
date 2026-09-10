@@ -4047,5 +4047,23 @@ use, but acceleration p99 rises 28.87% across the two enabled repetitions due
 to one five-frame burst. Both enabled runs also report more startup mailbox
 replacement drops; localization places all drops before ten seconds, outside
 the race windows. Keep those findings explicit and adoption unqualified.
-All matched 2x runs, broader lifetime/scenes and UI/NPC timing remain open. See
+At that checkpoint all matched 2x runs remained pending; broader lifetime/scenes
+and UI/NPC timing remain open. See
 [clean comparison](B_EPIC_EXECUTION.md#clean-hud-admission-both-preflights-pass-1x-comparison-remains-unqualified).
+
+The matched **2x block now stops at B1** (`20260910T125513Z-p8816`):
+automated HUD/pose/motion checks pass, but manual prestart review finds green/
+white windshield and colored headlight artifacts absent from A1. B2/A2 stay
+unexecuted. Keep the failed visual evidence and existing 1x tail/startup results;
+there is no valid 2x performance comparison or retained HUD correction.
+
+A separate RenderDoc diagnostic (`20260910T130420Z-p22000`) exits normally but
+does not reproduce the artifact. Its two GPU captures are clean references.
+An inventory and pixel history are available, but reused/tiled target coordinates
+have not been mapped to the failing windshield surface. Also establish whether
+the admission helper's vtable/owner predicate applies beyond the sampled HUD
+instance; the predicate alone is not proof of HUD-only scope. Attribute the
+failure before another qualification design. See
+[failure and diagnostic evidence](B_EPIC_EXECUTION.md#clean-hud-admission-2x-comparison-stops-on-a-visual-failure).
+Retained runtime/source hashes are restored and verified, the complete 1x pack
+is staged, recycling stays off, and every B1-B4 completion criterion stays open.
