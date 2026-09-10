@@ -937,3 +937,30 @@ complete 1x pack staged. No game/build/replay remains active. Source before this
 checkpoint is main `ee6e20a`, SDK `202247a`; unrelated SDK dirt and saves remain
 preserved. A6 stays symmetric-1x-only, recycling stays off, and the B goal stays
 active. This checkpoint does not publish a preview release.
+
+## Latest handoff: identify reference glass inputs
+
+Static checks identify the admission predicate's object as
+`CFixedFunctionRendererX360`, stored at render parent +2424 and shared by the
+two observed queues. The prior 70–84-second trace contains one begin-owner;
+startup/prestart scope and HUD-only behavior remain unproven. No admission
+restriction or correction is made from that class identity.
+
+Clean-reference replay now establishes three HDR scene strips and a later
+180-degree UV reorientation. A closer sample in the third strip reaches the
+glass pair VS `CE0FFEB0986E9971` / PS `1D38BA65C9D3C506`. Its selected inputs
+are fetch slot 2, a cube at guest `1C879000` with mips at `1C9F9000`, and slot
+13, a 2D texture at `1CE2D000`. The cube has no writes in this captured frame;
+its contents come from earlier work. Six face exports, material constants,
+shader disassembly and checked fetch decoding are available. The failed image's
+GPU contents remain uncaptured, so none of this establishes its cause.
+
+**Resume:** trace earlier cube production/publication and the slot-13 copies
+using those bindings and the glass pair as anchors. Preserve the 2x visual
+failure, the 1x acceleration/startup findings and both stopped comparisons.
+[B execution](B_EPIC_EXECUTION.md#reference-glass-inputs-and-fixed-function-renderer-scope)
+records exact events, decoded dimensions/formats, scope, local reports and the
+two corrected diagnostic failures. All replays have terminated; no game run or
+production behavior change occurred. Runtime/source hashes and the complete
+1x pack remain retained. Main before this checkpoint is `900c9bc`, SDK
+`202247a`; unrelated dirt and saves are preserved. B1-B4 remain active.

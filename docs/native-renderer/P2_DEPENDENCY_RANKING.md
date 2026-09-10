@@ -4067,3 +4067,13 @@ failure before another qualification design. See
 [failure and diagnostic evidence](B_EPIC_EXECUTION.md#clean-hud-admission-2x-comparison-stops-on-a-visual-failure).
 Retained runtime/source hashes are restored and verified, the complete 1x pack
 is staged, recycling stays off, and every B1-B4 completion criterion stays open.
+
+Reference attribution now identifies the fixed-function renderer's constructor
+and the glass material's active inputs. Three scene strips plus a later
+180-degree UV reorientation explain why the first raw pixel history cannot
+be assigned directly to the windshield. Glass pair `CE0FFEB0986E9971` /
+`1D38BA65C9D3C506` selects cube fetch 2 (`1C879000`, mip `1C9F9000`) and 2D
+fetch 13 (`1CE2D000`). The clean frame has no cube writes, so earlier production
+and publication are the next resource-history targets. This adds diagnostic
+anchors, not a measured optimization or failed-frame attribution. See
+[reference glass inputs](B_EPIC_EXECUTION.md#reference-glass-inputs-and-fixed-function-renderer-scope).

@@ -2512,3 +2512,61 @@ files and nine instrumented sources are directly verified restored: EXE
 no game/build/replay remains active. Source before this documentation checkpoint
 is main `ee6e20a`, SDK `202247a`. Unrelated SDK dirt and saves are preserved.
 A6 remains symmetric-1x-only, recycling stays off, and B1-B4 remain active.
+
+### Reference glass inputs and fixed-function renderer scope
+
+Follow-up static checks identify the admission predicate's object as the
+fixed-function renderer. Its initializer uses declaration names
+`CFixedFunctionRendererX360Decl` and `CFixedFunctionRendererX360DeclCB`.
+The checked constructor chain is `8259C7D8:8259D000` -> `82C537A8:82C537D8`
+-> `82C528A0`; `8259D004` stores the object at parent +2424. The renderer is
+shared by the main and worker queue wrappers. `check-hud-renderer-scope.py`
+checks retail branch/store instructions, declaration strings and vtable slots.
+It also rechecks the earlier selected-callback trace: 855,009 records and all
+4,071 begins use owner `402BBD10` through queues `40159EE8` and `4015A010`.
+The other 1,357 records have no begin callback. This establishes the observed
+owner scope during 70–84 seconds, not all startup/prestart uses or HUD-only
+behavior. It does not justify narrowing the helper or identify the corruption.
+
+The clean reference frame renders the HDR scene in three strips. Sampled
+viewports have heights 1440, 928 and 416; scissors cover 512, 512 and 416 rows.
+Later postprocess draws `16873`/`16882` cover the two screen halves and their
+captured vertex UVs confirm a 180-degree reorientation. Consequently, the
+earlier physical `(1600,210)` history must not be treated as one persistent
+windshield pixel. Filter offsets and strip placement matter.
+
+Near the observed glow, sample-0 history at physical `(1059,115)` in the third
+scene strip includes a surviving draw at event `15372`, primitive 65, using
+VS `CE0FFEB0986E9971` / PS `1D38BA65C9D3C506`. This reference glass draw reads
+two resources. Decoded guest fetch constants and shader branches identify them:
+
+| Fetch slot | Guest base / mip base | Guest dimensions and format | Captured resource | Writes in this frame |
+| --- | --- | --- | --- | --- |
+| 2 | `1C879000` / `1C9F9000` | 256x256 cube, six faces, format 54 (`k_2_10_10_10_AS_16_16_16_16`), exponent adjustment 4 | `8027`, 512x512x6, R10G10B10A2 | None |
+| 13 | `1CE2D000` / zero | 1280x720 2D, format 6 (`k_8_8_8_8`) | `9757`, 2560x1440, RGBA8 | Copies at 4466 / 4889 |
+
+Both fetches have the resolution-scaled bit set. The captured shader Boolean
+word is 529: its branch selects the slot-2 cube and skips the slot-1 scene
+sample. `check-hud-glass-bindings.py` verifies the six-dword SDK fetch layout,
+dimensions, formats, scaled dimensions, branches and resource-use records.
+The cube's contents predate this frame; six face exports and the full material
+constants/disassembly are preserved. These are diagnostic targets, not proof
+of which input caused the failed image. Exact final-pixel filter attribution
+and failed-frame GPU contents remain unavailable.
+
+Local evidence is under `b2/hud-glass-capture/`: `renderer-scope.json`,
+`glass-bindings.json`, `reference-surfaces-v2/`, `reference-final-pixel/`,
+`reference-final-pixel-1059-115/` and `reference-glass-material/`. Replays pass
+their report checks. The first surface audit's unmapped-barrier failure is
+preserved in `reference-surfaces/`; the corrected report explicitly marks
+barriers lacking draw-action metadata. A malformed replay invocation produced
+no report and was terminated after verifying its own live process identity;
+its failure is preserved in `replay-invocation-failure.json`. The corrected
+invocation uses a scoped environment variable and completes. No game runs or
+candidate behavior changes occur in this follow-up.
+
+**Next:** trace the cube's earlier production/publication and the slot-13
+copies, using the glass shader pair and fetch identities as diagnostic anchors.
+Obtain actual artifact contents before changing resource history or claiming a
+correction. Keep both stopped comparisons stopped and every B requirement open.
+The retained runtime, source hashes and complete 1x pack remain unchanged.
