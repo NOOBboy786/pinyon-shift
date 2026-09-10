@@ -7,17 +7,35 @@ guest-output frames by default; `# clock-hz N` makes their frame numbers an
 explicit wall-time clock for stock-versus-unlocked comparisons. It does not use
 computer use, screen scraping, or a physical controller.
 
-Run a scenario against the installed preview save:
+For the installed AppData save, follow [AGENTS.md](../../AGENTS.md): verify its
+`user/**/ForzaProfile/ForzaProfile` exists and no `pinyon_shift` process is running,
+then launch through `tools/launch-preview.ps1` with that preview as `-StateRoot`.
+Do not copy or reset this save for testing. Scripted/capture launches intentionally
+skip automatic shader-pack and prewarm staging, so explicitly stage the selected
+pack before a comparison. For an existing prepared 1x state:
 
 ```powershell
 $stateRoot = Join-Path $env:LOCALAPPDATA 'PinyonShift\source\0.1.0\.local\preview'
-python tools/run-fh1-render-test.py config/render-tests/fh1-map.fh1test `
-  --state-root $stateRoot --record-baseline
+python tools/native-shader-pack.py stage `
+  .local/native-renderer/fh1-disc-aot-complete-1x.pnsp --state-root $stateRoot --scale 1
+if ($LASTEXITCODE) { throw 'Shader pack staging failed.' }
+.\tools\launch-preview.ps1 -StateRoot $stateRoot `
+  -RenderTestScript config/render-tests/fh1-map.fh1test `
+  -RenderTestOutput .local/native-renderer/map-test `
+  -GameArguments @('--draw_resolution_scale_x=1', '--draw_resolution_scale_y=1')
 ```
 
-Every run copies only `user` and `config` from that state root into a private
+Pin pack and native shader/pipeline/prewarm catalog hashes before every condition,
+check them again after exit, and verify the loaded pack count in the session log.
+Do not silently replace a pack midway through a comparison. The direct launcher
+produces captures/logs; run the appropriate clock, workload and image checks
+separately before accepting the run. In-game autosaves remain normal gameplay.
+
+The separate `tools/run-fh1-render-test.py` runner supports disposable test seeds
+where copying is permitted; it is not the AppData-save procedure above. Each
+runner invocation copies only `user` and `config` from its seed into a private
 sibling directory beside its output. FH1 may autosave in the private copy, but
-the selected seed and the user's normal save are never written. Cache contents
+the selected seed is never written. Cache contents
 are deliberately not shared between runs. `--seed-shader-storage`
 `--seed-pipeline-prewarm` copies the immutable FH1 native shader/pipeline catalog
 and its allowlist; it no longer seeds writable `.xsh`/`.xpso` stores.

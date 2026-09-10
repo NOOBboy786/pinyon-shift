@@ -618,3 +618,53 @@ active, and unrelated SDK kernel edits and saves are preserved. New validation
 covers the presentation-path check, Release runtime, bounded replay reports,
 live route gates, release-contract tests, Markdown links, repository boundary,
 direct runtime hashes and whitespace. No preview release or B retention occurs.
+
+## Latest handoff: corrected shader-pack staging and first v2 control
+
+Checkpoint requested before further Epic B work. The eight apparent shader
+coverage gaps from the last capture control are traced to an older AppData 1x
+pack. All eight already exist in the current local offline packs. The updated
+1x pack adds 25 entries while preserving all 21,987 old entries' bytecode and
+bindings exactly. It is now staged with 22,012 entries, SHA256
+`1636179BF8633D7406C7C3C735DD600C0C05666D8A8A8CAC188433730A38C026`.
+The previous pack is preserved locally; the already-current 2x pack is unchanged.
+Full hashes and validation are in [B execution](B_EPIC_EXECUTION.md#shader-misses-traced-to-stale-staging-prospective-comparison-v2).
+
+Scripted/capture launches skip automatic pack/prewarm staging by design. The
+local benchmark runner now explicitly stages the selected pack and checks
+pack/catalog hashes before and after every condition. The
+[automation guide](FH1_RENDER_TEST_AUTOMATION.md) records this requirement and
+the direct AppData launch procedure without copying saves.
+
+The new prospective C-A-B-B-A-C block uses the widened-pulse route (SHA256
+`B8D8D835C2A928888C10DADCD7E599AF3A5B221A2DC757D00894C1CC6BBAEC3C`),
+one test EXE `EC2E5F...` and diagnostic runtime `6B97FB...` throughout.
+Only C1 at 1x is complete: `20260910T100454Z-p25840` exits normally, loads
+22,012 precompiled shaders and passes all 23 inputs, 12 capture/clock checks
+and seven HUD/pose/hold/motion checks. Manual race clocks at 76/88/92 seconds
+are 5.517/17.607/21.615. GPU errors/timing drops are zero; the known two
+invalid simulation deltas and startup device-path error persist.
+
+Early-race median/p95/p99 are 62.656/112.635/120.540 ms. Other windows,
+process CPU/RAM/faults and 355 valid GPU-memory counter records are in B
+execution and local `b2/matching-retention-v2/race-1x-cabbac-c1/`. There is no
+new off/on comparison or performance claim yet. The failed v1 block and the
+unresolved capture device loss remain archived and are not superseded by this
+single passing control. Experimental recycling remains off.
+
+**Resume:** run `.local/native-renderer/b2/run-matching-retention-v2.ps1
+-Scale 1 -Labels a1`, review all gates and actual race clocks, then follow
+the existing B1/B2/A2/C2 order and the full 2x block. Local v2 plan and helpers
+pin EXE/runtime/pack/catalog identities. Stop on any gate failure. Continue
+streaming, mutation/GPU-source lifetime checks, full B1 scenes, B3 pre-packet
+bypass and B4 visual/NPC/UI timing. A6 remains symmetric-1x-only. B1-B4 and
+the goal are active; no new setting is retained or preview published.
+
+All nine retained runtime files are restored and verified: EXE `372161...`,
+both GPU paths `27B486...`, both runtime paths `955BDC...`. No game/build/replay
+is active. Source before this documentation checkpoint is main `5b94b87`,
+SDK `202247a`; the latter is already on its remote `development` branch.
+Unrelated SDK kernel/libmspack dirt and saves are preserved. Shader packs,
+captures and local experiment artifacts remain outside Git. Validation covers
+pack payload equivalence/staging, the completed live run's gates and images,
+runtime hashes, tracked Markdown links, repository boundary and whitespace.

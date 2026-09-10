@@ -3993,3 +3993,12 @@ This improves attribution, not speed or retention. Static B4 postprocessing
 anchors are checked; actual cost, side effects and NPC/UI timing remain open.
 See the latest B execution/checkpoint for source/binary identities and resume
 order. The full B1-B4 goal is active and experimental recycling stays off.
+
+Latest checkpoint: the eight apparent variant gaps are caused by stale AppData
+1x pack staging. All eight exist in the current local packs; the newer 1x pack
+preserves every old entry and is now staged explicitly. The first control of
+a fresh widened-pulse comparison passes input/clock/HUD/motion checks with zero
+GPU errors. Five further 1x and all six 2x runs remain; no new performance
+retention or B-item completion follows from this control. See
+[B execution](B_EPIC_EXECUTION.md#shader-misses-traced-to-stale-staging-prospective-comparison-v2)
+and the latest checkpoint for pinned identities, metrics and resume order.

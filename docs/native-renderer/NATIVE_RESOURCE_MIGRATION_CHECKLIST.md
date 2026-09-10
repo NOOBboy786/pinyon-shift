@@ -156,6 +156,14 @@ shader-variant gaps. Presentation-loss HRESULT logging is added; no renderer
 setting is retained. B execution/checkpoint preserve all failures, new B4 static
 postprocessing anchors and the unchanged full B1-B4 requirements.
 
+Latest correction: those eight variants already exist in the current offline
+packs; the control used a stale staged 1x pack. Explicit staging and immutable
+pack/catalog pins now precede the new widened-pulse comparison. Its first 1x
+control passes input/clock/HUD/motion gates with zero GPU errors; the remaining
+five 1x and all six 2x runs are pending. See the latest checkpoint for the next
+run. This resolves the observed staging gap, retains no optimization and leaves
+the full B1-B4 scope open.
+
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.
   **Done:** required pass families have native producers/consumers and an explicit
