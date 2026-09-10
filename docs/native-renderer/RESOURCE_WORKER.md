@@ -5,7 +5,7 @@ does not contain this worker or a `DrainCommits` integration; its
 `guest_output_renderer.cpp` only installs the render-test output observer.
 Do not treat the metadata-worker results below as current native texture
 ownership or as an available upload implementation. Current execution status
-is recorded in the [performance checkpoint](NATIVE_RENDERER_PERFORMANCE_CHECKPOINT_2026-09-04.md).
+is recorded in the [performance checkpoint (historical)](https://github.com/arcanite24/pinyon-shift/blob/53f9bf91b470f37cf7efb21c64dc1f8cce50c4c5/docs/native-renderer/NATIVE_RENDERER_PERFORMANCE_CHECKPOINT_2026-09-04.md).
 
 NR-03G begins with a backend-neutral two-stage worker contract. CPU-only
 preparation runs on a fixed set of `std::jthread` workers. Backend resource,

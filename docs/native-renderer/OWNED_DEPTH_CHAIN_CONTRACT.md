@@ -3,7 +3,7 @@
 Status: retained at symmetric 1x draw resolution; A1–A6 complete for that scope.
 2x uses compatibility clears after failing performance retention. See
 [A6 retention](A6_OWNED_DEPTH_RETENTION.md) and
-[measurements and capture evidence](P2_DEPENDENCY_RANKING.md).
+[measurements and capture evidence (historical)](https://github.com/arcanite24/pinyon-shift/blob/53f9bf91b470f37cf7efb21c64dc1f8cce50c4c5/docs/native-renderer/P2_DEPENDENCY_RANKING.md).
 
 ## Boundary and identity
 

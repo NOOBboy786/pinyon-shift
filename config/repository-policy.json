@@ -39,7 +39,5 @@
     "XEX2",
     "MZ"
   ],
-  "allowed_large_files": [
-    "docs/native-renderer/screenshots/2026-09-07-area-performance-drop.png"
-  ]
+  "allowed_large_files": []
 }

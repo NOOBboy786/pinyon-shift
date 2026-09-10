@@ -1,10 +1,12 @@
 # Non-renderer experiment patches
 
 These patches preserve diagnostic edits separately from renderer work that was
-already dirty when the experiment branch began. They are already applied in
-the current working tree; do not apply them again there.
+already dirty when the experiment branch began. Check the target working tree
+before applying them; the I/O and wait patches were still applied locally at
+the September 10 consolidation.
 
-The recommended build-only change is `non-renderer-registration.patch`. It
+The build-only change in `non-renderer-registration.patch` is already on `dev`
+in `cmake/PinyonShiftRexGlue.cmake`; do not apply it again there. It
 applies independently at the project root against starting commit `f4c39de`;
 both forward application against that file and reverse application against the
 tested current file were checked. It excludes the unused main registration
@@ -33,4 +35,6 @@ apply it to the corresponding prerequisite revision and run the recorder's
 applicable. Do not stage unrelated SDK or renderer changes with these patches.
 
 Measurements, sessions, caveats and merge decisions are recorded in
-[the results ledger](../../docs/NON_RENDERER_OPTIMIZATION_RESULTS.md).
+[the results ledger (historical)](https://github.com/arcanite24/pinyon-shift/blob/53f9bf91b470f37cf7efb21c64dc1f8cce50c4c5/docs/NON_RENDERER_OPTIMIZATION_RESULTS.md).
+
+Current decisions: [non-renderer findings](../../docs/DEVELOPMENT.md#non-renderer-findings).

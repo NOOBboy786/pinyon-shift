@@ -1,364 +1,102 @@
-# Native renderer: resource migration checklist
+# Native resource migration checklist
 
-Execution checklist derived from the [renderer research](XBOX360_NATIVE_RENDERER_RESEARCH.md).
-This defines the next work order within P2/P3 of the [main backlog](NATIVE_RENDERER_BACKLOG.md).
-Existing correctness and retention rules still apply; P0/P1 remain open and deferred.
+Current status: 2026-09-10. Start with the [development findings](../DEVELOPMENT.md)
+for retained behavior, rejected experiments, installation work and user reports.
+This is the single execution checklist for renderer resource migration.
 
-## Objective
+## A — First complete resource chain
 
-Reduce rendering cost and hardware requirements by moving complete FH1 resource
-lifetimes and their producing/consuming passes under native ownership. Reuse
-suitable translated shaders. Ultimately run without Xenos command processing,
-resource management, or hidden renderer fallback.
+- [x] A1: establish a matched chain-cost baseline.
+- [x] A2: identify producer, consumers, history and lifetime boundaries.
+- [x] A3: implement native ownership with validated admission and fallback.
+- [x] A4: preserve changing contents, partial regions and history.
+- [x] A5: remove the replaced work and count remaining compatibility work.
+- [x] A6: qualify and retain the bounded chain.
 
-Track performance gains and dependency removal separately. A shader replacement,
-a correct screenshot, or a completed experiment alone does not establish either.
+A1–A6 are complete **only for the symmetric 1x owned depth-clear chain**.
+Scaled rendering retains compatibility clears: the unchanged 2x candidate failed
+North Carson frame-tail retention. Upstream CPU packet-emitter bypass remains B3.
+See the [resource contract](OWNED_DEPTH_CHAIN_CONTRACT.md) and
+[retention result](A6_OWNED_DEPTH_RETENTION.md).
 
-## Starting point
+## B — Expand native ownership
 
-- Existing shader packs, native specializations, video upload, discovery tools,
-  timing, and test routes remain the foundation.
-- Ordinary transfer intervals measured approximately 5.7 ms per sampled frame
-  at 2x resolution. This is diagnostic attribution, not fully removable frame time.
-- Both the depth-address shortcut and GPU stencil-predication experiment failed
-  retention. Predication was removed from production. Do not repeat either
-  unchanged, or reopen rejected RGBA8/direct-output/geometry candidates without
-  new evidence or a materially different design.
-- `tools/rank-fh1-transfer-contracts.py` now reproduces complete transfer-list
-  rankings. Native timestamps remain usable without Windows Developer Mode;
-  unavailable replay counters must not block independent work.
+The focused [reflection-mipmap replacement](REFLECTION_MIPMAP_REPLACEMENT.md)
+is implemented and enabled for validated symmetric 1x/2x inputs. It removes 48
+original draws and 48 resolve copies per cube, with current-input validation and
+fallback. It retains six guest lists and all 2,352 packet decodes per cube.
+Clean whole-frame comparisons show small/mixed changes, not a large FPS gain.
 
-Source of current status: the latest sections of [P2 dependency ranking](P2_DEPENDENCY_RANKING.md).
-Recheck those sections before implementation; this checklist is not a binary manifest.
+The [Carson cache fix](CARSON_GEOMETRY_CACHE_FIX.md) reduces allocation churn
+without raising the 32 MiB/512-entry budget. Its short race comparison and 1x/2x
+smoke pass; sustained town/race acceptance and green-glass reproduction remain open.
 
-## A — First complete native resource chain
+**Other B work remains deferred at the user's request.** Neither focused change
+completes B1–B4. Keep containment, recycling, tile-clear and HUD admission
+experiments unretained; stopped comparisons require new attribution and a revised
+protocol before resuming. See [rejected paths](../DEVELOPMENT.md#rejected-and-unqualified-paths).
 
-A1-A6 complete for the retained 1x owned depth-clear chain. 2x uses the
-qualified compatibility path; see [A6 retention](A6_OWNED_DEPTH_RETENTION.md).
-
-- [x] **A1 — Establish a matched chain-cost baseline.** Reuse complete transfer
-  contracts and existing source-frame/session timing. Select one expensive chain,
-  starting with the dominant D24S8 chain unless another has a stronger opportunity.
-  Record 1x/2x workload, actual transfers, preparation, and measurement losses.
-  **Done:** reproducible evidence attributes cost to the complete chain and
-  distinguishes GPU intervals from total frame time; no descriptor-count grouping.
-- [x] **A2 — Prove the resource lifetime and game boundary.** Trace creation,
-  clears, draw writes, partial regions, resolves, reads, reuse and destruction.
-  Identify the actual game producer and every required consumer, including
-  depth/stencil, aliasing, queries and guest-visible writes.
-  **Done:** a documented contract explains what survives each transition and
-  identifies the earliest usable hook; unknown consumers remain explicit.
-- [x] **A3 — Implement native ownership for the selected chain.** Reuse existing
-  D3D12 resources and suitable shaders; give the chain explicit resource identity,
-  generation and lifetime. Choose a boundary that removes measured work.
-  **Done:** the native producer and consumers execute on owned resources, with
-  observable admission and correct fallback for unsupported inputs during migration.
-- [x] **A4 — Preserve history without unconditional copies.** Allow direct
-  sampling or deferred copies only where the contract permits. Materialize old
-  contents before conflicting writes, reuse or destruction; preserve partial regions.
-  **Done:** changing-content, overwrite, partial-write and lifetime checks pass,
-  including nonzero stencil where relevant; captured zeros are never an admission rule.
-- [x] **A5 — Remove the replaced work.** Suppress only transfers/passes whose
-  required outputs are now supplied natively. Count retained compatibility work
-  and any new publication copies, conversions or synchronization.
-  **Done:** captures/counters prove the intended operations no longer execute,
-  with required side effects preserved and no duplicate rendering behind native output.
-- [x] **A6 — Qualify and retain the chain.** Compare against the qualified build
-  with repeated matched runs at 1x/2x, screenshots and motion. Include ordinary
-  driving/racing and a recorded difficult area relevant to the chain.
-  **Done:** a retained implementation demonstrates useful performance/memory
-  savings, or a real dependency removal without material regression. Document
-  scope, median/p95/p99, CPU/GPU cost, memory and remaining fallback.
-
-Implementation status, 2026-09-09 UTC: **A epic complete for the bounded 1x chain.**
-The native owned depth clear is retained and enabled by default only at symmetric
-1x resolution. Its longer ordinary-scene and North Carson comparisons support
-retention; 2x tail tests fail, so scaled rendering keeps compatibility clears.
-Final default-setting 1x/2x race-start checks pass on the retained DLL, with native
-admissions at 1x and zero owned clears at 2x. See [A6 retention](A6_OWNED_DEPTH_RETENTION.md)
-for exact identities, measurements, validation and limits, and the
-[chain contract](OWNED_DEPTH_CHAIN_CONTRACT.md) for resource correctness.
-A2 identifies the game GPU clear producer and verified draw boundary; upstream
-CPU packet-emitter bypass remains B3. This is useful retained native ownership at
-1x, not completion by merely rejecting the 2x experiment.
-
-If a candidate fails, archive the evidence, restore the qualified path and select
-a different design or measured chain. A rejected candidate closes that experiment;
-it does not complete A3–A6. Do not expand a failing design merely to increase coverage.
-
-## B — Expand the demonstrated approach
-
-**Focused mipmap milestone complete:** the experimental native reflection-mipmap
-replacement is enabled at symmetric 1x/2x with current-input validation and
-compatibility fallback. It removes 48 render draws and 48 resolve copies per
-admitted cube while retaining state packets, clears and transfers. Both scales
-pass publication/consumer checks, clear history and moving smoke; eight clean
-comparison runs show small/mixed whole-frame changes, not a large FPS gain.
-See [implementation, measurements and limits](REFLECTION_MIPMAP_REPLACEMENT.md).
-
-**Open user follow-up (2026-09-10):** green flashes on the main car's rear glass,
-roughly half normal performance in Carson town, and severe Carson race slowdown.
-The Hot Hatch Hustle slowdown reproduces with native mipmaps disabled. A geometry
-cache eviction fix improves the short 2x race comparison from about 100 ms to
-33.5 ms median frame time without increasing the cache budget. Native mipmaps
-enabled also pass 1x/2x race smoke. Green flashes remain unreproduced, and longer
-Carson town/race acceptance remains open. See the
-[cache fix and validation limits](CARSON_GEOMETRY_CACHE_FIX.md) and
-[the preserved report](REFLECTION_MIPMAP_REPLACEMENT.md#user-follow-up-carson-and-green-reflection-flashes).
-
-- [x] Replace captured-list/fixed-address admission with a current-data contract.
-- [x] Validate 1x/2x native writes, cube imports, clears and later consumers.
-- [x] Add the normal runtime switch and aggregate admission counters.
-- [x] Complete bounded motion checks and record the clean comparison honestly.
-- [x] Checkpoint the implementation and SDK pin for remote dev.
-
-Other B migrations, recycling/containment, general producer bypass and the
-broader visual profile are **deferred by the user, still open**. Six mip guest
-lists and all 2,352 packets per cube remain; their removal is deferred B3 work.
-Broader scene/streaming/hardware qualification is not completed by this milestone.
-
-Start after A6. Each item needs its own bounded implementation and evidence.
-The B1-B4 goal is paused; see [B execution and coverage](B_EPIC_EXECUTION.md)
-for the fixed scene set and earlier experiments. The opt-in tile-clear
-candidate remains unretained despite passing GPU clear/publication and live
-eviction checks: 1x triage is unfavorable and the 2x long comparison
-has a HUD workload mismatch. B2 now has measured allocation-churn attribution,
-opt-in buffer recycling and a bounded GPU copy proof, but the mixed Outpost/local
-comparisons do not establish retention. Paid Outpost travel is unavailable until
-normal play replenishes credits; free routes remain usable. Stable containment
-has bounded 1x/2x GPU validation, but live mutation/streaming and retention remain
-open. A completed 1x handbrake comparison has mixed timings, more imported bytes
-and differing traffic; 2x performance remains unqualified. B3 now has
-live clear-producer attribution (about 0.03-0.045 ms/frame median in the local
-scene); downstream decode attribution and actual pre-packet bypass remain open.
-See the [current checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md).
-All B items remain open.
-B1 also tracks corrupted car-selection thumbnails, present in the retained
-control and corrected-CRT probes. The separate CRT configuration correction
-passes bounded 1x/2x race smoke checks; it completes no B item.
-B2 now has a default-off 64 KiB invalidation candidate with lower import rates
-in two bounded runs. An incomplete HUD-gated comparison prevents retention;
-see the checkpoint for the revised, unexecuted workload protocol.
-Later update: the revised protocol is exercised with strict early/late HUD gates,
-but its comparison also stops on a missing early HUD. Dense captures reproduce
-intermittent HUD absence on both the retained renderer and candidate flag-off;
-UI/output attribution is now required. The separate CPU-only snapshot shortcut
-was implemented and archived after its bounded avoided bytes measured below
-0.4%. Neither experiment completes or retains a B item; see B execution.
-Latest source-linked diagnostic attributes about 22.47 ms/frame of early-race
-CPU work to geometry allocation/eviction and maps two HUD gaps to frames with
-148 absent draws. Their correlation with the HUD gap does not yet establish HUD
-production. Measure recycler work and trace the actual HUD resource chain next;
-no cause fix or speedup is retained.
-Broader scene coverage, mutation/streaming, clean comparisons and timing remain
-required. GPU sampling is sparse and unsampled cost remains unavailable.
-Follow-up: the recycler now searches for a completed exact-size victim beyond
-the oldest entry. Production-cache checks and strict 1x/2x HUD/hold/motion smoke
-runs pass. A larger-capacity experiment is archived after increased cache
-rejections and late recurring work. The matching-victim option remains off;
-actual GPU copy/consumer checks, matched tails/memory, sustained streaming and
-the full scene set remain required before retention. See B execution for all
-identities and the unresolved HUD/thumbnail defects.
-Latest GPU evidence checks 18 actual 2x recycled copies and their first draw
-consumers, including ten matching victims beyond the oldest entry. A second
-capture has no marked copies and remains an explicit coverage gap. Direct
-replay also verifies HUD outputs from nine draws of the three correlated shader
-pairs; their CPU producer and omission cause remain open. A retained single-
-confirmation route passes the original HUD/hold/motion gates, but still needs
-race-stage repeatability before matched comparisons. These bounded results
-retain no new setting; see the latest checkpoint and B execution.
-The first stage-comparison block then fails event arrival. New test-input and
-capture-clock telemetry plus a braked-entry route pass bounded validation.
-One same-binary recycler off/on pair improves early median 46.015→25.222 ms,
-but later tails rise and memory/repeated 1x/2x/streaming gates remain open.
-This prioritizes repeated qualification; it does not retain the option.
-The repeated C-A-B-B-A-C comparison now has its first C/A/B runs at 1x,
-with passing input/race-stage/HUD gates and valid process/GPU-memory samples.
-The remaining 1x repeats and all 2x runs are pending at the requested checkpoint.
-Early recycling results remain promising, but later tails and the incomplete
-comparison prevent retention. See the latest checkpoint for exact resume state.
-Follow-up: the final 1x control skips a 100 ms menu pulse, stopping that block.
-A widened-pulse route passes bounded injected checks; one normal 1x capture
-now verifies 12 recycled GPU copies and first consumers. Earlier capture
-device loss remains unresolved, and its control exposes eight precompiled
-shader-variant gaps. Presentation-loss HRESULT logging is added; no renderer
-setting is retained. B execution/checkpoint preserve all failures, new B4 static
-postprocessing anchors and the unchanged full B1-B4 requirements.
-
-Latest correction: those eight variants already exist in the current offline
-packs; the control used a stale staged 1x pack. Explicit staging and immutable
-pack/catalog pins now precede the new widened-pulse comparison. Its first 1x
-control passes input/clock/HUD/motion gates with zero GPU errors; the remaining
-five 1x and all six 2x runs are pending. See the latest checkpoint for the next
-run. This resolves the observed staging gap, retains no optimization and leaves
-the full B1-B4 scope open.
-
-The v2 block subsequently stops at A2: every input is delivered, but the
-76-second capture has no HUD. The final 1x control and all 2x runs stay
-unexecuted. New decoder/indirect-buffer diagnostics reproduce the gap and
-show the observed full HUD-list references absent, while short references
-still execute. Trace the producer/wrapper publication before restarting
-retention; no HUD fix or recycling setting is qualified. The latest
-checkpoint/B execution preserve the results and the complete B1-B4 scope.
-
-- [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
-  dependencies, then repeat the A2–A6 contract and retention checks.
-  **Done:** required pass families have native producers/consumers and an explicit
-  inventory accounts for every remaining compatibility dependency in the scene set.
-- [ ] **B2 — Reduce geometry/texture preparation where measured.** Use proven
-  allocation identity and mutation/lifetime hooks for persistent buffers and texture
-  mirrors. Move conversion earlier only when it improves measured first-use cost.
-  **Done:** imports, allocations or conversion recurrence fall without stale data,
-  missing streamed content, higher memory pressure or worse frame-time tails.
-  Latest ranking: cube GPU conversion/copy measures 0.023 ms at 1x and
-  0.051 ms at 2x in the bounded native timing diagnostic. Deprioritize that
-  GPU work. A later CPU probe measures backend load medians of 0.0045 ms
-  at 1x and 0.00595 ms at 2x; wider texture requests include other resources
-  and diagnostic overhead. The 48 single-draw mip pass spans per sampled
-  frame total medians of 0.892928 ms / 1.073152 ms. Prioritize their full
-  producer/resource contract alongside larger depth/transfer chains before
-  implementing a replacement. These diagnostic costs qualify no retained
-  optimization. See [CPU and mip attribution](B_EPIC_EXECUTION.md#cube-cpu-cost-and-reflection-mip-pass-attribution).
-  Follow-up: changing-input native publication passes a bounded 2x check.
-  An experimental replacement removes the 48 legacy mip draws/resolve copies
-  in a captured frame, with correct native buffer and cube import contents.
-  All 48 scratch clears match; incoming-source and later-consumer checks now
-  explain the outside-clear differences and prove those captured transfers.
-  One same-binary 2x diagnostic pair reduces median six-list GPU cost from
-  1.075200 to 0.100352 ms and CPU cost from 0.4011 to 0.1980 ms. This is not
-  frame-time retention. Production lifetime admission and clean matched
-  qualification remain open. See
-  [history and cost evidence](B_EPIC_EXECUTION.md#mip-scratch-history-proven-and-live-work-cost-measured).
-  A later 1x check proves exact native shared-memory output, all 54 cube imports
-  and a bound consumer. Its normal run removes 30,432 mip draws/resolve copies.
-  The combined candidate's 2x run admits zero native work; preserve and diagnose
-  that failed check. 1x scratch history and all broader retention gates remain
-  open. See [1x proof and 2x failure](B_EPIC_EXECUTION.md#1x-native-mip-publication-and-failed-dual-scale-admission).
-- [ ] **B3 — Bypass obsolete guest command generation.** For covered chains,
-  replace the producer path before packet emission where its contract permits.
-  **Done:** less command generation/decoding is measured, and queries, fences,
-  memory export and other guest-visible behavior remain correct.
-
-  The mip replacement still submits six cached guest lists and decodes all
-  2,352 packets per cube. Its downstream work removal does not complete B3.
-
-  Current qualification blocker: matched slot lifetimes show HUD lists already
-  empty before finalization. A rejected enqueue probe's checked prefix links
-  producer-side job discards to 48 subsequent normal-mode empty submissions.
-  A local admission prototype now preserves HUD-span jobs until the existing
-  worker decides whether to render or drain. All 27 bounded captures pass;
-  3,893 joined cycles contain no normal-mode empty list. Qualify memory,
-  lifetime, motion and broader scenes before retaining it or restarting the
-  stopped comparison. Preserve the earlier trace coverage/cap failures. See
-  [prototype evidence](B_EPIC_EXECUTION.md#hud-admission-prototype-passes-bounded-correctness-checks).
-  No production HUD fix or B3 producer bypass is retained.
-  Clean enabled preflights now pass at 1x/2x, and a full 1x off/on/on/off
-  comparison passes HUD/motion gates. Its acceleration p99 is +28.87%, driven
-  by one enabled run, and both enabled runs have more startup mailbox drops.
-  The subsequent 2x block stops at B1: manual review finds bright green/white
-  windshield and colored headlight artifacts absent from A1. B2/A2 remain
-  unexecuted; a separate GPU diagnostic captures a clean reference only.
-  Preserve the failed run and investigate resource/producer attribution before
-  a fresh qualification protocol. No HUD fix is retained. See
-  [stopped comparison](B_EPIC_EXECUTION.md#clean-hud-admission-2x-comparison-stops-on-a-visual-failure).
-
-  Reflection mip tracing now identifies initial list construction and six
-  recurring cached submissions at both scales. Both scale-specific packet
-  audits now join published handles to submitted buffers and check incoming
-  state dependencies; native output ownership, lifetime and actual submission
-  bypass remain open. See the
-  [mip producer contract](B_EPIC_EXECUTION.md#reflection-mip-producer-and-cached-packet-contract).
-- [ ] **B4 — Qualify a lower-cost visual profile.** Test individually measured
-  AA, shadow/reflection, scene-scale or postprocessing changes; combine only retained
-  settings. Mark an effect inapplicable if attribution shows no worthwhile opportunity.
-  **Done:** the profile has documented visual differences and repeatable savings
-  in representative motion, including correct NPC/UI timing at supported frame rates.
-  A standalone native reflection-mip kernel now passes GPU content and mutation
-  checks. Its recursive box filter stays within 2/1,023 RGB error in one captured
-  frame; input/publication integration and gameplay qualification remain open.
-  The isolated 0.020480 ms kernel timing is not retained frame-time savings. See
-  [native mip candidate](B_EPIC_EXECUTION.md#native-reflection-mip-kernel-bounded-gpu-proof).
-  The corrected 2x tiled kernel also passes GPU content/mutation checks, but
-  integration has not run: the first diagnostic build fails on private range-query
-  access. Original mip resolves also clear color, which any replacement must
-  preserve. See [publication contract and resume point](B_EPIC_EXECUTION.md#tiled-reflection-mips-and-publication-contract).
-  The revised integration subsequently builds and runs: one 2x GPU capture
-  verifies native output, all imported cube subresources and a later bound consumer.
-  Its maximum observed legacy/native RGB error is 3/1,023 in one channel. Original
-  mip work still runs; changing-input/1x/motion and removal remain unqualified. See
-  [in-game publication evidence](B_EPIC_EXECUTION.md#native-mip-publication-reaches-the-in-game-cube).
-
-B1 follow-up: the 2x owned-clear optimization failed North Carson tail retention
-(short p99 +24.46%, longer p99 +90.09%). Keep the 1x-only guard until actual
-attribution or a changed design earns fresh scaled qualification. Do not repeat
-the unchanged 2x candidate. Other measured chains may offer better next work.
-
-Research references: Unleashed's lifetime/copy handling, re:Blue's history and
-resource mirrors, Skate's complete-pass suppression, and Marathon's producer-side
-tiling removal. Their game-specific assumptions are examples to investigate,
-not FH1 contracts to copy.
+- [ ] **B1 — Migrate the next highest-value chains.** Rank actual resource and
+  pass costs; repeat A2–A6 for each selected chain. Complete when required pass
+  families have native producers/consumers and the scene inventory accounts for
+  every remaining compatibility dependency. Draw counts, first-shader labels
+  and isolated kernel timings are not complete cost attribution.
+- [ ] **B2 — Reduce geometry/texture preparation.** Use proven allocation
+  identity, mutation and lifetime hooks for persistent buffers/texture mirrors.
+  Complete when imports, allocations or conversions fall without stale content,
+  missing streamed geometry, higher memory pressure or worse frame-time tails.
+  Bounded GPU copy/consumer proofs do not establish changing-content coverage.
+- [ ] **B3 — Bypass obsolete guest command generation.** Replace covered producer
+  work before packet emission while preserving queries, fences, memory exports,
+  dirty state, clipping, refill/flush and other side effects. Complete only when
+  less generation/decoding is measured. The clear producer anchor is
+  `sub_8240E130` (shader `0x820C5FD0`, copy callsite `0x8240E4A8`, caller
+  `0x824019D0`); measured aggregate CPU cost was only about 0.03–0.045 ms/frame
+  in one scene. This does not justify skipping it or measure downstream GPU work.
+  Mip cached-list construction/submission is another explicit remaining dependency.
+- [ ] **B4 — Qualify a lower-cost visual profile.** Measure AA, shadow/reflection,
+  scene scale or postprocessing settings individually and combine only retained
+  changes. Complete with documented visual differences and repeatable savings
+  during motion, including correct NPC/UI timing. Mark effects inapplicable when
+  attribution shows no useful opportunity.
 
 ## C — Retire Xenos and qualify lower requirements
 
-- [ ] **C1 — Close remaining rendering dependencies.** Cover required geometry,
-  textures, render targets, resolves, presentation, readbacks and guest side effects.
-  **Done:** qualification routes report no renderer fallback or unhandled dependency,
-  including menus, video, race transitions and streaming; coverage limits are explicit.
-- [ ] **C2 — Run without the Xenos renderer.** Remove superseded command/resource
-  paths and renderer build dependencies after their replacements are qualified.
-  **Done:** a clean build runs the scene set without the Xenos renderer linked or
-  invoked. Keep required offline shader production separate from runtime retirement.
-- [ ] **C3 — Validate lower hardware requirements.** Reuse P1/P4 qualification;
-  test lower-end discrete and integrated/UMA hardware with stated settings and
-  sustained difficult scenes. Identify hardware still unavailable for testing.
-  **Done:** publish only demonstrated FPS/frame-time and memory targets, with
-  adapter/API/driver and quality settings. Compare pinned Canary separately where
-  available; another game's claims cannot establish FH1 requirements.
+- [ ] **C1 — Close remaining dependencies.** Cover geometry, textures, render
+  targets, resolves, presentation, readbacks and guest side effects. Qualification
+  routes must report no fallback or unhandled dependency, including menus, video,
+  transitions and streaming; state coverage limits explicitly.
+- [ ] **C2 — Run without Xenos.** Remove superseded command/resource paths and
+  runtime build dependencies only after their replacements are qualified. A clean
+  build must pass the scene matrix without Xenos linked or invoked. Keep offline
+  shader production separate and preserve a rollback release.
+- [ ] **C3 — Measure lower hardware requirements.** Test lower-end discrete and
+  integrated/UMA hardware with stated quality, API, adapter and driver settings
+  during sustained difficult scenes. Publish only measured frame-time and memory
+  targets. Compare pinned Canary separately with matched workloads; another
+  game's renderer cannot establish FH1 requirements.
 
-## Completion and evidence rules
+## Gates for every retained change
 
-For each checked item, append its result and evidence link here; keep detailed
-logs in the existing ranking/checkpoint rather than duplicating them. Record the
-qualified source/binary identity, removed work, remaining dependencies, and limitations.
+1. Freeze actual source, SDK, binary, settings and artifact identities. Separate
+   the source checkpoint from any previously staged runtime; old embedded hashes
+   and successful compilation do not prove a binary is the qualified one.
+2. Validate exact session, input delivery, clocks, scene/HUD state, motion and
+   candidate admissions. Keep failed captures and incomplete comparisons; a
+   normal exit or correct screenshot does not prove native work executed.
+3. Check resource contents, mutation, partial writes, aliasing, history, reuse,
+   destruction and GPU completion. Preserve simulation, ordering and guest-visible
+   side effects. Missing geometry, flicker, broken transparency and timing errors
+   fail qualification; small stable shading changes need explicit benefit.
+4. Use repeated matched controls at relevant scales. Report median/p95/p99,
+   CPU/GPU cost, memory, removed work and fallback. Keep profiling and readback
+   outside clean benchmarks. Cover frontend, garage, day/night driving, traffic,
+   race, rewind, map, pause, photo, FMV and streaming as the changed chain requires.
+5. Retain only a useful measured improvement or faithful dependency removal
+   without material regression. A rejected candidate closes its experiment,
+   not the checklist item. Full release coverage is broader than bounded smoke.
 
-Preserve simulation, geometry, resource contents, ordering and guest-visible side
-effects. Small stable visual differences require an explicit benefit and motion
-review. Measure profiling and clean benchmarks separately. A newly introduced
-timing defect must be fixed before retaining the change; existing P0 issues remain
-tracked independently and must be resolved before broader release qualification.
-
-## Suggested next goal
-
-Proceed to B1: rank the next valuable resource chain against the retained 1x
-owned-depth implementation, then qualify one bounded migration. Keep the failed
-2x clear optimization disabled unless new attribution supports a changed design.
-B/C expansion, broader town stalls and full Xenos retirement remain open; do not
-claim new hardware requirements from this first-chain result.
-
-## Earlier evidence (historical, superseded by A6 retention)
-
-Progress, 2026-09-09 UTC: an opt-in early owned-depth clear candidate now builds
-and runs at 2x with thousands of admissions. CPU mapping checks pass; a single
-probe shows fewer ordinary transfer intervals. GPU content/history equivalence,
-matched repeated performance and motion remain unqualified. See the latest
-[dependency-ranking entry](P2_DEPENDENCY_RANKING.md). A1–A6 remain unchecked.
-
-Earlier evidence: A1/A2 remain incomplete. A full-frame resource-use
-audit confirms the dominant 4x D24S8 target has 36 transfer draws and no guest
-geometry draws; its other writes are clears. Reads feed transfers and EDRAM
-resolve dumps, including later mixed floating-depth preservation. Inspect native
-rectangle-clear admission before render-target Update as the next ownership
-experiment; this is not permission to skip a clear or its downstream history.
-Evidence: `p2/native-chain-usage/{report,summary}.json`, local audit/check scripts,
-and the latest [dependency-ranking entry](P2_DEPENDENCY_RANKING.md).
-
-> Complete A1–A6: qualify and retain one complete FH1 resource chain under native
-> ownership, removing its measured redundant transfer/pass work while preserving
-> required resource history and guest-visible behavior. Reuse existing shaders,
-> tools and D3D12 facilities. Verify 1x/2x performance, frame-time tails and motion,
-> record remaining dependencies, and continue to another measured chain if the
-> first candidate fails retention. Do not claim completion from a rejected experiment.
-
-The full migration objective remains A–C. The focused goal provides a concrete
-architectural milestone without making complete Xenos retirement a prerequisite
-for the first useful result.
+Record one concise result and its evidence link against the relevant item.
+Keep detailed run logs under `.local` and follow [AGENTS.md](../../AGENTS.md)
+for the AppData save. Do not manipulate saves for tests or automatically resume
+previously deferred work merely because an old journal says a goal is active.

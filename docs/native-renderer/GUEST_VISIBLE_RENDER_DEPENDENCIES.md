@@ -18,7 +18,7 @@ Those missing facts keep Gate B closed for suppressing render-target work.
 Qualified native pass and shader replacements now preserve selected outputs,
 but guest command execution and resource ownership remain. Their current scope
 and parity evidence are recorded in the
-[performance checkpoint](NATIVE_RENDERER_PERFORMANCE_CHECKPOINT_2026-09-04.md).
+[performance checkpoint (historical)](https://github.com/arcanite24/pinyon-shift/blob/53f9bf91b470f37cf7efb21c64dc1f8cce50c4c5/docs/native-renderer/NATIVE_RENDERER_PERFORMANCE_CHECKPOINT_2026-09-04.md).
 The census observer APIs remain read-only and default-off.
 
 ## Observation boundary
