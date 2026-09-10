@@ -295,3 +295,38 @@ runtime remains `955BDC64AD9ABA356B162F1BD0B89E356ED45622F8F8C7D66CDB4213290F350
 All runs/builds/samplers are terminal. SDK stays at `75c3880`, retaining the
 unrelated local profiling edits. No save manipulation, release, new retained
 optimization or B-item completion is claimed.
+
+## Latest checkpoint: early-race buffer churn and source-linked HUD gap
+
+Diagnostic session `20260910T072547Z-p23496` exits 0 with 23 captures. Temporary
+CPU/output instrumentation identifies about **22.47 ms/source frame** in geometry
+allocation plus eviction during the 66..74-second early-race window, with about
+45 buffers created and 45 owners evicted per frame. Import CPU cost is only
+about 0.54 ms/frame there. Later stationary work largely stops the churn. These
+instrumented observations prioritize work; they are not retained speedups.
+
+Two missing-HUD images at scheduled 69.5/70.5 seconds map to source frames
+4758/4770 through the actual captured output resource, with no pending-resource
+conflict. Each lacks all 148 calls from three UI-associated shader pairs found
+in every passing neighboring capture. The guest producer's reason for omitting
+them and actual host-visible behavior remain unresolved. Strict HUD gates stay.
+
+Native GPU pass sampling still occurs every 60 source frames: only two early
+and two late source frames have samples. Unsampled frames do not have zero GPU
+cost. No additive GPU-cost or general performance claim follows from this run.
+Exact diagnostic binary identities, measurement boundaries, validation and local
+archive paths are in [B execution](B_EPIC_EXECUTION.md).
+
+**Resume:** attribute the existing exact-size recycler under this early-race
+churn. If it cannot reuse enough buffers, investigate fence-safe capacity reuse
+with exact logical owner ranges and the same allocation budget. That design is
+not implemented. Continue upstream HUD attribution, then strict matched 1x/2x
+and changing/streamed-content qualification across the full B scene set. The
+64 KiB invalidation candidate remains off; B1-B4 remain open and active.
+
+The probe's production source edits and binaries are restored. Direct hashes
+still verify EXE `372161...`, both renderer paths `27B486...` and both runtime
+paths `955BDC...` (full values above). SDK remains `75c3880`, with unrelated
+local kernel profiling edits preserved and excluded. No game, compiler or replay
+is active. This checkpoint adds findings only; no new retained optimization,
+preview release, save change or A6 2x expansion is made.

@@ -3920,3 +3920,19 @@ dense/sparse capture observations before recovery. Prioritize attribution of
 that active racing workload and UI gap; late stationary comparisons alone miss
 it. A 30-FPS-cap probe is inconclusive because that interval only achieves about
 15 source FPS. These are diagnostic observations, not retained speedups.
+
+Latest attribution (`20260910T072547Z-p23496`) promotes **early-race geometry
+buffer churn** as the next B2 investigation: about 45 creations/evictions and
+22.47 ms allocation-plus-eviction CPU per source frame, versus 0.54 ms import
+CPU. These are instrumented measurements, not independent frame savings. Test
+the existing exact-size recycler's removed work here before designing a larger
+capacity reuse path; the latter remains unimplemented. The 64 KiB invalidation
+lead and full mutation/streaming/retention requirements remain open.
+
+Output-resource joins map two missing-HUD captures to source frames lacking all
+148 draws from three UI-associated shader pairs present in passing neighbors.
+This narrows the next correctness investigation to upstream draw generation;
+the omission's cause and host-visible behavior remain unproven. GPU timings are
+sampled every 60 source frames, so missing records cannot be counted as zero
+cost. See [B execution](B_EPIC_EXECUTION.md) for exact identities, intervals and
+limits. Qualified binaries/defaults and all B1-B4 completion criteria are unchanged.

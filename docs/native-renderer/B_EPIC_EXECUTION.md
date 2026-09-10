@@ -1115,3 +1115,111 @@ left: static pose/HUD endpoints alone do not match race stage or the costly work
 Use this reproducible early-race interval for UI/geometry/pass attribution while
 preserving the separate Outpost, town, junction and highway requirements.
 See `hud-gap-diagnostic/{cadence-observations,early-phase-context,runtime-review}.json`.
+
+### Early-race attribution: buffer churn and absent UI-associated draws
+
+Session `20260910T072547Z-p23496` completes the 88-second stationary Recaro
+diagnostic and exits 0. It records 23 captures, including 19 race captures with
+the expected stationary pose. Two race images lack the HUD: scheduled 69.5
+and 70.5 seconds (`hud-4170`, `hud-4230`). Preserve both failures.
+
+This uses temporary instrumentation on SDK `75c3880`, with narrow invalidation,
+contained windows, buffer recycling and tile ownership explicitly off. Corpus
+recording is on and discovery sampling is off. Exact binary SHA256 identities:
+
+- EXE: `3721619222F6269492B40D91CD4972A7C7536E82C2F7067958F76BD8229AFFD3`.
+- Diagnostic renderer: `37B02E7F925FBC5E2A6DAE301A5D68CE0D0EFB9F1B0F43B2CB4CAA3D374B6A94`.
+- Diagnostic runtime: `411CF48B0D81A0C630A10C0F6F31C4B29A2593C3376CAD66640E66B38A40E75C`.
+
+The renderer includes the current SDK's exact-window map implementation, so
+candidate flags off does **not** make it the retained `27B486...` binary/source.
+Per-draw clocks, logging and captures perturb timing. These observations rank
+work within this diagnostic; they are not a retained-build benchmark, a matched
+early/late comparison or an estimate of fully removable frame time.
+
+The existing geometry-cost probe measures allocation, eviction and import CPU
+time. Source-labelled `IssueDraw` totals are joined through native output and
+geometry frame identities. Windows below use seconds since the first native
+output callback, not an assumed alignment with asynchronous CSV/GPU rows:
+
+| Measurement | Early (66..74 s, 122 frames) | Late (82.1..84.8 s, 118 frames) |
+| --- | ---: | ---: |
+| Median total `IssueDraw` CPU ms/frame | 42.023 | 12.145 |
+| Mean geometry buffers created/frame | 45.254 | 0.025 |
+| Mean geometry owners evicted/frame | 45.131 | 0.034 |
+| Mean allocation CPU ms/frame | 14.088 | 0.008 |
+| Mean eviction CPU ms/frame | 8.383 | 0.010 |
+| Mean import CPU ms/frame | 0.540 | 0.051 |
+| Mean geometry imports/frame | 46.541 | 4.975 |
+| Mean imported bytes/frame | 4,719,129 | 455,975 |
+
+Allocation covers `CreateCommittedResource`; eviction includes victim selection,
+watch removal and resource/map release. Import measures CPU preparation and
+copy-command recording, not GPU copy duration. These timers are contained within
+the draw path and must not be added again to total draw CPU. The approximately
+22.47 ms/frame allocation-plus-eviction cost makes **buffer churn during active
+early racing** the next B2 lead. The 32 MiB cache budget is unchanged. A later
+stationary scene largely stops this churn and does not qualify the early workload.
+
+The largest early CPU draw groups are depth-mode VS hashes `5A28C7FAFD86F112`,
+`C8C39E5AE1B08DE6` and `9BF2991815B941B9`, at about 6.45, 6.01 and 4.53
+ms/source frame respectively. These are draw-processing CPU costs, not measured
+shader execution time or independently removable passes.
+
+For capture attribution, the probe logs the output resource before native
+rendering and after submission, then logs the resource actually consumed by
+`CaptureGuestOutput`. Every race capture maps to a preceding completed submission
+with no same-resource pending-output conflict. The existing capture queue/fence
+path is unchanged. Submission completion here means commands submitted before
+publication, not GPU execution completed at that log entry.
+
+Missing captures map to source frames **4758 and 4770**. Both have 5,492
+`IssueDraw` calls, 5,326 issued draws and zero failed calls. Across the 14 passing
+neighboring captures through 74 seconds, the following three mode-4 shader pairs
+issue 99, 42 and 7 draws per frame; both missing captures have no recorded calls
+for any of these pairs:
+
+| Vertex / pixel shader hashes | Issued in each passing neighbor | Missing frames |
+| --- | ---: | ---: |
+| `ED90DA6EFF5C6BCA / 57B9400F6B398736` | 99 | 0 |
+| `79034645B1CB882B / CAE1DB68AFFA9D3C` | 42 | 0 |
+| `984DBF6AF14DBEBD / 6FDA0F1CDE67D12F` | 7 | 0 |
+
+Thus these 148 UI-associated draws are absent from the attributed source frames;
+the evidence does not show normally issued HUD draws simply disappearing during
+capture. It still does not identify why the guest producer omits them, prove an
+animation/cadence cause, or independently establish host-visible presentation.
+Trace that producer/packet boundary before claiming the HUD defect fixed.
+
+GPU timing retains `IsFh1GpuWorkTimingSampleFrame`'s every-60-source-frame gate.
+Only two early sources (4740/4800, 190/184 records) and two late sources
+(5340/5400, 139 records each) have pass samples. Missing samples mean unavailable
+cost, never zero. Another 26 sampled source identities fall outside the logged
+output window. Intervals can overlap, nest or include CPU starvation; no GPU
+ranking or sum of independently removable GPU costs is claimed. The final pass
+timing report records zero dropped samples.
+
+**Next:** measure the existing exact-size buffer recycler in this specific
+early-race diagnostic before designing a new cache. This would attribute work
+removed under the newly identified churn, not reopen an old failed retention
+comparison unchanged. If size mismatch still forces creation, investigate
+fence-safe reuse of a larger buffer's capacity while retaining the new owner's
+exact logical range, full import and actual allocation budget. That revised
+design is not implemented or qualified. Continue the HUD producer investigation
+and retain the strict early/late correctness gates before clean comparisons.
+
+Local evidence lives in `.local/native-renderer/b2/race-cost-profile/`: source
+snapshots/patches and hashes, Release build, passing production-cache check,
+diagnostic DLLs, route, raw log, corpus, CSV, images, capture identities and
+`run-1x/profile-summary.json`. The existing local `make-race-cost-profile.py`,
+`build-race-cost-profile.ps1`, `run-race-cost-profile.ps1` and
+`summarize-race-cost-profile.py` reproduce the probe and identity joins. These
+raw diagnostic archives remain local; this checkpoint publishes the findings
+and exact identities. No diagnostic instrumentation remains in production.
+
+Both renderer/runtime paths and the EXE are restored to their qualified hashes
+in the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md). Unrelated SDK
+kernel profiling edits remain byte-preserved and excluded from this build and
+commit. No game/compiler/replay is active. B1-B4 remain open with the full scene,
+mutation/streaming, producer-bypass and visual/timing scope; no new optimization,
+release or higher-resolution A6 admission is retained.

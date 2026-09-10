@@ -116,6 +116,12 @@ intermittent HUD absence on both the retained renderer and candidate flag-off;
 UI/output attribution is now required. The separate CPU-only snapshot shortcut
 was implemented and archived after its bounded avoided bytes measured below
 0.4%. Neither experiment completes or retains a B item; see B execution.
+Latest source-linked diagnostic attributes about 22.47 ms/frame of early-race
+CPU work to geometry allocation/eviction and maps two HUD gaps to frames with
+148 absent UI-associated draws. Measure the existing recycler under that churn
+and trace upstream HUD generation next; no cause fix or speedup is retained.
+Broader scene coverage, mutation/streaming, clean comparisons and timing remain
+required. GPU sampling is sparse and unsampled cost remains unavailable.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.
