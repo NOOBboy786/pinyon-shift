@@ -45,6 +45,9 @@ struct InputStep {
 struct Capture {
   uint64_t frame = 0;
   std::string name;
+  uint64_t trigger_output_frame = 0;
+  uint64_t trigger_elapsed_us = 0;
+  uint64_t capture_begin_elapsed_us = 0;
 };
 
 struct TestState {
@@ -240,6 +243,23 @@ class ScriptedInputDriver final : public rex::input::InputDriver {
           });
       out->gamepad = std::prev(next)->state;
       out->packet_number = uint32_t(frame);
+      const size_t index = size_t(std::prev(next) - g_test.inputs.begin());
+      size_t previous = last_input_step_.load(std::memory_order_relaxed);
+      while (previous == SIZE_MAX || index > previous) {
+        if (last_input_step_.compare_exchange_weak(previous, index,
+                                                   std::memory_order_relaxed)) {
+          // Records delivery to the input API, not acceptance by a menu.
+          diagnostics::RecordEvent(
+              "fh1.render_test.input_step",
+              {{"index", std::to_string(index)},
+               {"scheduled_frame", std::to_string(g_test.inputs[index].frame)},
+               {"observed_frame", std::to_string(frame)},
+               {"buttons", std::to_string(out->gamepad.buttons)},
+               {"skipped_steps", std::to_string(
+                   previous == SIZE_MAX ? index : index - previous - 1)}});
+          break;
+        }
+      }
     }
     return X_ERROR_SUCCESS;
   }
@@ -271,6 +291,9 @@ class ScriptedInputDriver final : public rex::input::InputDriver {
                               rex::input::X_INPUT_KEYSTROKE*) override {
     return id == kDevice ? X_ERROR_EMPTY : X_ERROR_DEVICE_NOT_CONNECTED;
   }
+
+ private:
+  std::atomic<size_t> last_input_step_{SIZE_MAX};
 };
 
 std::unique_ptr<rex::system::IInputSystem> CreateInputSystem(bool) {
@@ -324,6 +347,14 @@ bool WritePpm(const Capture& capture, const rex::ui::RawImage& image,
       "fh1.render_test.capture",
       {{"name", capture.name},
        {"frame", std::to_string(capture.frame)},
+       // The trigger is the current output callback. The image may come from
+       // an earlier published resource, so this is not its source-frame ID.
+       {"trigger_output_frame", std::to_string(capture.trigger_output_frame)},
+       {"trigger_elapsed_us", std::to_string(capture.trigger_elapsed_us)},
+       {"capture_begin_elapsed_us", std::to_string(capture.capture_begin_elapsed_us)},
+       {"capture_end_elapsed_us", std::to_string(
+           std::chrono::duration_cast<std::chrono::microseconds>(
+               std::chrono::steady_clock::now() - g_test.clock_origin).count())},
        {"width", std::to_string(image.width)},
        {"height", std::to_string(image.height)},
        {"source", source},
@@ -354,6 +385,9 @@ void Worker() {
       }
       capture = g_test.captures[g_test.next_capture];
     }
+    capture.capture_begin_elapsed_us = uint64_t(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - g_test.clock_origin).count());
     rex::ui::RawImage image;
     const bool captured = g_test.presenter->CaptureGuestOutput(image) &&
                           WritePpm(capture, image, "guest_output");
@@ -423,11 +457,11 @@ bool ObserveOutput(
     return false;
   }
   uint64_t frame = context.frame_sequence;
+  const auto now = std::chrono::steady_clock::now();
+  if (g_test.clock_origin == std::chrono::steady_clock::time_point{}) {
+    g_test.clock_origin = now;
+  }
   if (g_test.clock_hz) {
-    const auto now = std::chrono::steady_clock::now();
-    if (g_test.clock_origin == std::chrono::steady_clock::time_point{}) {
-      g_test.clock_origin = now;
-    }
     frame = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             now - g_test.clock_origin)
@@ -455,6 +489,11 @@ bool ObserveOutput(
            ? frame >= g_test.captures[g_test.next_capture].frame
            : context.frame_sequence ==
                  g_test.captures[g_test.next_capture].frame + 1)) {
+    auto& capture = g_test.captures[g_test.next_capture];
+    capture.trigger_output_frame = context.frame_sequence;
+    capture.trigger_elapsed_us = uint64_t(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            now - g_test.clock_origin).count());
     g_test.capture_complete = false;
     g_test.capture_pending = true;
     g_test.condition.notify_all();

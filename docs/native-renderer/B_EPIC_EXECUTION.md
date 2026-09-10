@@ -1417,3 +1417,91 @@ timed interval. Do not replace it with a later stationary phase or discard any
 missing-HUD evidence. Fresh 1x GPU checks, repeated clean 1x/2x tails/memory,
 sustained mutation/streaming and the full B scene set remain required. B1-B4
 stay open and the matching-victim recycler remains disabled by default.
+
+### Test-input delivery, capture clocks and a braked-entry recycler pair
+
+The prospective single-confirmation C-A block stops at A1. Retained C1
+(`20260910T083614Z-p15512`) passes all seven race HUD/pose/motion checks.
+Candidate-off A1 (`20260910T083941Z-p19100`) exits normally but never enters
+the event: its supposed race captures show free roam and fail the grid-pose
+gate. Both use EXE `372161...`; renderers are `27B486...` and `3A0B434A...`.
+No B runs or 2x block follow this failed comparison. At signup, screenshots
+show different approach positions, moving cars and adjacent traffic. The
+failure's exact cause is unproven; later success does not erase it.
+
+The test driver selects the latest scheduled input state, so a short pulse
+can be skipped if polling/output progress jumps over it. Test-only runtime
+instrumentation now records delivered step indices, scheduled/observed frames
+and skipped steps, without changing selection or input duration. Delivery to
+the API does not prove menu acceptance. Capture events additionally record
+their output-callback index, actual trigger time and readback/write interval
+relative to the route clock. The trigger is **not** the captured image's
+source-frame identity: publication may supply an earlier resource.
+
+`tools/check-fh1-render-test-clock.py` checks input delivery and bounds the
+route/CSV origin offset using synchronous D3D12 callbacks between consecutive
+XE_SWAP CSV rows, including accumulated microsecond truncation. It rejects
+missing timing evidence and inconsistent anchors. The executable unit check
+also rejects an omitted input even when capture timing is valid. Usage:
+
+```powershell
+python tools/check-fh1-render-test-clock.py <session.jsonl> --output clock-check.json
+```
+
+Release EXE SHA256:
+`EC2E5F097A3D513AE945B42B9E1EE01822A9E2DA7EEA08F5DD91B7E8F3243D30`.
+It includes the already documented CRT configuration correction as well as
+the new test telemetry. It is archived, not substituted for retained EXE
+`372161...` after tests. The unchanged candidate renderer is `3A0B434A...`;
+runtime remains `955BDC...`. Unrelated SDK kernel edits are excluded from the
+build and restored byte-for-byte.
+
+Initial timing diagnostic `20260910T084813Z-p23280` passes all 22 delivered
+inputs, 12 captures and seven race HUD/pose/motion checks. Its route/CSV origin
+offset is bounded to 3.073..20.207 ms. Whole capture-containing source-frame
+intervals are outside every selected timing window. Early-race median is
+61.497 ms; this verifies the costly phase remains present, not a speedup or
+a cause fix for the earlier failed arrival.
+
+A changed entry route adds handbraking at 14 seconds and extends the signup
+X press from 100 to 500 ms. Other times are preserved, including one final
+confirmation at 64 seconds. Both subsequent candidate-off/on runs show a
+stopped car at signup, deliver all 23 steps, exit 0, and pass the seven HUD,
+grid-pose, hold and motion checks. Their race clocks at 76/88/92 seconds differ
+by at most 0.129 seconds. Opponent standings differ; this is not identical AI
+behavior or continuous NPC/UI timing qualification.
+
+| Braked-entry diagnostic | Recycling off | Recycling on |
+| --- | ---: | ---: |
+| Session | `20260910T085213Z-p8464` | `20260910T085529Z-p29728` |
+| Early 78..86 s source frames | 144 | 316 |
+| Early median / p95 / p99, ms | 46.015 / 88.927 / 92.396 | 25.222 / 29.879 / 30.797 |
+| Early mean draws | 5,457.46 | 5,501.32 |
+| Hold 94..114 s median / p95 / p99, ms | 16.849 / 19.868 / 22.069 | 16.799 / 19.927 / 21.243 |
+| Handbrake 124..130 s p99, ms | 19.057 | 21.207 |
+| Settled 134..140 s p95 / p99, ms | 18.701 / 20.350 | 19.906 / 21.197 |
+| Last periodic allocations / recycles | 23,707 / 0 | 4,006 / 29,284 |
+
+Both use the same `EC2E5F...` EXE and `3A0B434A...` renderer; only recycling
+changes. Narrow invalidation, containment and tile ownership remain off.
+Clock-offset bounds are 3.480..20.708 ms and 3.566..20.305 ms respectively.
+Selected whole source-frame intervals stay inside each measurement window for
+every allowed offset and CSV rounding bound; capture intervals stay outside.
+No asynchronous GPU sample is assigned to a CPU row. Periodic allocation
+records are not exact session totals or per-phase rates.
+
+The early improvement prioritizes this candidate for repeated qualification.
+**No retention:** this is one off/on pair, not the full preselected repeated
+1x/2x comparison. Handbrake p99 rises 11.28% and settled p95 rises 6.44% in
+this pair. Memory-pressure comparisons, fresh 1x GPU copy evidence, sustained
+streaming, difficult scenes and continuous visual/timing checks remain open.
+Both runs retain two known invalid simulation-delta samples and the startup
+`ResolvePath(\Device)` error, with zero GPU errors/timing drops.
+
+Evidence: `.local/native-renderer/b2/matching-stage/` preserves the failed
+block and new route plans. `test-clock/` holds the build, exact sources/binary,
+three telemetry runs, clock/window checks, images and
+`braked-entry-comparison.json`. The local `summarize-test-clock.py` performs
+conservative window selection. Continue with repeated 1x/2x controls on one
+pinned EXE and the braked-entry route, collecting matched memory/process/GPU
+metrics and preserving all failures. The full B1-B4 scope remains unchanged.

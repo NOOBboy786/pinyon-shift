@@ -3963,3 +3963,10 @@ must accompany pose checks. Prioritize that qualification before matched
 1x/2x retention; fresh 1x GPU, sustained streaming, memory/tails and the full
 B1-B4 scope remain open. Detailed evidence is in [B execution](B_EPIC_EXECUTION.md)
 and the [latest checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md).
+
+Later qualification adds delivered-input/capture-clock checks after the first
+new block fails event arrival. A braked-entry same-binary off/on pair preserves
+race stage and HUD/motion while early median improves 46.015→25.222 ms and
+periodic allocations fall 23,707→4,006. Handbrake p99 rises 11.28%; this remains
+a single diagnostic pair without memory/2x/streaming retention. Continue
+repeated qualification with the new timing gates, not default enablement.

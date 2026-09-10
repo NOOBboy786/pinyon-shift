@@ -138,6 +138,11 @@ pairs; their CPU producer and omission cause remain open. A retained single-
 confirmation route passes the original HUD/hold/motion gates, but still needs
 race-stage repeatability before matched comparisons. These bounded results
 retain no new setting; see the latest checkpoint and B execution.
+The first stage-comparison block then fails event arrival. New test-input and
+capture-clock telemetry plus a braked-entry route pass bounded validation.
+One same-binary recycler off/on pair improves early median 46.015→25.222 ms,
+but later tails rise and memory/repeated 1x/2x/streaming gates remain open.
+This prioritizes repeated qualification; it does not retain the option.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.

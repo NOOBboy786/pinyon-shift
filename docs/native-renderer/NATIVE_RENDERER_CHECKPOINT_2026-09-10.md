@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [GPU reuse, HUD classification and race stage](#latest-handoff-gpu-reuse-hud-classification-and-race-stage).
+**Latest handoff:** [Input delivery, capture clocks and the recycler pair](#latest-handoff-input-delivery-capture-clocks-and-the-recycler-pair).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `acd222caa04adcc9e2ad8aabf99c09a9a8e12f0e`.
 
@@ -441,3 +441,52 @@ Checkpoint validation: the single-confirmation workload check, all tracked
 Markdown links, repository boundary check (506 files, zero violations) and
 `git diff --check` pass. No rebuild is needed for this documentation-only
 follow-up; the earlier Release and GPU results retain their exact identities.
+
+## Latest handoff: input delivery, capture clocks and the recycler pair
+
+The initial single-confirmation C-A comparison stops on failed event arrival:
+candidate-off A1 stays in free roam, despite normal exit. Preserve it under
+`.local/native-renderer/b2/matching-stage/`; no B/2x comparison followed.
+
+Test-only instrumentation now records actual delivered input steps and capture
+trigger/readback timing. `tools/check-fh1-render-test-clock.py` checks delivery
+and derives bounded CSV/route clock alignment, including timestamp truncation.
+It rejects missing evidence; output-trigger IDs are not captured-image source
+IDs. Input scheduling and normal gameplay are unchanged. The Release build,
+unit check and live timing/route checks pass.
+
+New test EXE is
+`EC2E5F097A3D513AE945B42B9E1EE01822A9E2DA7EEA08F5DD91B7E8F3243D30`;
+it includes the earlier CRT configuration correction. Three 1x telemetry runs
+use unchanged candidate renderer `3A0B434A...` and retained runtime `955BDC...`.
+The first verifies clock alignment and all 22 input steps. The next two test
+a changed approach: brake before signup, hold X for 500 ms, then confirm the
+settled Start Race menu once. All 23 steps, 12 captures and seven race HUD,
+grid-pose, hold and motion checks pass. Race-clock spread is at most 0.129 s.
+
+In the single braked-entry off/on pair, early 78..86-second median falls from
+46.015 to 25.222 ms and p99 from 92.396 to 30.797 ms. Last periodic allocation
+counts fall from 23,707 to 4,006, with 29,284 recycles. **Still unretained:**
+handbrake p99 rises 11.28%, opponents differ, and repeated 1x/2x memory/tail,
+streaming and difficult-scene qualification remains open. All timing windows
+exclude the actual capture-containing source-frame intervals. Detailed
+identities, phase results and limitations are in [B execution](B_EPIC_EXECUTION.md).
+
+**Resume:** use one pinned EXE and the braked-entry route for preselected
+repeated control/off/on 1x/2x comparisons, including memory/process/GPU cost.
+Require input delivery, actual signup/race stage, strict HUD/motion and clock
+gates. Obtain fresh 1x GPU reuse proof and continue mutation/streaming and the
+full B1 scene set. B3 pre-packet bypass and B4 visual/NPC/UI timing remain
+required; no B item completes here. Keep recycling off pending retention.
+
+All nine retained runtime files are restored and verified, including EXE
+`372161...`, both renderer paths `27B486...` and runtime `955BDC...`. Test
+archives are in `.local/native-renderer/b2/test-clock/`. No game/build/replay
+remains active. Unrelated SDK edits and saves are preserved; SDK pin stays
+`acd222c` and no renderer default changes.
+
+Validation: Release build, 17 render-test tooling tests, three 1x telemetry
+route/clock checks, the original missing-HUD negative control, legacy timing
+evidence rejection, tracked Markdown links, repository boundary (508 files,
+zero violations) and `git diff --check` pass. The staged runtime and unrelated
+source backups are verified by direct SHA256 after the last run.
