@@ -4020,4 +4020,11 @@ handoff before any presentation workaround or fresh retention comparison. The
 broad dispatcher probe hit its cap and remains rejected; the narrowed probe
 completes accounting without fixing the defect. See
 [B execution](B_EPIC_EXECUTION.md#cpu-submission-queue-and-dispatcher-evidence).
-No B item, performance setting or hardware claim is retained by this evidence.
+  No B item, performance setting or hardware claim is retained by this evidence.
+
+  Subsequent lifecycle and enqueue attribution moves the defect upstream:
+  drawing jobs are discarded during recording before some lists are consumed
+  in normal mode. The checked enqueue prefix links 48 such cycles; that run
+  still fails its trace cap, and the lifecycle run misses one early capture.
+  Follow the per-frame queue discard policy before resuming comparisons. See
+  [producer evidence](B_EPIC_EXECUTION.md#empty-normal-mode-lists-originate-in-producer-side-job-discards).

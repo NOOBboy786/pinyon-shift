@@ -776,3 +776,42 @@ The complete 1x shader pack remains staged. No game/build/replay is active.
 Source before this documentation checkpoint is main `3790487`, SDK `202247a`;
 no production algorithm/default or toolchain-pin changes. Unrelated SDK dirt
 and saves remain preserved. A6 stays symmetric-1x-only; recycling stays off.
+
+## Latest handoff: producer discards precede normal-mode empty HUD lists
+
+The lifecycle probe `20260910T114031Z-p26872` reproduces missing HUD at 77
+and 81 seconds. For those lists, the command cursor never advances between
+begin and finalization, and no ordinary drawing jobs appear in that interval.
+Closing, waiting and recorded metadata handoff succeed. The failure is already
+present before finalization. 7,074 complete slot generations are checked;
+26 of 27 captures have lifecycle coverage. Capture 72.0 precedes that window,
+so the lifecycle report retains its full-coverage failure explicitly.
+
+The enqueue probe `20260910T115046Z-p25232` reaches its two-million-record cap
+and remains **rejected as a full diagnostic**. Its separately checked prefix
+links 3,042 producer cycles by exact node/callback/owner/payload and recording
+list to dispatcher/lifecycle/CPU records. In 48 cycles, drawing jobs are
+discarded during recording, then begin/finalize/consume all run in normal mode
+0 and submit an empty 16-word list. The observed discard condition is queue
+byte 149 = 1, job flag = 0 and nesting counter 144 = 0.
+
+**Resume:** follow the per-frame discard policy through shared enqueue
+`823F4B30` (`823F4C10` admission, `823F4F08` discard, `823F4F04` linked node)
+and queue publication's byte-149 assignment at `82C0D3EC`. Separate this policy
+from the worker's later mode read at parent +6684. Test a correction that
+preserves payload lifetime, queries/fences, ordering and guest side effects;
+do not force every queued job to execute or replay old HUD lists. Reduce the
+enqueue probe's redundant records before another full diagnostic. Do not
+restart retention v2 unchanged.
+
+[B execution](B_EPIC_EXECUTION.md#empty-normal-mode-lists-originate-in-producer-side-job-discards)
+records exact binaries, counts, failure boundaries and checks. Local tools and
+evidence are `b2/hud-lifecycle-profile/`, `b2/hud-enqueue-profile/` and their
+make/build/run/analyze scripts, including the separate rejected-run prefix
+analyzer. No production fix or optimization is retained.
+
+All nine retained runtime files and diagnostic source bytes are restored and
+directly verified. No game/build/replay remains active; the complete 1x pack
+stays staged. Main source before this documentation checkpoint is `ab6757f`,
+SDK `202247a`. Unrelated SDK dirt and saves are preserved. A6 remains 1x-only,
+recycling stays off, and the complete B1-B4 goal remains active.

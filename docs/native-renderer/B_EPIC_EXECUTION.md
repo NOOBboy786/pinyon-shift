@@ -2110,3 +2110,105 @@ queries, fences and guest-visible side effects. The v2 block remains stopped;
 the full B1 scene set, B2 streaming/lifetime/tails, B3 pre-packet bypass and B4
 visual/NPC/UI timing remain required. All nine retained runtime files and
 original SDK source bytes are restored, with unrelated dirt and saves preserved.
+
+### Empty normal-mode lists originate in producer-side job discards
+
+Two additional read-only probes follow the previous dispatcher evidence.
+Neither changes rendering behavior or qualifies a performance setting.
+
+**Lifecycle probe:** `20260910T114031Z-p26872`, local
+`b2/hud-lifecycle-profile/`, exits normally with 21/21 input steps, 32/32
+capture-clock checks and 27 expected stationary Recaro poses. Decoder/IB,
+list-head, CPU-submit, queue and dispatcher checks pass. There are 1,291
+profiled source frames and 1,837,833 IB records. HUD disappears at 77 and
+81 seconds; a six-image contact sheet confirms both gaps between visible
+neighbors. Present-drop deltas total 28, invalid simulation deltas 2 and
+GPU timestamp drops 0; these instrumented timings are not benchmarks.
+
+The new lifecycle stream contains 49,518 records for 7,074 complete slot
+generations. Every checked generation closes successfully, waits successfully,
+and preserves its recorded object metadata from close to consumer wait.
+9,486 CPU submission records join those generations. The cursor does not
+advance between begin and finalization for either missing capture's two
+normal-mode HUD lists. No ordinary drawing jobs occur in those intervals;
+visible neighbors do execute drawing jobs and advance their cursors. This
+moves the investigation upstream of finalization and submission.
+
+The broad work stream completes at 1,230,383 decisions without saturation.
+The lifecycle window, however, begins later than the dispatcher window:
+capture 72.0 precedes it. Its full-coverage result is explicitly **failed**;
+the remaining 26 captures, including both missing HUD cases, have complete
+lifecycle joins. Preserve `lifecycle-analysis-coverage-failed.log` and the
+report's `passed: false`, alongside `analysis_passed: true`. Three consecutive
+same-thread events share a clock sample; the earlier strict-timestamp failure
+is preserved and ordering now permits equal samples without permitting reversal.
+Two fixture-preparation attempts rejected non-unique source anchors before
+compilation; their directories remain archived. Source and runtime restoration
+ran after each attempt.
+
+**Enqueue probe:** `20260910T115046Z-p25232`, local
+`b2/hud-enqueue-profile/`, also exits normally with 21/21 input steps and
+32/32 capture-clock checks. Its shared-enqueue trace reaches the two-million
+record cap after 11.2064167 seconds of tracing. The decoder analyzer rejects
+the GPU-category cap error; no complete decoder/capture report or retention
+claim is made for this run. Present-drop deltas total 2, invalid simulation
+deltas 2 and GPU timestamp drops 0. Both runs retain the known startup
+`ResolvePath(\Device)` error.
+
+The separate, explicitly failed-run prefix report validates 666,666 completed
+enqueue calls and leaves the final entry/decision pair incomplete. It observes
+280,353 appended nodes and 386,313 discarded jobs. All observed discards use
+queue `4015A010`, byte 149 = 1, job flag = 0, nesting counter 144 = 0 and
+state 172 = 0. These are the actual inputs to the guest discard branch, not
+an inferred GPU rejection.
+
+Exact node/callback/owner/payload and recording-list joins connect 3,042
+complete producer cycles to dispatcher decisions, slot lifetimes and CPU
+submissions. **48 cycles discard their drawing jobs but subsequently begin,
+finalize and consume in normal mode 0, submitting a 16-word list.** Their
+command cursors remain unchanged before finalization; none appends a traced
+drawing job. The discard totals per cycle are 9 (16 cycles), 21 (16),
+591 (14) or 592 (2). The observed callback families are bounded to the 21
+families selected from the earlier trace. This prefix proves the producer
+discard/normal-consumption mismatch; it does not waive saturation, establish
+coverage of every HUD state, or prove a correction.
+
+Static path for the next implementation:
+
+- Shared enqueue wrapper `823F4FE8` calls `823F4B30`. The latter has 633
+  wrapper call sites and other paths; preserve their contracts.
+- At `823F4C10`, queue byte 149, job flag and nesting counter 144 determine
+  admission. The discard path starts at `823F4F08`; successful node linkage
+  ends at `823F4F04`. Payload destruction/freeing on discard matters.
+- Queue publication code in `82C0D3EC` sets byte 149 when a queued tail remains
+  or queue counter 128 exceeds threshold 132; the alternate branch clears it.
+  Trace its frame identity and policy before deciding a correction. Do not
+  force every job to execute or replay stale HUD contents.
+- The worker `82472908` reads the shared mode at parent +6684 and forwards it
+  through `82473DE0` to the embedded queue at parent +2816. The main dispatcher
+  and this worker run on different host threads. Producer discard policy and
+  later consumer mode must be treated as distinct decisions.
+
+Binary identities (SHA256):
+
+| Probe | EXE | GPU DLL |
+| --- | --- | --- |
+| Lifecycle | `18650E344AB473A2CC560FEFA9AB8C89B7E43498B88575C215DE160C964CDB6B` | `8F466021AFC643F18C74E32F51257F015FC4D7CEBC05D8EA9B690F2DC69EE86B` |
+| Enqueue | `9D0867032220489070E6C8A92F18C5EC01511293A06E3CD05E3F0225645D274A` | `52AB1B32E4A440830648928633AAEC2F7132C7A0605B99A2DEA5834B5C420F81` |
+
+Both use diagnostic runtime
+`0558BADA33DB85F57C27C8404F3A0A3076A846BF22378E6E58F00282B2C7A52E`
+and the same pinned complete 1x pack/catalogs and 94-second route as the previous
+probe. Lifecycle stream SHA256 is
+`24F480B9A9E0FC4C220B61B4C6A09019F84BF7FD2C2FF96E4568DDB4A22E9BA7`;
+the saturated 384,000,000-byte enqueue stream is
+`097556C3E7928DB546A2BD7BDE3FEE74D54B44BC5694A926C7D0C4631F1C2660`.
+Source snapshots, diffs, binary manifests and runnable analyzers are local.
+
+Both Release builds and geometry-cache checks pass. All diagnostic source
+bytes and nine retained runtime files are restored and directly verified;
+EXE `372161...`, GPU `27B486...`, runtime `955BDC...`. No game/build/replay is
+active. Unrelated SDK dirt and saves remain intact. A6 remains symmetric-1x-only,
+recycling remains off, retention v2 stays stopped, and every B1-B4 requirement
+remains open. Next work is a correction to the producer/consumer frame policy
+with bounded diagnostics, followed by the full outstanding qualification.
