@@ -3904,3 +3904,19 @@ Qualify actual measurement-phase HUD bookends with captures outside timed
 windows, preserving the early-HUD issue explicitly. A separate unimplemented
 lead is avoiding the GPU reimport for a CPU-snapshot upgrade while the existing
 owner watch remains valid. Retained DLL `27B486...` and the full B scope remain.
+
+Later attribution: the CPU-only snapshot shortcut saves under 0.4% of observed
+imported-plus-avoided bytes at either scale. Its implementation is archived and
+removed; the 12,451 earlier snapshot requests included new/dirty owners. Prioritize
+the larger 64 KiB invalidation lead, which still has no retention result.
+
+The revised strict HUD comparison also stops, and denser sampling now reproduces
+brief missing-HUD captures in both retained and candidate-off paths. Attribute UI
+generation/drawing and output publication/capture before further retention runs;
+matching car poses miss a six-second race-entry offset in the latest control.
+The full records and unchanged B1-B4 scope are in [B execution](B_EPIC_EXECUTION.md).
+The early-race interval also shows roughly 56..85 ms source-frame medians in
+dense/sparse capture observations before recovery. Prioritize attribution of
+that active racing workload and UI gap; late stationary comparisons alone miss
+it. A 30-FPS-cap probe is inconclusive because that interval only achieves about
+15 source FPS. These are diagnostic observations, not retained speedups.

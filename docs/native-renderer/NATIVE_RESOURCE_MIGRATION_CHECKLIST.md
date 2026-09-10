@@ -110,6 +110,12 @@ passes bounded 1x/2x race smoke checks; it completes no B item.
 B2 now has a default-off 64 KiB invalidation candidate with lower import rates
 in two bounded runs. An incomplete HUD-gated comparison prevents retention;
 see the checkpoint for the revised, unexecuted workload protocol.
+Later update: the revised protocol is exercised with strict early/late HUD gates,
+but its comparison also stops on a missing early HUD. Dense captures reproduce
+intermittent HUD absence on both the retained renderer and candidate flag-off;
+UI/output attribution is now required. The separate CPU-only snapshot shortcut
+was implemented and archived after its bounded avoided bytes measured below
+0.4%. Neither experiment completes or retains a B item; see B execution.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.

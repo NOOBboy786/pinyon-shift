@@ -249,3 +249,49 @@ edits remain local. No new release or B-item completion is claimed.
 Validation: all 600 tooling tests, tracked Markdown links and the repository
 boundary check (506 files, zero violations) pass. Draft route grammar and
 capture/window separation pass; its live workload checker is still pending.
+
+## Later checkpoint: snapshot attribution and baseline HUD reproducer
+
+The preceding goal turn made progress through the invalidation implementation
+and its checkpoint. This continuation adds implementation evidence and a more
+specific UI/cost reproducer; **B1-B4 remain open**.
+
+- The CPU-only snapshot upgrade was implemented and passed production-cache
+  mutation/lifetime checks and bounded 1x/2x gameplay. It avoids only about
+  14.2/16.3 MB in runs observing 4.32/4.75 GB of imports. The earlier snapshot
+  request count included new/dirty owners. Archive this low-value experiment;
+  its production code, flag and checker extension are removed. Source, patches,
+  executable checker, DLL `0CE37F...`, build and sessions remain in
+  `.local/native-renderer/b2/cpu-snapshot/`.
+- The revised HUD/capture-window checker is implemented and its negative test
+  still rejects the original early-HUD gap even with all later bookends passing.
+  Fresh 1x C1 passes; A1 again misses the early HUD, so the comparison stops
+  before any B run. No revised 2x comparison or retention result exists.
+- Dense half-second captures reproduce intermittent missing full HUD in both
+  retained and candidate-off renderers, between passing neighboring images.
+  Sessions are `20260910T070148Z-p24964` and `20260910T070529Z-p5916`.
+  This predates the 64 KiB option. Whether title draws, output publication or
+  capture behavior causes it remains unproven; host-visible behavior is not yet
+  independently established.
+- One requested 30-FPS-cap control, `20260910T070826Z-p27796`, has no sampled HUD
+  gap, but the critical interval achieves only about 15 source FPS. It does not
+  establish a high-FPS cause or timing fix. Every diagnostic exits 0. Preserve
+  the two known invalid simulation deltas elsewhere in each session.
+
+**Next:** attribute UI generation/drawing and the produced/published image during
+the now-reproducible early-race interval. Source-CSV frame medians there are about
+56..85 ms in dense and sparse capture runs, followed by substantial recovery.
+The fresh control's race timer also differs by six seconds despite matching car
+positions. Qualify actual workload/race stage and capture timing before further
+retention comparisons; do not substitute late stationary success for this work
+or for the other required scenes. Detailed measurements, identities and limits
+are in [B execution](B_EPIC_EXECUTION.md). The 64 KiB candidate remains default-off.
+
+Retained EXE SHA256 remains
+`3721619222F6269492B40D91CD4972A7C7536E82C2F7067958F76BD8229AFFD3`;
+both staged renderer paths remain
+`27B486FD5BBD928B90186AF2778D8489F364B3C78993FDB7818CC8514E318B50`;
+runtime remains `955BDC64AD9ABA356B162F1BD0B89E356ED45622F8F8C7D66CDB4213290F3500`.
+All runs/builds/samplers are terminal. SDK stays at `75c3880`, retaining the
+unrelated local profiling edits. No save manipulation, release, new retained
+optimization or B-item completion is claimed.

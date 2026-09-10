@@ -1014,3 +1014,104 @@ reimports GPU bytes when adding a CPU snapshot even if its existing watch
 still proves the previous owner unchanged. Investigate a CPU-only upgrade
 using that watch and authoritative CPU copy, with invalidation-during-copy
 fallback; no implementation or saving from this separate lead is claimed.
+
+### CPU-only snapshot experiment: implemented, then archived
+
+The watch-valid upgrade lead was implemented behind a default-off flag, built
+and exercised at 1x/2x. An existing owner watch must remain valid through the
+authoritative CPU copy and final import decision. Otherwise the original full
+import runs. The successful path avoids the upload allocation, GPU copy and
+barriers; it adds only the CPU snapshot already required by the consumer.
+Full-owner coverage, immutable index snapshots, alias revalidation, eviction
+fences, allocation budgets and destruction retain the existing cache rules.
+
+The production-body cache check passes with exact and contained owners, partial
+writes, CPU/GPU invalidation during the copy, upload failure, failed prior imports,
+snapshot/GPU bytes, counters and fences. Candidate renderer SHA256:
+`0CE37F6CC49865B1D160C3232C4E2BE2E58D6E28197C56E7CC8F220921FAF3FC`.
+Both probes use corrected CRT EXE `C24D88...`, narrow invalidation/containment/
+recycling/tile clear off, and the revised 130-second race route. Both exit 0 and
+pass all six race HUD checks, arrival, hold and motion. Sampled race images are
+intact; the existing car-selection thumbnail corruption remains. Both have zero
+GPU errors/timing drops and the same two invalid simulation-delta observations.
+
+| Scale / session | CPU-only upgrades | Avoided upload bytes | Imported bytes |
+| --- | ---: | ---: | ---: |
+| 1x `20260910T064709Z-p3992` | 216 | 14,155,776 | 4,319,412,224 |
+| 2x `20260910T064943Z-p26616` | 249 | 16,318,464 | 4,749,000,704 |
+
+These are **last periodic counters**, not exact whole-session totals or a
+performance comparison. Avoided bytes are only 0.327%/0.342% of observed
+imported-plus-avoided bytes. The earlier 12,451 `add_snapshot` observations
+included new/dirty owners; they were not 12,451 clean-owner opportunities.
+This corrects the attribution behind that lead.
+
+**Do not retain this experiment.** Its bounded work reduction is too small to
+prioritize over speculative invalidation. The production change, flag and test
+extension are removed after archiving source, patches, executable checker, build,
+binary, sessions and review under `.local/native-renderer/b2/cpu-snapshot/`.
+No GPU-content or performance qualification is claimed, and rejection does not
+complete B2. SDK source returns to `75c3880` plus the pre-existing unrelated edits.
+
+### Revised comparison stops; dense captures reproduce a baseline HUD gap
+
+The prospective route adds captures at 80 and 129 seconds and restricts the
+acceleration window to 106..108 seconds. All scheduled captures lie outside the
+82..102, 106..108, 112..118 and 122..128 windows. Its checker separately records
+early and later HUD outcomes, but **either failure still rejects the route**.
+A negative check using the previously missing-HUD image confirms this; passing
+later bookends cannot mask the early failure. Endpoint checks still do not prove
+continuous activity, capture/CSV clock identity or transition timing.
+
+Fresh 1x C-A-B-B-A-C comparison uses the original EXE `372161...`, retained C
+renderer `27B486...` and candidate A/B renderer `BE32EE...`, narrow invalidation
+off/on. C1 (`20260910T065334Z-p11964`) passes. A1
+(`20260910T065549Z-p14316`) exits 0 but again has no HUD at 68 seconds; all five
+later HUD checks pass. The driver stops before B1/B2/A2/C2. The revised 2x block
+is not run. Both incomplete comparison blocks and all failed images remain.
+Neither supports retention. At 80 seconds the race clocks read 15.592 seconds
+in C1 and 21.592 in A1 despite matching positions, exposing a six-second race
+entry offset that pose checks alone miss.
+
+Two separate 82-second diagnostic runs capture every half-second from 66.5 to
+74 seconds and once at 80. Both exit 0 and retain the expected stationary race
+pose. They use EXE `372161...`; all candidate options are off:
+
+| Renderer / session | Missing HUD at scheduled seconds | Remaining race captures |
+| --- | --- | --- |
+| Candidate `BE32EE...`, `20260910T070148Z-p24964` | 68, 69 | 15 pass |
+| Retained `27B486...`, `20260910T070529Z-p5916` | 67.5, 69 | 15 pass |
+
+The full HUD disappears in individual captured images between passing neighbors,
+including on the retained path. This predates the 64 KiB option and is not a
+sustained missing-HUD transition. It does **not** yet distinguish title draw
+omission from output/publication/capture behavior, or establish what the user
+sees in host presentation. Do not dismiss it as a screenshot artifact or claim a
+renderer root cause. Dense captures are diagnostic, never clean benchmarks.
+Evidence and scripts: `b2/hud-gap-diagnostic/`, `hud-gap-diagnostic-plan.json`,
+`check-hud-gap-diagnostic.py`, `check-race-bookends.py` and its negative check.
+
+Next attribute the missing UI at producer, draw and published-image boundaries,
+including cadence. The 64 KiB candidate remains off pending this issue and the
+full 1x/2x ordinary/difficult streaming and mutation checks. All B1-B4 requirements
+remain open; no A6 2x retest or expansion is authorized by these observations.
+
+A follow-up retained-renderer run with requested source cap 30,
+`20260910T070826Z-p27796`, exits 0 and has no missing HUD among its 17 race
+captures. This is **inconclusive cadence attribution**: the 66..74-second
+interval produces only about 15 source frames/s, versus about 14/16 in the
+uncapped candidate/control diagnostics. It does not demonstrate a 30-versus-high
+FPS comparison, an animation fix or complete UI timing. All three diagnostics
+have zero GPU errors/timing drops, two invalid deltas elsewhere in the session,
+and approximately 1.00 simulation/wall ratio with zero invalid deltas in 66..74.
+
+The early racing workload deserves separate cost attribution. Source-CSV median
+intervals in 66..74 seconds are about 56..85 ms across these diagnostics and the
+sparsely captured controls; later intervals often recover to about 16.7..17.3 ms.
+The late-starting control remains slow longer. These are descriptive observations
+with captures, not clean benchmark estimates or proof of a capture-induced stall.
+They expose an important gap in judging this scene only after the opponents have
+left: static pose/HUD endpoints alone do not match race stage or the costly work.
+Use this reproducible early-race interval for UI/geometry/pass attribution while
+preserving the separate Outpost, town, junction and highway requirements.
+See `hud-gap-diagnostic/{cadence-observations,early-phase-context,runtime-review}.json`.
