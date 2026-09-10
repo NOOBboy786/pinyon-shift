@@ -17,7 +17,7 @@ from pathlib import Path
 SCHEMA = "pinyon-shift.fh1-render-test-result.v1"
 HEADER = "pinyon-shift-fh1-render-test-v1"
 NATIVE_COUNTER = re.compile(
-    r"FH1 V5 native (?P<family>.+?) (?:draws|vertex draws) (?P<count>\d+)"
+    r"FH1 (?:V5 )?native (?P<family>.+?) (?:draws|vertex draws|clears) (?P<count>\d+)"
 )
 PASS_FAMILY = re.compile(
     r"FH1 V5 pass family (?P<family>[0-9A-F]{16}): attachment "

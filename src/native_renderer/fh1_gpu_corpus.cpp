@@ -1,6 +1,7 @@
 #include "native_renderer/fh1_gpu_corpus.h"
 
 #include <atomic>
+#include <chrono>
 #include <array>
 #include <filesystem>
 #include <fstream>
@@ -17,10 +18,24 @@ REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_gpu_corpus, false, "Pinyon Shift",
                     "Record the local FH1 V4 GPU execution corpus")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_scene_dump, false, "Pinyon Shift",
+                    "Record expensive scene bindings/producers alongside the GPU corpus")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+
+REXCVAR_DEFINE_INT32(pinyon_shift_fh1_corpus_checkpoint_seconds, 0, "Pinyon Shift",
+                    "Periodic coverage checkpoint interval (0 = exit only)");
+
 namespace pinyon_shift::native_renderer {
 namespace {
 
 constexpr size_t kMaximumCorpusKeys = 65536;
+constexpr size_t kMaximumShaderFamilies = 4096;
+
+struct ShaderFamilyEntry {
+  uint64_t count = 0;
+  uint64_t first_frame = 0;
+  uint64_t last_frame = 0;
+};
 
 struct CorpusEntry {
   rex::system::GraphicsFh1ExecutionKey key;
@@ -42,11 +57,14 @@ struct PassEntry {
   uint64_t draw_executions = 0;
   uint64_t first_frame = 0;
   uint64_t last_frame = 0;
+  bool first_draw_identity_varies = false;
 };
 
 std::atomic<bool> g_enabled{false};
 std::mutex g_mutex;
 std::map<uint64_t, CorpusEntry> g_entries;
+std::map<std::pair<uint64_t, uint64_t>, ShaderFamilyEntry> g_shader_families;
+uint64_t g_shader_family_overflow = 0;
 std::map<uint64_t, PassEntry> g_passes;
 Fh1PassTracker g_pass_tracker;
 uint64_t g_overflow = 0;
@@ -62,6 +80,20 @@ CorpusEntry* RecordKeyLocked(const rex::system::GraphicsFh1ExecutionKey& key,
                              uint64_t pixel_shader, uint32_t index_count = 0,
                              uint32_t index_buffer_guest_base = 0,
                              uint32_t index_buffer_length = 0) {
+  // Families remain discoverable after changing resource identities fill the
+  // detailed inventory. Counts describe observed (possibly sampled) draws.
+  if (key.kind == rex::system::GraphicsFh1ExecutionKind::kDraw) {
+    const auto family_key = std::make_pair(vertex_shader, pixel_shader);
+    auto family = g_shader_families.find(family_key);
+    if (family != g_shader_families.end()) {
+      ++family->second.count;
+      family->second.last_frame = frame;
+    } else if (g_shader_families.size() < kMaximumShaderFamilies) {
+      g_shader_families.emplace(family_key, ShaderFamilyEntry{1, frame, frame});
+    } else {
+      ++g_shader_family_overflow;
+    }
+  }
   auto found = g_entries.find(key.identity);
   if (found != g_entries.end()) {
     if (found->second.key != key) {
@@ -86,6 +118,11 @@ CorpusEntry* RecordKeyLocked(const rex::system::GraphicsFh1ExecutionKey& key,
 }
 
 void RecordPassLocked(const Fh1PassSummary& summary) {
+  if (g_passes.size() >= kMaximumCorpusKeys &&
+      !g_passes.contains(summary.signature)) {
+    ++g_overflow;
+    return;
+  }
   auto [found, inserted] = g_passes.try_emplace(
       summary.signature,
       PassEntry{summary, 1, summary.draw_count, summary.frame,
@@ -95,7 +132,6 @@ void RecordPassLocked(const Fh1PassSummary& summary) {
   }
   if (found->second.summary.attachment_state != summary.attachment_state ||
       found->second.summary.first_draw_family != summary.first_draw_family ||
-      found->second.summary.first_draw_identity != summary.first_draw_identity ||
       found->second.summary.terminal_copy_state !=
           summary.terminal_copy_state ||
       found->second.summary.draw_count != summary.draw_count) {
@@ -103,6 +139,10 @@ void RecordPassLocked(const Fh1PassSummary& summary) {
     return;
   }
   ++found->second.occurrences;
+  // A pass signature groups draw families, not changing buffer identities.
+  // Keep the first identity as a representative and make variation explicit.
+  found->second.first_draw_identity_varies |=
+      found->second.summary.first_draw_identity != summary.first_draw_identity;
   found->second.draw_executions += summary.draw_count;
   found->second.summary.prepare_cpu_time_ns += summary.prepare_cpu_time_ns;
   found->second.last_frame = summary.frame;
@@ -114,6 +154,8 @@ void RecordPassLocked(const Fh1PassSummary& summary) {
 bool ResetFh1GpuCorpus() {
   std::lock_guard lock(g_mutex);
   g_entries.clear();
+  g_shader_families.clear();
+  g_shader_family_overflow = 0;
   g_passes.clear();
   g_pass_tracker = {};
   g_overflow = 0;
@@ -134,6 +176,20 @@ bool ResetFh1GpuCorpus() {
 
 void RecordFh1GpuExecution(
     const rex::system::GraphicsPreparedDrawObservation& observation) {
+  // Check the clock once per source frame, not once per draw.
+  static uint64_t checkpoint_frame = UINT64_MAX;
+  static auto last_checkpoint = std::chrono::steady_clock::now();
+  if (checkpoint_frame != observation.frame_sequence) {
+    checkpoint_frame = observation.frame_sequence;
+    const auto interval = REXCVAR_GET(pinyon_shift_fh1_corpus_checkpoint_seconds);
+    if (interval > 0) {
+      const auto now = std::chrono::steady_clock::now();
+      if (now - last_checkpoint >= std::chrono::seconds(interval)) {
+        FlushFh1GpuCorpus(false);
+        last_checkpoint = std::chrono::steady_clock::now();
+      }
+    }
+  }
   const size_t mode = static_cast<size_t>(observation.fh1_execution_mode);
   const size_t fallback = static_cast<size_t>(observation.fh1_fallback_reason);
   if (mode < g_mode_counts.size()) {
@@ -199,8 +255,9 @@ void RecordFh1GpuExecution(
   RecordKeyLocked(key, frame, vertex_shader, pixel_shader);
 }
 
-void FlushFh1GpuCorpus() {
-  if (!g_enabled.exchange(false, std::memory_order_acq_rel)) {
+void FlushFh1GpuCorpus(bool final) {
+  if (!(final ? g_enabled.exchange(false, std::memory_order_acq_rel)
+              : g_enabled.load(std::memory_order_acquire))) {
     return;
   }
   diagnostics::RecordEvent(
@@ -226,8 +283,10 @@ void FlushFh1GpuCorpus() {
                     g_runtime_sync_pipeline_creations.load(
                         std::memory_order_relaxed))}});
   std::lock_guard lock(g_mutex);
-  if (const auto pass = g_pass_tracker.Finish()) {
-    RecordPassLocked(*pass);
+  if (final) {
+    if (const auto pass = g_pass_tracker.Finish()) {
+      RecordPassLocked(*pass);
+    }
   }
   const auto root = diagnostics::StateRoot() / "cache" / "fh1-gpu-corpus";
   std::error_code error;
@@ -246,6 +305,9 @@ void FlushFh1GpuCorpus() {
     return;
   }
   stream << "{\n  \"schema\": \"pinyon-shift.fh1-gpu-corpus.v3\",\n"
+         << "  \"observation_frame_stride\": "
+         << (rex::cvar::GetFlagByName("fh1_discovery_sampling") == "true" ? 60 : 1)
+         << ",\n"
          << "  \"key_version\": "
          << rex::system::GraphicsFh1ExecutionKey::kVersion << ",\n"
          << "  \"unique_keys\": " << g_entries.size() << ",\n"
@@ -253,7 +315,19 @@ void FlushFh1GpuCorpus() {
          << "  \"overflow\": " << g_overflow << ",\n"
          << "  \"collisions\": " << g_collisions << ",\n"
          << "  \"pass_collisions\": " << g_pass_collisions << ",\n"
-         << "  \"entries\": [\n";
+         << "  \"shader_family_overflow\": " << g_shader_family_overflow << ",\n"
+         << "  \"shader_families\": [\n";
+  bool first_family = true;
+  for (const auto& [shaders, family] : g_shader_families) {
+    if (!first_family) stream << ",\n";
+    first_family = false;
+    stream << fmt::format(
+        "    {{\"vertex_shader\":\"{:016X}\",\"pixel_shader\":\"{:016X}\","
+        "\"count\":{},\"first_frame\":{},\"last_frame\":{}}}",
+        shaders.first, shaders.second, family.count, family.first_frame,
+        family.last_frame);
+  }
+  stream << "\n  ],\n  \"entries\": [\n";
   bool first = true;
   for (const auto& [identity, entry] : g_entries) {
     if (!first) {
@@ -338,6 +412,7 @@ void FlushFh1GpuCorpus() {
         "\"attachment_state\":\"{:016X}\"," 
         "\"first_draw_family\":\"{:016X}\"," 
         "\"first_draw_identity\":\"{:016X}\"," 
+        "\"first_draw_identity_varies\":{},"
         "\"terminal_copy_state\":\"{:016X}\"," 
         "\"draw_count\":{},\"hazard_flags\":{},"
         "\"prepare_cpu_time_ns\":{},"
@@ -348,6 +423,7 @@ void FlushFh1GpuCorpus() {
         signature, entry.summary.attachment_state,
         entry.summary.first_draw_family,
         entry.summary.first_draw_identity,
+        entry.first_draw_identity_varies,
         entry.summary.terminal_copy_state, entry.summary.draw_count,
         entry.summary.hazard_flags, entry.summary.prepare_cpu_time_ns,
         entry.occurrences
@@ -371,6 +447,7 @@ void FlushFh1GpuCorpus() {
   diagnostics::RecordEvent(
       "native_renderer.v4.corpus.write",
       {{"status", error ? "commit_failed" : "written"},
+       {"final", final ? "1" : "0"},
        {"path", output.string()},
        {"unique_keys", fmt::format("{}", g_entries.size())},
        {"unique_passes", fmt::format("{}", g_passes.size())},

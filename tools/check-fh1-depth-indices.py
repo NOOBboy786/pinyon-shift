@@ -45,10 +45,10 @@ bool admitted(uint64_t fh1_vertex_hash,bool pixel,bool memexport_used,bool host,
  ADMISSION
  return fh1_depth_indices;
 }
-bool run(bool eligible,Result primitive_processing_result,SharedMemory& memory,bool terrain=false,bool qualified=true,bool scene=false,bool packed=false){
+bool run(bool eligible,Result primitive_processing_result,SharedMemory& memory,bool terrain=false,bool qualified=true,bool scene=false,bool packed=false,bool skinned=false){
  auto* shared_memory_=&memory;const bool fh1_depth_indices=eligible;
- int root_signature_fh1_depth_=1,root_signature_fh1_terrain_=2,root_signature_fh1_layered_=3,root_signature=qualified?(terrain?2:scene&&!packed?3:1):4;
- uint32_t fh1_depth_stride=(terrain || scene)?0:24,fh1_scene_stride=scene?(packed?28:20):0;
+ int root_signature_fh1_depth_=1,root_signature_fh1_terrain_=2,root_signature_fh1_layered_=3,root_signature_fh1_skinned_=5,root_signature=qualified?(skinned?5:terrain?2:scene&&!packed?3:1):4;
+ uint32_t fh1_depth_stride=(terrain || scene || skinned)?0:24,fh1_scene_stride=skinned?32:scene?(packed?28:20):0;
  SNAPSHOT
  struct {uint64_t BufferLocation=0;uint32_t SizeInBytes=4;} index_buffer_view;
  auto finish_draw=[](bool result){return result;};
@@ -60,6 +60,17 @@ bool run(bool eligible,Result primitive_processing_result,SharedMemory& memory,b
 }
 bool needs_residency(Result cacheable,bool defer_guest_dma_residency){return PREDICATE;}
 int main(){
+ for(bool available:{false,true})for(bool qualified:{false,true}){
+  SharedMemory m;cache_ok=available;cache_calls=0;
+  assert(run(true,Result{},m,false,qualified,false,false,true)==(available&&qualified));
+  assert(cache_calls==int(qualified));assert(m.requests==int(!available||!qualified));
+ }
+ cache_ok=true;
+ for(bool memexport:{false,true})for(bool host:{false,true}){
+  assert(admitted(0xB8489164D5A86043ull,true,memexport,host,0x68150A8E959006CDull)==(!memexport&&host));
+  assert(!admitted(0xB8489164D5A86043ull,true,memexport,host,0));
+ }
+
  {SharedMemory m;assert(run(true,Result{},m,false,true,true,true));
   assert(!run(true,Result{},m,false,false,true,true));}
 

@@ -1,4 +1,4 @@
-"""Compile the production shadow-mask admission gate."""
+"""Compile production shadow and standalone vertex admission gates."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -8,6 +8,7 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--compiler',default='clang++')
 a=p.parse_args()
 s=(Path(__file__).resolve().parents[1]/'thirdparty/shiftglue-sdk/src/graphics/d3d12/pipeline_cache.cpp').read_text()
+assert 'const bool fh1_skinned_geometry = false &&' in s, 'ownership must stay disabled until its performance gate passes'
 i=s.index('  return',s.index('bool PipelineCache::IsFh1NativeShadowPipeline'))
 gate=s[i:s.index(';',i)+1].replace('  return','  const bool fh1_shadow_mask_pixel =',1)
 j=s.index("  return",s.index("bool PipelineCache::IsFh1NativeShadowVertex"))
@@ -27,6 +28,18 @@ bool standalone(uint64_t hash,uint64_t modification,bool bindless_resources_used
 bool position(Description description,bool bindless_resources_used_=true){POSITION_GATE}
 bool admits(Description description,bool bindless_resources_used_=true){auto IsFh1NativeShadowVertex = [&](uint64_t hash,uint64_t modification){return admits_vertex(hash,modification,bindless_resources_used_);}; GATE return fh1_shadow_mask_pixel;}
 int main(){
+ for(int x=1;x<=4;++x)for(int y=1;y<=4;++y)for(uint64_t mod:{0ull,1ull,0x1Full,0x3Full,~0ull}){
+  render_target_cache_={};render_target_cache_.x=x;render_target_cache_.y=y;
+  assert(standalone(0xB8489164D5A86043ull,mod)==(mod==0x1F&&x==2&&y==2));
+  assert(!standalone(0xB8489164D5A86043ull,mod,false));
+  render_target_cache_.path=RenderTargetCache::Path::kPixelShaderInterlock;
+  assert(!standalone(0xB8489164D5A86043ull,mod));
+ }
+ render_target_cache_={};
+ for(int bit=0;bit<64;++bit){
+  assert(!standalone(0xB8489164D5A86043ull^(uint64_t(1)<<bit),0x1F));
+  assert(!standalone(0xB8489164D5A86043ull,0x1Full^(uint64_t(1)<<bit)));
+ }
  for(uint64_t mod:{0x0000400000000001ull,0x0000400000010001ull}){
   render_target_cache_={};Description d;d.vertex_shader_hash=0x1E6883FCCDE1F688ull;d.pixel_shader_hash=0xA4A965C189287B99ull;d.pixel_shader_modification=mod;
   assert(position(d));assert(!position(d,false));
@@ -56,4 +69,4 @@ with tempfile.TemporaryDirectory() as tmp:
  cpp=Path(tmp)/'check.cpp';exe=Path(tmp)/'check.exe';cpp.write_text(code)
  subprocess.run([a.compiler,'-std=c++20',str(cpp),'-o',str(exe)],check=True)
  subprocess.run([str(exe)],check=True)
-print('Shadow-mask admission checks passed')
+print('Shadow and standalone vertex admission checks passed')

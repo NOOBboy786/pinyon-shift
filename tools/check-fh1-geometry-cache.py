@@ -31,6 +31,7 @@ def main():
     index_start = source.index('    deferred_command_list_.D3DIASetIndexBuffer(&index_buffer_view);')
     access_start = source.index('    if (memexport_used)', index_start)
     index_access = source[access_start:source.index('    SubmitBarriers();', access_start)]
+    skinned_binding = block_at('if (current_fh1_skinned_origin_ != skinned_origin)')
     binding = block_at('if (current_fh1_geometry_address_ != geometry_address)')
     rebase = block_at('if (geometry_address) {\n      const uint32_t rebased')
     terrain_binding = block_at('if (current_fh1_terrain_addresses_ != terrain_addresses)')
@@ -49,6 +50,7 @@ def main():
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <string>
 #include <span>
@@ -62,6 +64,9 @@ constexpr int D3D12_RESOURCE_FLAG_NONE=0;
 #define FAILED(x) ((x)!=0)
 #define IID_PPV_ARGS(x) x
 #define REXGPU_INFO(...) ((void)0)
+inline bool fh1_recycle_geometry_buffers=false;
+inline bool fh1_contain_geometry_windows=false;
+#define REXCVAR_GET(name) name
 struct ID3D12Resource { std::vector<uint8_t> bytes; explicit ID3D12Resource(size_t size):bytes(size){} void SetName(const wchar_t*){} uint64_t GetGPUVirtualAddress(){return reinterpret_cast<uint64_t>(bytes.data());} };
 namespace Microsoft::WRL {
 template<class T> struct ComPtr {
@@ -70,6 +75,7 @@ template<class T> struct ComPtr {
   ComPtr()=default;
   ComPtr(const ComPtr&)=delete;
   ComPtr(ComPtr&& other):ptr(std::exchange(other.ptr,nullptr)){}
+  ComPtr& operator=(ComPtr&& other){if(this!=std::addressof(other)){delete ptr;ptr=std::exchange(other.ptr,nullptr);}return *this;}
   T* Get()const{return ptr;}
   T* operator->()const{return ptr;}
   T** operator&(){return &ptr;}
@@ -85,10 +91,11 @@ void FillBufferResourceDesc(D3D12_RESOURCE_DESC& desc,uint32_t size,int){desc.si
 }
 struct Device {
   bool fail=false;
+  uint32_t creations=0;
   struct Allocation {uint64_t SizeInBytes;};
   Allocation GetResourceAllocationInfo(int,int,const D3D12_RESOURCE_DESC* d){return {(d->size+65535)&~uint64_t(65535)};}
   int CreateCommittedResource(const int*,int,const D3D12_RESOURCE_DESC* d,int,void*,ID3D12Resource** out){
-    if(fail)return 1;*out=new ID3D12Resource(d->size);return 0;
+    if(fail)return 1;*out=new ID3D12Resource(d->size);++creations;return 0;
   }
 };
 struct Provider {Device device; Device* GetDevice()const{return const_cast<Device*>(&device);} int GetHeapFlagCreateNotZeroed()const{return 0;} };
@@ -145,8 +152,11 @@ struct D3D12CommandProcessor {
   Provider provider;SharedMemory memory;SharedMemory* shared_memory_=&memory;Commands deferred_command_list_;
   uint64_t submission_current_=1,submission_completed_=0;
   const Provider& GetD3D12Provider(){return provider;}
-  void PushTransitionBarrier(ID3D12Resource*,int,int){}
+  std::vector<std::array<int,2>> barriers;
+  void PushTransitionBarrier(ID3D12Resource*,int from,int to){barriers.push_back({from,to});}
   void SubmitBarriers(){}
+  uint32_t current_fh1_skinned_origin_=0;
+  void bind_skinned(uint32_t skinned_origin){ /* SKINNED BINDING */ }
   uint64_t current_fh1_geometry_address_=0;
   std::array<uint64_t,2> current_fh1_terrain_addresses_{};
   void bind_terrain(std::array<uint64_t,2> terrain_addresses){
@@ -180,7 +190,125 @@ auto depth_geometry_range(std::span<const uint32_t,8> system,std::span<const uin
 }
 /* METHODS */
 /* INVALIDATE */
-int main(){
+int main(int argc,char**){
+  fh1_contain_geometry_windows=argc>1;
+  {
+    // A new larger import must not redirect snapshots away from a held owner.
+    D3D12CommandProcessor c;c.memory.cpu=true;c.memory.source.bytes[64]=7;
+    auto held=c.GetFh1OwnedGeometry(64,4,true);assert(held);
+    c.memory.source.bytes[64]=9;c.memory.invalidate(64,false);
+    auto larger=c.GetFh1OwnedGeometry(0,131072,true);assert(larger);
+    assert(*reinterpret_cast<uint8_t*>(held)==7);
+    assert(reinterpret_cast<uint8_t*>(larger)[64]==9);
+    assert(c.GetFh1OwnedGeometryCpuRange(64,4)[0]==7);
+    assert(c.GetFh1OwnedGeometry(64,4,true)==held); // Refresh the original owner.
+    assert(*reinterpret_cast<uint8_t*>(held)==9);
+    c.ClearFh1OwnedGeometry();assert(c.memory.watches.empty());
+  }
+  {
+    D3D12CommandProcessor c;c.memory.cpu=true;
+    c.memory.source.bytes[64]=1;c.memory.source.bytes[65552]=77;
+    auto large=c.GetFh1OwnedGeometry(0,131072);assert(large);
+    auto nested=c.GetFh1OwnedGeometry(64,16,true);assert(nested);
+    const bool contained=fh1_contain_geometry_windows;
+    assert((nested==large+64)==contained);
+    assert(c.fh1_geometry_.size()==(contained?1u:2u));
+    assert(c.fh1_geometry_bytes_==(contained?131072u:196608u));
+    assert(c.GetFh1OwnedGeometryCpuRange(64,16)[0]==1);
+    assert(c.GetFh1OwnedGeometryCpuRange(65552,1).empty()); // Different base.
+    const auto imports=c.fh1_geometry_imports_;
+    c.memory.source.bytes[65552]=88;c.memory.invalidate(65552,false);
+    assert(c.GetFh1OwnedGeometry(64,16,true)==nested);
+    assert(c.fh1_geometry_imports_==imports+contained);
+    if(contained){
+      assert(c.fh1_geometry_.begin()->second.cpu_snapshot.size()==131072);
+      assert(c.fh1_geometry_.begin()->second.cpu_snapshot[65552]==88);
+      assert(reinterpret_cast<uint8_t*>(large)[65552]==88);
+      auto& owner=c.fh1_geometry_.begin()->second;
+      owner.depth_bounds.emplace_back();owner.terrain_bounds.emplace_back();
+      c.memory.cpu=false;c.memory.source.bytes[64]=4;c.memory.invalidate(64,true);
+      assert(c.GetFh1OwnedGeometry(64,16,true)==nested);
+      assert(c.GetFh1OwnedGeometryCpuRange(64,16).empty());
+      assert(owner.depth_bounds.empty() && owner.terrain_bounds.empty());
+      assert(*reinterpret_cast<uint8_t*>(nested)==4);
+      assert(reinterpret_cast<uint8_t*>(large)[65552]==88);
+      c.memory.cpu=true;c.memory.source.bytes[64]=5;c.memory.invalidate(64,false);
+      assert(c.GetFh1OwnedGeometry(64,16,true)==nested);
+      assert(c.GetFh1OwnedGeometryCpuRange(64,16)[0]==5);
+    }
+    assert(bool(c.fh1_geometry_contained_uses_)==contained);
+    c.ClearFh1OwnedGeometry();assert(c.memory.watches.empty());
+    // Same guest range after destruction must get fresh contents and metadata.
+    c.memory.source.bytes[64]=6;
+    assert(c.GetFh1OwnedGeometry(0,131072,true));
+    assert(c.GetFh1OwnedGeometry(64,16,true));
+    assert(c.GetFh1OwnedGeometryCpuRange(64,16)[0]==6);
+    c.ClearFh1OwnedGeometry();assert(c.memory.watches.empty());
+  }
+  if(fh1_contain_geometry_windows){
+    D3D12CommandProcessor c;c.memory.cpu=true;c.memory.source.bytes[64]=7;
+    constexpr uint32_t size=16*1024*1024;
+    auto held=c.GetFh1OwnedGeometry(0,size,true);assert(held);
+    c.submission_current_=2;assert(c.GetFh1OwnedGeometry(size,size));
+    c.submission_current_=3;c.submission_completed_=2;
+    assert(c.GetFh1OwnedGeometry(64,16,true)==held+64);
+    c.submission_current_=4;assert(c.GetFh1OwnedGeometry(2*size,size));
+    assert(c.fh1_geometry_.contains(size)); // Nested use protected first owner.
+    assert(!c.fh1_geometry_.contains((uint64_t(size)<<32)|size));
+    assert(c.GetFh1OwnedGeometryCpuRange(64,16)[0]==7);
+    assert(reinterpret_cast<uint8_t*>(held)[64]==7);
+    assert(c.fh1_geometry_bytes_==32*1024*1024);
+    c.ClearFh1OwnedGeometry();assert(c.memory.watches.empty());
+  }
+  for(bool recycle:{false,true}) {
+    fh1_recycle_geometry_buffers=recycle;
+    D3D12CommandProcessor c;c.memory.cpu=true;
+    constexpr uint32_t bytes=16*1024*1024;
+    std::fill_n(c.memory.source.bytes.begin(),bytes,0xA5);
+    std::fill_n(c.memory.source.bytes.begin()+bytes,bytes,0xB6);
+    std::fill_n(c.memory.source.bytes.begin()+2*bytes,bytes,0xC7);
+    auto original=c.GetFh1OwnedGeometry(0,bytes,true);assert(original);
+    c.fh1_geometry_.at(bytes).depth_bounds.emplace_back();
+    c.fh1_geometry_.at(bytes).terrain_bounds.emplace_back();
+    c.submission_current_=2;assert(c.GetFh1OwnedGeometry(bytes,bytes,true));
+    c.submission_current_=3;
+    assert(!c.GetFh1OwnedGeometry(2*bytes,bytes,true)); // Every victim still in flight.
+    assert(c.fh1_geometry_recycles_==0 && c.provider.device.creations==2);
+    c.submission_completed_=1;
+    c.provider.device.fail=recycle; // Reuse needs no successful allocation call.
+    auto barrier_start=c.barriers.size();
+    auto replacement=c.GetFh1OwnedGeometry(2*bytes,bytes,true);assert(replacement);
+    assert(!recycle || replacement==original);
+    assert(c.provider.device.creations==(recycle?2u:3u));
+    assert(c.fh1_geometry_allocations_==c.provider.device.creations);
+    assert(c.fh1_geometry_recycles_==uint64_t(recycle));
+    assert(c.barriers[barrier_start][0]==(recycle?6:1) && c.barriers[barrier_start][1]==1);
+    assert(c.fh1_geometry_bytes_==2*bytes && c.fh1_geometry_.size()==2 && c.memory.watches.size()==2);
+    assert(!c.fh1_geometry_.contains(bytes));
+    auto& entry=c.fh1_geometry_.at((uint64_t(2*bytes)<<32)|bytes);
+    assert(entry.depth_bounds.empty() && entry.terrain_bounds.empty());
+    assert(!std::memcmp(reinterpret_cast<void*>(replacement),c.memory.source.bytes.data()+2*bytes,bytes));
+    assert(!std::memcmp(entry.cpu_snapshot.data(),reinterpret_cast<void*>(replacement),bytes));
+    auto watch=entry.watch;c.memory.invalidate(64,false);assert(entry.watch==watch);
+    c.memory.source.bytes[2*bytes+64]=0xD8;c.memory.invalidate(2*bytes+64,false);
+    assert(!entry.watch);assert(c.GetFh1OwnedGeometry(2*bytes,bytes,true)==replacement);
+    assert(reinterpret_cast<uint8_t*>(replacement)[64]==0xD8);
+    c.submission_completed_=3;c.ClearFh1OwnedGeometry();
+    assert(c.memory.watches.empty() && c.fh1_geometry_.empty() && !c.fh1_geometry_bytes_);
+  }
+  {
+    fh1_recycle_geometry_buffers=true;
+    D3D12CommandProcessor c;c.memory.cpu=true;
+    constexpr uint32_t unit=8*1024*1024;
+    assert(c.GetFh1OwnedGeometry(0,unit));
+    c.submission_current_=2;assert(c.GetFh1OwnedGeometry(unit,3*unit));
+    c.submission_current_=3;c.submission_completed_=2;
+    assert(c.GetFh1OwnedGeometry(4*unit,2*unit)); // Neither victim has the requested size.
+    assert(c.provider.device.creations==3 && c.fh1_geometry_recycles_==0);
+    assert(c.fh1_geometry_bytes_==2*unit && c.memory.watches.size()==1);
+    c.ClearFh1OwnedGeometry();
+  }
+  fh1_recycle_geometry_buffers=false;
   {
     D3D12CommandProcessor c;c.memory.cpu=true;c.memory.source.bytes[64]=1;
     uint32_t system[8]={0,0,0,0xffffffff,0,0,0,0xffffff};
@@ -209,7 +337,7 @@ int main(){
     c.memory.invalidate(64,false);c.memory.source.bytes[64]=3;
     assert((*bound())[0].second==36 && terrain_scans==before);
     c.GetFh1OwnedGeometry(68,4);assert((*bound())[0].second==92 && terrain_scans==before+1);
-    for(uint32_t fetch:{89u,90u,95u})assert(c.vertex_buffer_states_[fetch].address==UINT32_MAX);
+    for(uint32_t fetch:{89u,90u,94u,95u})assert(c.vertex_buffer_states_[fetch].address==UINT32_MAX);
     for(uint32_t i=0;i<40;++i)c.GetFh1TerrainGeometryRanges(256+i*2,2,system,2,false,constants,fetches);
     assert(c.fh1_geometry_.begin()->second.terrain_bounds.size()==32);
     before=terrain_scans;bound();assert(terrain_scans==before+1);
@@ -263,6 +391,7 @@ int main(){
     assert(shared.writes==memexport_used);
     assert(shared.reads==(!memexport_used && !geometry_address));
   }
+  const bool fh1_skinned=false;
   for(uint64_t geometry_address:{0ull,100ull}) for(uint64_t control:{0ull,200ull}) {
     std::array<uint64_t,2> terrain_addresses{0,control};
     uint32_t requested=0;
@@ -318,6 +447,12 @@ int main(){
     assert(!snapshot.empty() && std::memcmp(snapshot.data(),reinterpret_cast<void*>(gpu),4)==0);
   }
   D3D12CommandProcessor bindings;
+  for(uint32_t origin:{0u,0x1000u,0x1010u,0x1010u,0u}){
+    uint32_t old=bindings.current_fh1_skinned_origin_;
+    bindings.cbuffer_binding_fetch_.up_to_date=true;bindings.bind_skinned(origin);
+    assert(bindings.cbuffer_binding_fetch_.up_to_date==(old==origin));
+  }
+
   bindings.bind_geometry(100);
   assert(!bindings.cbuffer_binding_fetch_.up_to_date && !(bindings.current_graphics_root_up_to_date_ & (1u<<5)));
   bindings.cbuffer_binding_fetch_.up_to_date=true;
@@ -344,10 +479,24 @@ int main(){
     /* REBASE */
     for(uint32_t i=0;i<192;i++)assert(output[i]==(geometry_address && i==190 ? regs[i]&15u : regs[i]));
   }
+  const bool native_skinned=false;const uint32_t skinned_origin=0;
   for(auto terrain_addresses:{std::array<uint64_t,2>{0,0},{0,200},{100,200}}){
     std::memcpy(output,regs,sizeof(regs));auto* fetch_constants=reinterpret_cast<uint8_t*>(output);
     /* TERRAIN REBASE */
     for(uint32_t i=0;i<192;++i)assert(output[i]==(((i==180 && terrain_addresses[0]) || (i==178 && terrain_addresses[1]))?regs[i]&15u:regs[i]));
+  }
+  for(uint32_t origin:{0x1000u,0x12340u}){
+    const bool native_skinned=true;const uint32_t skinned_origin=origin;
+    std::array<uint64_t,2> terrain_addresses{100,0};
+    std::memcpy(output,regs,sizeof(regs));auto* fetch_constants=reinterpret_cast<uint8_t*>(output);
+    /* TERRAIN REBASE */
+    for(uint32_t i=0;i<192;++i)assert(output[i]==(i==188?regs[i]-origin:regs[i]));
+  }
+  for(bool owned:{false,true}){
+    const bool fh1_skinned=true;uint64_t geometry_address=owned?100:0;
+    std::array<uint64_t,2> terrain_addresses{owned?200u:0u,0};uint32_t requested=0;
+    for(uint32_t vfetch_index=0;vfetch_index<96;++vfetch_index){ /* SKIP */ ++requested; }
+    assert(requested==(owned?94u:96u));
   }
   D3D12CommandProcessor c;
   assert(!c.GetFh1OwnedGeometry(0,0));
@@ -389,13 +538,14 @@ int main(){
   assert(c.fh1_geometry_bytes_==32*1024*1024);
   c.ClearFh1OwnedGeometry();assert(c.memory.watches.empty());
 }
-""".replace('/* MEMBERS */',members).replace('/* METHODS */',methods).replace('/* INVALIDATE */',invalidate).replace('/* DRAW ACCESS */',draw_access).replace('/* BINDING */',binding).replace('/* REBASE */',rebase).replace('/* SKIP */',skip).replace('/* TERRAIN BINDING */',terrain_binding).replace('/* TERRAIN REBASE */',terrain_rebase)
+""".replace('/* SKINNED BINDING */',skinned_binding).replace('/* MEMBERS */',members).replace('/* METHODS */',methods).replace('/* INVALIDATE */',invalidate).replace('/* DRAW ACCESS */',draw_access).replace('/* BINDING */',binding).replace('/* REBASE */',rebase).replace('/* SKIP */',skip).replace('/* TERRAIN BINDING */',terrain_binding).replace('/* TERRAIN REBASE */',terrain_rebase)
     with tempfile.TemporaryDirectory(prefix='fh1-geometry-cache-') as directory:
         cpp, executable = Path(directory)/'check.cpp', Path(directory)/'check.exe'
         cpp.write_text(harness.replace('/* INDEX ACCESS */',index_access))
         subprocess.run([args.compiler,'-std=c++20','-I'+str(root/'include'),str(cpp),'-o',str(executable)],check=True)
         subprocess.run([str(executable)],check=True)
-    print('Geometry cache mutation, in-flight invalidation, failures, budget and eviction: passed')
+        subprocess.run([str(executable),'contain'],check=True)
+    print('Geometry cache exact/contained ownership, mutation, in-flight invalidation, failures, budget and eviction: passed')
 
 
 if __name__=='__main__':

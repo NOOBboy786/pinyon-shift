@@ -14,6 +14,6 @@ void RecordFh1GpuCopy(
 void RecordFh1GpuExecution(
     const rex::system::GraphicsFh1ExecutionKey& key, uint64_t frame,
     uint64_t vertex_shader = 0, uint64_t pixel_shader = 0);
-void FlushFh1GpuCorpus();
+void FlushFh1GpuCorpus(bool final = true);
 
 }  // namespace pinyon_shift::native_renderer

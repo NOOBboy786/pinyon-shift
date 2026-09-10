@@ -43,6 +43,9 @@ def main():
 #undef assert
 #define assert(x) ((x) ? void(0) : throw std::runtime_error(#x))
 #define assert_not_zero(x) assert(x)
+constexpr int kTextureDirtyLoadAttempts=0;
+int dirty_load_attempts=0;
+void PERF_counter_inc(int id){assert(id==kTextureDirtyLoadAttempts);++dirty_load_attempts;}
 namespace rex { template<class T> T align(T a,T b) { return (a+b-1)&~(b-1); } }
 struct Region { std::recursive_mutex mutex; auto Acquire() { return std::unique_lock(mutex); } };
 struct SharedMemory {
@@ -115,6 +118,11 @@ struct TextureCache {
 };
 METHODS
 int main() try {
+  { TextureCache c; TextureCache::Texture t{c}; dirty_load_attempts=0;
+    assert(c.LoadTextureData(t)); assert(dirty_load_attempts==1);
+    TextureCache::PendingTextureLoad p; TextureCache::PendingSharedMemoryRange ranges[2]; size_t n=0;
+    assert(!c.PrepareTextureLoad(t,p,ranges,n)); assert(dirty_load_attempts==1); }
+
   // CPU success skips residency; writes survive completion and failed attempts fall back.
   for(bool success:{false,true}) for(int part:{-1,0,1}) {
     TextureCache c; TextureCache::Texture t{c}; c.cpu_import=success;c.cpu_write=part;

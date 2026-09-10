@@ -55,7 +55,8 @@ void PinyonShiftObserveGraphicsFrame() { PROFILE_SOURCE_FRAME(); }
 void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
                                          PPCRegister& r11) {
   static const bool enabled =
-      rex::cvar::GetFlagByName("pinyon_shift_fh1_gpu_corpus") == "true";
+      rex::cvar::GetFlagByName("pinyon_shift_fh1_gpu_corpus") == "true" &&
+      rex::cvar::GetFlagByName("pinyon_shift_fh1_scene_dump") == "true";
   if (!enabled) {
     return;
   }

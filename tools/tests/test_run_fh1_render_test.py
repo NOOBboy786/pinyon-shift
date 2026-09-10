@@ -13,6 +13,30 @@ SPEC.loader.exec_module(MODULE)
 
 
 class Fh1RenderTestRunnerTests(unittest.TestCase):
+    def test_native_counter_accepts_owned_clear_and_legacy_draws(self):
+        for line, family, count in (
+            ("FH1 native owned depth clears 8192", "owned depth", 8192),
+            ("FH1 V5 native world-lit draws 12", "world-lit", 12),
+            ("FH1 V5 native world-lit vertex draws 9", "world-lit", 9),
+        ):
+            match = MODULE.NATIVE_COUNTER.search(line)
+            self.assertIsNotNone(match)
+            self.assertEqual(family, match["family"])
+            self.assertEqual(count, int(match["count"]))
+        self.assertIsNone(MODULE.NATIVE_COUNTER.search("FH1 native owned depth rejected 42"))
+
+    def test_owned_depth_race_preserves_motion_and_timing_requirements(self):
+        scenarios = Path(__file__).parents[2] / "config" / "render-tests"
+        legacy = MODULE.parse_scenario(scenarios / "fh1-race.fh1test")
+        owned = MODULE.parse_scenario(scenarios / "fh1-owned-depth-race.fh1test")
+        self.assertEqual({"owned depth"}, owned[2])
+        self.assertEqual(legacy[:2], owned[:2])
+        self.assertEqual(legacy[3:], owned[3:])
+        def actions(path):
+            return [line for line in path.read_text().splitlines() if line and not line.startswith("#")]
+        self.assertEqual(actions(scenarios / "fh1-race.fh1test"),
+                         actions(scenarios / "fh1-owned-depth-race.fh1test"))
+
     def test_resolves_disc_corpus_ucode_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
