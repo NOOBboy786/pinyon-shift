@@ -4,6 +4,10 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
+**Latest handoff:** [GPU reuse, HUD classification and race stage](#latest-handoff-gpu-reuse-hud-classification-and-race-stage).
+Earlier sections preserve the sequence of experiments; their resume orders and
+source pins are historical. Current SDK pin: `acd222caa04adcc9e2ad8aabf99c09a9a8e12f0e`.
+
 ## Retained behavior and current source
 
 - A1–A6 are complete for the bounded native depth-clear chain at symmetric 1x.
@@ -379,3 +383,61 @@ release-contract tests, tracked Markdown links and repository boundary check
 (506 files) pass. Fresh GPU byte/consumer replay and matched performance gates
 remain outstanding; no unavailable counter or passing smoke test substitutes
 for them.
+
+## Latest handoff: GPU reuse, HUD classification and race stage
+
+The matching-victim recycler now has actual 2x GPU copy/consumer evidence.
+Capture session `20260910T080726Z-p12416` exits 0 and passes all six strict race
+HUD checks plus hold/motion. Replay checks 18 reused buffers (2,293,760 bytes),
+including ten selected beyond the oldest victim. Every checked destination
+changes to exactly match its nonzero upload source, and the first bound draw
+consumer still sees those bytes. Sizes are 64, 128 and 320 KiB. This covers
+these CPU-source lifetimes; fresh 1x, GPU-written sources, sustained streaming
+and matched performance/memory/tails remain open.
+
+The second RenderDoc capture contains no marked recycled copy. Its replay
+report records that missing coverage explicitly; it is not another passing
+proof. `qrenderdoc --script` returned 0 even when that script asserted, so
+inspect the report result rather than relying on the process exit code.
+
+Direct replay also classifies nine draws from the three shader pairs previously
+correlated with HUD gaps. They write the map, standings, lap glyphs and
+speedometer into the main R10G10B10A2 target. Catalog names such as world-lit
+do not establish exclusive world use. This supports investigating the earlier
+source frames' omitted HUD draws upstream; it does not identify their CPU
+producer, explain the omission, establish host-visible behavior or fix timing.
+Full hashes, event evidence and limits are in [B execution](B_EPIC_EXECUTION.md).
+
+A retained-renderer single-confirmation route probe,
+`20260910T082207Z-p23756`, also exits 0. All 13 captures are accounted for and
+the original six HUD/pose/hold/motion checks pass unchanged. The Start Race
+menu is visible at 52, 58 and 62 seconds; one final confirmation at 64 seconds
+gives countdown 3 at 68 seconds and about 9.36 seconds on the race clock at
+80 seconds. Matching car positions alone did not detect this stage difference
+from earlier runs. All 597 existing M4 route samples have identical route and
+transition states across menus and racing, so those fields cannot gate race
+start. This one probe establishes a useful route adjustment, not repeatability
+or a matched benchmark. Its unchanged later inputs occur at an earlier race
+stage; preserve that limitation.
+
+**Resume:** qualify a single-confirmation route on both control and candidate
+using actual race-stage evidence. Include the expensive early-race phase and
+capture-free measurement windows; retain every HUD failure. Then complete
+fresh 1x GPU checks and preselected repeated 1x/2x cost, memory, tail and
+changing/streamed-content qualification for the default-off recycler. Continue
+the full B1 scene/resource inventory, B3 pre-packet bypass and B4 visual/timing
+work. B1-B4 stay open; no optimization is newly retained.
+
+Evidence is preserved locally in `.local/native-renderer/b2/matching-capture/`
+and `race-stage-probe/`, including scripts, raw captures, source/binary hashes,
+reports, images and the negative replay result. This documentation checkpoint
+adds no production instrumentation or default change. The clean candidate
+remains `3A0B434A...`; SDK `acd222c` is already pushed on `development`.
+All nine staged runtime files match their retained backups: EXE `372161...`,
+renderer `27B486...` and runtime `955BDC...` (full hashes above). No game,
+compiler or replay is active. Unrelated SDK changes and saves are preserved.
+
+Checkpoint validation: the single-confirmation workload check, all tracked
+Markdown links, repository boundary check (506 files, zero violations) and
+`git diff --check` pass. No rebuild is needed for this documentation-only
+follow-up; the earlier Release and GPU results retain their exact identities.

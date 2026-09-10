@@ -3951,3 +3951,15 @@ hold and motion smoke checks. It remains default-off and unretained; these are
 not matched performance or sustained streaming results. See
 [B execution](B_EPIC_EXECUTION.md) and the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md)
 for binary identities, known defects and the unchanged full B1-B4 scope.
+
+Latest qualification: 18 actual 2x matching-recycler copies (2,293,760 bytes)
+and first draw consumers pass GPU byte checks; ten reuse a matching victim
+beyond the oldest entry. The adjacent capture has no marked copies and adds
+no proof. Direct replay verifies HUD writes from nine sampled draws of the
+three previously correlated shader pairs, strengthening the upstream HUD
+omission lead without identifying its cause. A single-confirmation retained
+route passes strict HUD/hold/motion but demonstrates why race-clock alignment
+must accompany pose checks. Prioritize that qualification before matched
+1x/2x retention; fresh 1x GPU, sustained streaming, memory/tails and the full
+B1-B4 scope remain open. Detailed evidence is in [B execution](B_EPIC_EXECUTION.md)
+and the [latest checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md).

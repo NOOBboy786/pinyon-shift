@@ -130,6 +130,14 @@ rejections and late recurring work. The matching-victim option remains off;
 actual GPU copy/consumer checks, matched tails/memory, sustained streaming and
 the full scene set remain required before retention. See B execution for all
 identities and the unresolved HUD/thumbnail defects.
+Latest GPU evidence checks 18 actual 2x recycled copies and their first draw
+consumers, including ten matching victims beyond the oldest entry. A second
+capture has no marked copies and remains an explicit coverage gap. Direct
+replay also verifies HUD outputs from nine draws of the three correlated shader
+pairs; their CPU producer and omission cause remain open. A retained single-
+confirmation route passes the original HUD/hold/motion gates, but still needs
+race-stage repeatability before matched comparisons. These bounded results
+retain no new setting; see the latest checkpoint and B execution.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.

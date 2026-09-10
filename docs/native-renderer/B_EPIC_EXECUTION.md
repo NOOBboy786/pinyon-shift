@@ -1314,3 +1314,106 @@ Evidence: `matching-recycle/exact-{1,2}x/`, `contact.png` and
 `runtime-review.json`. Both staged renderer/runtime paths and the EXE are restored
 to the qualified `27B486...` / `955BDC...` / `372161...` hashes. All build, game
 and replay processes are terminal. B1-B4 remain active and open.
+
+### Matching-victim GPU proof and direct HUD classification
+
+Session `20260910T080726Z-p12416` runs the 130-second Recaro route at 2x,
+recycling on, narrow invalidation/containment/tile ownership off. It exits 0
+with ten captures and all six strict HUD/pose/hold/motion checks passing.
+Temporary markers surround actual recycled `CopyBufferRegion` commands only;
+admission, victim selection and copying are unchanged from SDK `acd222c`.
+Production instrumentation is removed and qualified binaries are restored.
+Recording perturbs execution; this is correctness evidence, not performance.
+
+| Artifact | SHA256 |
+| --- | --- |
+| EXE | `3721619222F6269492B40D91CD4972A7C7536E82C2F7067958F76BD8229AFFD3` |
+| Runtime | `955BDC64AD9ABA356B162F1BD0B89E356ED45622F8F8C7D66CDB4213290F3500` |
+| Marker-only renderer | `43E59CB2EDBA3177060E58CEA90EE964A00527849DD7DDC39BB772DF6E4C71A4` |
+| Production command-processor source | `7E88F0F6D8F6C6F4F3735C9094F577B8420E268B6042ACB15352E88A22B4B22B` |
+| Marker source fixture | `71B6B942DBBD9410B854F4C89A2902279DD39D74374D10825C6DE3F2B7A8AE69` |
+| `frame_frame3883.rdc` (567,873,360 bytes) | `D66776560139566184606AE12A9E642F8E29F97EFE283AB3C24D47A2F983E999` |
+| `frame_frame3884.rdc` (524,249,907 bytes) | `1BDB326604A585A4D0C7DD790AC76E1848D465D8610042E0598C5D9368976454` |
+
+Replay of capture 3883 passes all 18 actual copies into 18 reused buffers:
+2,293,760 bytes, with seven 64 KiB, nine 128 KiB and two 320 KiB imports.
+Ten choose a completed matching victim other than the oldest cache entry.
+Retired submissions are 12500..12505, completed is 12507 and current is 12509.
+All sources are CPU uploads with nonzero bytes; each destination changes and
+equals the actual source immediately after copying. The first bound consumer
+also matches the imported bytes for every buffer: 12 VS-resource and six
+index-buffer checks. Later uses are inventoried, but only the first consumer
+is byte-checked before rewrite. This does not cover GPU-written sources, all
+sizes, sustained streaming or full lifetime qualification.
+
+Capture 3884 has zero marked recycled copies. Preserve its report error,
+`AssertionError('No actual recycled copies captured',)`, as missing coverage.
+The replay launcher returns 0 despite the assertion; inspect report contents
+to establish success. These adjacent RenderDoc captures do not establish
+adjacent native source frames or zero total GPU work in the second capture.
+
+The same capture provides direct output attribution for the previously
+correlated shader groups. Replay maps actual command-list pipelines and checks
+the first, middle and last draw in each group, exporting raw before/after
+target bytes and images. All nine write `ResourceId::1915`, the main
+`k_2_10_10_10` target: R10G10B10A2_UNORM, one sample, 2560x4096 backing with
+2560x1440 viewport/scissor. Image review uses the active viewport.
+
+| VS / PS | Draw count in this capture | Sampled HUD outputs |
+| --- | ---: | --- |
+| `ED90DA6EFF5C6BCA / 57B9400F6B398736` | 101 | Lap, standings and gear glyphs |
+| `79034645B1CB882B / CAE1DB68AFFA9D3C` | 42 | Speedometer dial, tick and marking |
+| `984DBF6AF14DBEBD / 6FDA0F1CDE67D12F` | 7 | Map, standings background and speed readout |
+
+For example, event 38530 changes the map region, event 38580 the speedometer
+dial and event 38610 a lap-label glyph. This now verifies HUD use for these
+sampled draws, beyond shader-name correlation. It does not classify every
+global use as HUD-only. Earlier source-linked gaps lacking these groups
+therefore warrant upstream HUD draw-generation investigation. Their CPU
+producer, omission cause, animation/cadence connection and host-visible
+behavior remain unresolved. No workaround or cause fix is retained.
+
+Local evidence: `.local/native-renderer/b2/matching-capture/`, including
+`2x-audit-3883/{inventory,report}.json`, negative `2x-audit-3884/report.json`,
+`2x-hud-classification-3883/{report,classified}.json`, raw bytes and
+`viewport-contact.png`. Reproduction helpers remain under `b2/`:
+`make-matching-capture.py`, `build-matching-capture.ps1`,
+`run-matching-capture.ps1`, `audit-matching-capture.py` and
+`classify-hud-capture.py`. Game/build/replay work ran sequentially.
+
+### Race-stage probe: confirm once after the menu is ready
+
+Retained 1x session `20260910T082207Z-p23756` removes the repeated confirmation
+pulses at 52, 58, 60 and 62 seconds, keeps one at 64 seconds and adds three
+pre-confirmation captures. Remaining hold/motion inputs are unchanged. The
+130-second run exits 0 with 13 captures. A copy of the existing workload
+checker changes only expected capture count and diagnostic scope; all six
+original HUD/pose/motion thresholds and window checks pass. Moving distance
+is 16.732 m and stopped distance 49.951 m, with a stable final pose.
+
+Image review shows the pre-race cinematic at 49 seconds and the Start Race
+menu at 52, 58 and 62 seconds. After the final confirmation, the 68-second
+image has a three-second countdown and zero race time; the 80-second image
+shows about 9.36 seconds of race time. Later motion images retain the car,
+road and HUD. This demonstrates that the original pose gates alone miss
+race-stage shifts. It supports testing a single confirmation after menu
+readiness; one diagnostic does not establish repeatable timing or prove why
+the earlier runs differed by six seconds. The later inputs now occur at an
+earlier race stage, so this run is not a matched performance comparison.
+
+Existing M4 telemetry adds 597 route-frame and 551 vehicle-pose samples.
+Every route sample reports `route_state=00000001` and
+`transition_active=00000000`, across menus and racing. These fields cannot
+identify race start in this route. No timing hook or simulation behavior is
+changed. EXE/renderer/runtime are retained `372161...`/`27B486...`/`955BDC...`;
+all experimental options are off. Logs, route, images, strict checker output,
+`stage-summary.json` and restored runtime verification remain under
+`.local/native-renderer/b2/race-stage-probe/`.
+
+Next, prospectively qualify race-stage alignment on retained and candidate
+builds with a single final confirmation. Shift later phases consistently and
+include an explicit expensive early-race window with HUD captures outside its
+timed interval. Do not replace it with a later stationary phase or discard any
+missing-HUD evidence. Fresh 1x GPU checks, repeated clean 1x/2x tails/memory,
+sustained mutation/streaming and the full B scene set remain required. B1-B4
+stay open and the matching-victim recycler remains disabled by default.
