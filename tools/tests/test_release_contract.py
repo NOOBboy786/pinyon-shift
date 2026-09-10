@@ -80,7 +80,7 @@ catch { [Console]::Error.Write($_.Exception.Message); exit 2 }
                                         cwd=ROOT, env=environment, capture_output=True, text=True)
                 self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
                 if expected == 0:
-                    self.assertEqual(pathlib.Path(result.stdout), cmake)
+                    self.assertTrue(pathlib.Path(result.stdout).samefile(cmake))
                 else:
                     self.assertIn("provision-toolchain.ps1", result.stderr)
 
@@ -272,7 +272,7 @@ catch { [Console]::Error.Write($_.Exception.Message); exit 2 }
             executable.touch()
             found = subprocess.run(args, cwd=ROOT, env=environment, capture_output=True, text=True)
             self.assertEqual(found.returncode, 0, found.stderr)
-            self.assertEqual(pathlib.Path(found.stdout), executable)
+            self.assertTrue(pathlib.Path(found.stdout).samefile(executable))
 
     @unittest.skipUnless(shutil.which("powershell"), "Windows PowerShell is required")
     def test_artifact_production_preserves_existing_work_and_rejects_external_paths(self):

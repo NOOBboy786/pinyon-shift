@@ -32,6 +32,8 @@ jobs:
       - name: Package launcher
         shell: powershell
         run: .\tools\package-launcher.ps1
+      - name: Check launcher behavior
+        run: python tools/check-launcher.py
       - uses: actions/upload-artifact@v7
         with:
           name: PinyonShift-Launcher
