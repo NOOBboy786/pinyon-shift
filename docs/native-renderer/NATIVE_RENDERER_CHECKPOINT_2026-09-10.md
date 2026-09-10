@@ -4,7 +4,7 @@ This is a source checkpoint for remote `dev`, not a new preview release or a
 claim that B is complete. Continue with the active B1–B4 goal in the
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 
-**Latest handoff:** [Input delivery, capture clocks and the recycler pair](#latest-handoff-input-delivery-capture-clocks-and-the-recycler-pair).
+**Latest handoff:** [Partial repeated comparison with memory sampling](#latest-handoff-partial-repeated-comparison-with-memory-sampling).
 Earlier sections preserve the sequence of experiments; their resume orders and
 source pins are historical. Current SDK pin: `acd222caa04adcc9e2ad8aabf99c09a9a8e12f0e`.
 
@@ -490,3 +490,58 @@ route/clock checks, the original missing-HUD negative control, legacy timing
 evidence rejection, tracked Markdown links, repository boundary (508 files,
 zero violations) and `git diff --check` pass. The staged runtime and unrelated
 source backups are verified by direct SHA256 after the last run.
+
+## Latest handoff: partial repeated comparison with memory sampling
+
+Checkpoint requested after the first three runs of the preselected C-A-B-B-A-C
+comparison at 1x. C uses the retained renderer; A/B use the same candidate with
+recycling off/on. Run labels are separate from the B-epic checklist items.
+The second B, second A and final C at 1x, and all six 2x runs, remain unexecuted.
+This is an incomplete comparison, not a failed block or a retention decision.
+
+C1 `20260910T090600Z-p26468`, A1 `20260910T090921Z-p8644` and B1
+`20260910T091240Z-p10900` each exit 0, deliver all 23 inputs, account for all
+12 captures and pass the seven HUD/pose/hold/motion checks. Reviewed race clocks
+at 76/88/92 seconds differ by at most 0.079 seconds across these runs. Source
+windows exclude capture-containing intervals using the measured clock bounds.
+There is no concurrent compilation/replay. The known two invalid simulation
+deltas and startup device-path error persist in each; GPU errors/timing drops
+are zero. These checks do not close NPC/UI timing or intermittent HUD defects.
+
+The first B run records early-race median/p95/p99 of 24.738/29.374/38.336 ms,
+versus C1 51.391/112.070/119.821 and A1 68.509/88.323/91.360 ms. Later tails
+are mixed, and the remaining repeats are essential. All phases, process CPU,
+RAM, GPU-memory samples and measurement limits are recorded in
+[B execution](B_EPIC_EXECUTION.md#repeated-recycler-comparison-with-process-and-gpu-memory-sampling).
+There is no new default, retained optimization, B-item completion or release.
+
+The local runner now samples Windows process CPU/RAM/faults and GPU Process
+Memory counters equally in each condition. Each completed run has 71 GPU-memory
+sample sets (355 valid counter records), with zero sampling errors. Samples
+are tied to the game PID; dedicated/local and shared/nonlocal are overlapping
+counter concepts, not additive memory totals. Whole-session asynchronous GPU
+intervals are kept separate from source-frame and OS phase metrics.
+
+Exact comparison identities remain test EXE `EC2E5F...`, runtime `955BDC...`,
+retained renderer `27B486...` and clean candidate `3A0B434A...` (full hashes in
+the preceding handoffs). SDK pin is `acd222c`; the previous main source commit
+is `814d3eb`. Local evidence, plan, raw metrics and reviews are under
+`.local/native-renderer/b2/matching-retention/`. Its route SHA256 is
+`51e9be1cf28fc725b60873726f0cc5ac6b4e30f5915eb98165cb0681813de077`.
+Local experiment scripts and runtime artifacts remain outside Git; this
+checkpoint publishes their protocol, results and resume state.
+
+**Resume:** run `run-matching-retention.ps1 -Scale 1 -Labels b2` from the local
+`b2` evidence directory, then review its clock/workload/metrics and images
+before A2 and C2. Preserve the preselected order and every result; stop on a
+failed input, arrival, HUD or clock gate. Follow with the preselected 2x block,
+fresh actual 1x GPU reuse proof, changing/streamed content and the full required
+scene set. Keep the failed A6 2x clear disabled. B1 resource-chain coverage,
+B3 pre-packet bypass and B4 visual/NPC/UI timing remain open; the goal is active.
+
+All nine staged runtime files again match their retained backups, including
+EXE `372161...`, both renderer paths `27B486...` and both runtime paths
+`955BDC...`. No game/build/replay is running. Unrelated SDK kernel edits and
+saves remain untouched. This documentation checkpoint needs no rebuild;
+validation covers the three completed runs' existing gates, direct runtime
+hashes, tracked Markdown links, repository boundary and `git diff --check`.

@@ -1505,3 +1505,93 @@ three telemetry runs, clock/window checks, images and
 conservative window selection. Continue with repeated 1x/2x controls on one
 pinned EXE and the braked-entry route, collecting matched memory/process/GPU
 metrics and preserving all failures. The full B1-B4 scope remains unchanged.
+
+### Repeated recycler comparison with process and GPU memory sampling
+
+The next comparison prospectively selects C-A-B-B-A-C at 1x, then the same
+order at 2x. C is retained renderer `27B486...`; A/B are clean candidate
+`3A0B434A...` with recycling off/on. Every condition uses test EXE `EC2E5F...`
+and runtime `955BDC...` from the preceding entry. Narrow invalidation,
+containment and tile ownership stay off. There are no per-draw CPU clocks,
+corpus or M4 diagnostics. The braked-entry route is pinned to SHA256
+`51e9be1cf28fc725b60873726f0cc5ac6b4e30f5915eb98165cb0681813de077`.
+
+**Partial checkpoint:** only C1, A1 and B1 at 1x have run. The second B/A/C
+and the entire 2x block remain outstanding. The user's checkpoint request
+does not invalidate these runs or permit a retention decision from half a
+block. Run labels do not mean completion of the B-epic checklist items.
+
+| Completed 1x run | C1 retained | A1 recycling off | B1 recycling on |
+| --- | ---: | ---: | ---: |
+| Session | `20260910T090600Z-p26468` | `20260910T090921Z-p8644` | `20260910T091240Z-p10900` |
+| Race clock at 76 / 88 / 92 s | 5.544 / 17.583 / 21.592 | 5.513 / 17.569 / 21.562 | 5.592 / 17.617 / 21.608 |
+| Early 78..86 s source frames | 138 | 136 | 319 |
+| Early median / p95 / p99, ms | 51.391 / 112.070 / 119.821 | 68.509 / 88.323 / 91.360 | 24.738 / 29.374 / 38.336 |
+| Early mean draws | 5,462.23 | 5,476.00 | 5,511.54 |
+| Early mean vertices | 2,136,463 | 2,134,103 | 2,143,745 |
+| Hold 94..114 s median / p95 / p99, ms | 16.736 / 18.666 / 20.838 | 16.799 / 19.100 / 21.659 | 16.794 / 18.847 / 21.031 |
+| Acceleration 118..120 s median / p95 / p99, ms | 16.322 / 18.319 / 18.586 | 16.431 / 18.516 / 18.843 | 16.665 / 18.815 / 20.286 |
+| Handbrake 124..130 s median / p95 / p99, ms | 16.290 / 18.281 / 19.839 | 16.494 / 19.877 / 21.414 | 16.745 / 18.648 / 20.738 |
+| Settled 134..140 s median / p95 / p99, ms | 16.358 / 18.128 / 18.819 | 16.765 / 19.006 / 20.825 | 16.783 / 18.859 / 20.361 |
+| Last periodic allocations / recycles | Unavailable | 23,923 / 0 | 3,421 / 28,103 |
+| Hold periodic imports/s | 422.71 | 298.07 | 416.42 |
+| Whole-session async GPU interval mean, ms | 12.387 | 12.592 | 12.376 |
+| Process CPU seconds/wall second | 3.028 | 3.009 | 3.109 |
+| Process total OS faults/s | 2,854.96 | 2,795.14 | 2,799.64 |
+| Sampled peak private / working memory, MiB | 2,722.53 / 2,210.92 | 2,714.73 / 2,181.76 | 2,701.26 / 2,172.95 |
+| Early mean dedicated / shared GPU memory, MiB | 1,218.19 / 177.49 | 1,230.22 / 162.18 | 1,227.42 / 154.55 |
+| Early mean total committed GPU memory, MiB | 1,395.68 | 1,392.40 | 1,381.97 |
+| Hold mean dedicated / shared GPU memory, MiB | 1,219.86 / 189.43 | 1,230.37 / 162.18 | 1,227.44 / 154.55 |
+| Hold mean total committed GPU memory, MiB | 1,409.28 | 1,392.55 | 1,381.99 |
+
+All three runs exit normally with all 23 delivered inputs, 12 captures and
+seven HUD/grid-pose/hold/motion checks passing. Manual review verifies stopped
+signup, the prestart menu at 62 seconds and race-clock spread at each bookend
+within the preselected 0.5-second limit (largest observed: 0.079 seconds).
+Race daylight/grid match; opponent standings and pre-race free-roam lighting
+vary. This does not establish identical AI behavior or continuous NPC/UI timing.
+Each retains two known invalid simulation deltas and the startup
+`ResolvePath(\Device)` error; GPU errors/timing drops are zero.
+
+Measurement boundaries and limits:
+
+- Source median/p95/p99 use complete CSV frame intervals conservatively inside
+  each window for every permitted route/CSV clock offset and truncation bound.
+  Capture-containing intervals are outside every timed window. Offset bounds
+  for C1/A1/B1 are 3.389..19.366 / 3.415..19.358 / 3.441..19.914 ms.
+- Whole-session GPU intervals are asynchronous native timestamp observations,
+  not CPU-row pairs or isolated shader execution cost. They may include CPU
+  starvation; changing pre-race lighting also limits whole-route comparisons.
+- All runs use the same Windows process/GPU-memory sampler. GPU counters have
+  71 sets per run, five valid records per set, with zero reported sampling
+  errors. Roughly two-second cadence gives four early and ten hold samples.
+  Counters identify the game PID and preserve per-instance paths/status/time;
+  they are not adapter totals. Dedicated equals local here, and shared equals
+  nonlocal: do not add these duplicate concepts. Total committed is separate.
+- OS phases use wall timestamps aligned approximately through capture log
+  anchors, with 100 ms excluded at phase edges. Anchor spread is below 1 ms
+  in all three runs; OS samples still are not exact source-frame observations.
+  Short motion phases contain only one to three OS samples. Peaks are sampled
+  peaks, not a proof that memory pressure cannot rise during longer play.
+- CPU and fault rates cover the sampled process interval. Faults are total
+  PSAPI page faults, not specifically guest protection faults. Geometry rates
+  require two timestamped periodic records: early C1/A1 have only one, so
+  their import rates are unavailable. Hold rates use 12 records each. Allocation
+  counters are last periodic values, not exact totals; C's DLL lacks those
+  allocation/recycle counters. Recorded geometry allocation stays within 32 MiB.
+
+The early improvement and fewer allocations remain promising. Later tails,
+imports, process CPU and memory still require the complete repeated comparison;
+these three runs neither retain recycling nor establish lower requirements.
+Fresh 1x GPU copy proof, sustained mutation/streaming, difficult/ordinary scenes
+and the full B1-B4 contract remain required.
+
+Local evidence is `.local/native-renderer/b2/matching-retention/`, including
+`plan.json`, per-run session logs/CSV, `process-samples.json`, `page-faults.json`,
+`metrics.json`, clock/workload checks, images and `stage-review.json`.
+Local helpers `run-matching-retention.ps1`, `summarize-retention-run.py`,
+`retention-contact.py` and `record-retention-stage.py` reuse the existing launch,
+clock and workload tools. Resume with label `b2` at scale 1, review its gates
+and images, then A2/C2 and the planned 2x block. No processes remain active;
+all nine retained runtime files are restored and verified. Defaults, saves and
+unrelated SDK work are unchanged.

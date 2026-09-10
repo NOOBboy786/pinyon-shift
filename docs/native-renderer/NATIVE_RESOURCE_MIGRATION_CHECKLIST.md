@@ -143,6 +143,11 @@ capture-clock telemetry plus a braked-entry route pass bounded validation.
 One same-binary recycler off/on pair improves early median 46.015→25.222 ms,
 but later tails rise and memory/repeated 1x/2x/streaming gates remain open.
 This prioritizes repeated qualification; it does not retain the option.
+The repeated C-A-B-B-A-C comparison now has its first C/A/B runs at 1x,
+with passing input/race-stage/HUD gates and valid process/GPU-memory samples.
+The remaining 1x repeats and all 2x runs are pending at the requested checkpoint.
+Early recycling results remain promising, but later tails and the incomplete
+comparison prevent retention. See the latest checkpoint for exact resume state.
 
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.

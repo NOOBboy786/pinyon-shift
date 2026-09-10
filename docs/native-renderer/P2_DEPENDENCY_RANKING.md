@@ -3970,3 +3970,14 @@ race stage and HUD/motion while early median improves 46.015→25.222 ms and
 periodic allocations fall 23,707→4,006. Handbrake p99 rises 11.28%; this remains
 a single diagnostic pair without memory/2x/streaming retention. Continue
 repeated qualification with the new timing gates, not default enablement.
+
+Checkpoint follow-up: the preselected repeated C-A-B-B-A-C block has completed
+only its first C/A/B at 1x. Input, clock, race-stage and HUD/motion gates pass;
+matching process CPU/RAM/fault and per-process GPU-memory samples are available.
+The second B/A/C and all 2x runs remain pending. The first B again reduces early
+frame cost and allocations, while later tails and import rates are mixed.
+Keep the matching-victim candidate default-off until the complete comparison,
+GPU/lifetime and full scene-set requirements pass. See
+[B execution](B_EPIC_EXECUTION.md#repeated-recycler-comparison-with-process-and-gpu-memory-sampling)
+for all completed results and the [checkpoint](NATIVE_RENDERER_CHECKPOINT_2026-09-10.md)
+for the exact next run. No B item or hardware-requirement claim completes here.
