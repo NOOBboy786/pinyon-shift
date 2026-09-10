@@ -164,6 +164,14 @@ five 1x and all six 2x runs are pending. See the latest checkpoint for the next
 run. This resolves the observed staging gap, retains no optimization and leaves
 the full B1-B4 scope open.
 
+The v2 block subsequently stops at A2: every input is delivered, but the
+76-second capture has no HUD. The final 1x control and all 2x runs stay
+unexecuted. New decoder/indirect-buffer diagnostics reproduce the gap and
+show the observed full HUD-list references absent, while short references
+still execute. Trace the producer/wrapper publication before restarting
+retention; no HUD fix or recycling setting is qualified. The latest
+checkpoint/B execution preserve the results and the complete B1-B4 scope.
+
 - [ ] **B1 — Migrate the next highest-value chains.** Rank remaining resource
   dependencies, then repeat the A2–A6 contract and retention checks.
   **Done:** required pass families have native producers/consumers and an explicit

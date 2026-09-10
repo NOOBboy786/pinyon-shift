@@ -4002,3 +4002,12 @@ GPU errors. Five further 1x and all six 2x runs remain; no new performance
 retention or B-item completion follows from this control. See
 [B execution](B_EPIC_EXECUTION.md#shader-misses-traced-to-stale-staging-prospective-comparison-v2)
 and the latest checkpoint for pinned identities, metrics and resume order.
+
+The subsequent A2 fails the early-HUD gate despite correct pack/input delivery,
+stopping v2 before its last 1x control or any 2x run. Two diagnostic probes
+reproduce the defect at decoder and indirect-buffer boundaries: full observed
+HUD-list references disappear while short, unskipped references remain. Their
+producer, contents and publication order need tracing before new retention
+runs. Early recycling gains repeat, but later hold tails worsen and no setting
+is retained. See [B execution](B_EPIC_EXECUTION.md#v2-stops-on-an-early-hud-gap-trace-the-indirect-buffer-submission)
+for the complete results, exact diagnostic identities and B4 dataflow correction.

@@ -668,3 +668,70 @@ Unrelated SDK kernel/libmspack dirt and saves are preserved. Shader packs,
 captures and local experiment artifacts remain outside Git. Validation covers
 pack payload equivalence/staging, the completed live run's gates and images,
 runtime hashes, tracked Markdown links, repository boundary and whitespace.
+
+## Latest handoff: v2 HUD failure and indirect-buffer submission evidence
+
+The v2 comparison is **stopped**. After C1, A1/B1/B2 pass all gates; A2
+`20260910T102201Z-p23016` exits normally and delivers every input but has no
+HUD at 76 seconds. Its six later HUD checks pass. Final C2 and every 2x run
+remain unexecuted. Preserve all v2 results and the explicit failed review;
+do not replace A2 or follow the superseded resume instructions above.
+
+Recycling-on early-race medians are 25.345/24.907 ms versus the first off
+control's 65.954 ms, with fewer recorded allocations. Hold p99 is worse in
+both on runs, and the full comparison is incomplete. No optimization is
+retained. [B execution](B_EPIC_EXECUTION.md#v2-stops-on-an-early-hud-gap-trace-the-indirect-buffer-submission)
+records every passing run's phases, CPU/RAM/fault/GPU observations and the
+failed A2. Phase CPU rates now use existing OS samples; original reports are
+preserved and all other fields are checked unchanged.
+
+Two separate read-only diagnostic builds narrow the intermittent HUD defect:
+
+- Decoder probe `20260910T103154Z-p22848` accounts for 1,307 source frames
+  and reproduces five missing-HUD captures. It observes HUD shader groups
+  before packet predication and distinguishes query kills/backend calls.
+  The missing groups have no corresponding draw packets, but skipped parent
+  command buffers still need accounting.
+- IB probe `20260910T103956Z-p30256` adds copied-reader inspection of all
+  indirect-buffer descriptors, including skipped ones. All 1,857,941 records
+  match independent decoder counts. HUD is absent at 74.0 and 78.5 seconds.
+  Visible frames reference full 2,475/4,076-word HUD lists through 23/46-word
+  wrappers. In each missing capture, the 28 references to observed HUD buffer
+  addresses are only 16 words; none is predicated away, and the full references
+  are absent. Their contents, ordered publication and actual producer remain
+  unproven; address reuse is not resource identity.
+
+Both runs exit 0 with all 21 inputs, 32 capture/clock checks and expected race
+poses. Dense capture review preserves every missing HUD. GPU errors/timing
+drops are zero; two known invalid simulation deltas and the startup device-path
+error persist. A first analysis assumption about the submission-frame number
+was corrected against source and every output pair: closing a frame increments
+that number while its source ID remains unchanged. The failed analysis log is
+preserved. These are diagnostics, not clean benchmarks or a HUD fix.
+
+Local evidence is `b2/hud-decode-profile/` and `b2/hud-ib-profile/`, with
+source snapshots, hashes, routes, raw descriptors and decode/indirect reports.
+The enclosing `b2` directory has the make/build/run/analyze helpers. Both use
+test EXE `EC2E5F...`, runtime `0558BA...` and the pinned complete 1x pack;
+GPU DLLs are `B80934...` and `81CBF6...`. Full hashes are in B execution.
+The IB binary is 133,771,752 bytes, SHA256
+`4B454196D100F46D10D3A5E75E49F81CD08512B16A94148CF64EEF5ECE4F126C`.
+
+**Resume:** trace the short-list contents, ordered wrapper submission and
+their CPU producer before restarting retention. Existing scene-command-buffer
+observation is a lead; static IB-header candidates are recorded locally.
+Do not rerun the stopped block unchanged until a favorable outcome. Keep all
+B1 scenes, B2 mutation/streaming/tails, actual B3 pre-packet bypass and B4
+visual/NPC/UI timing in scope. A6 stays symmetric-1x-only and recycling stays
+off. The B4 motion-blur note is corrected: the last f8 load before the hook
+comes from initial-image value 0.075, overwriting the earlier 500.0 load;
+live values and savings remain unqualified.
+
+All nine retained runtime files and SDK source bytes are restored and verified.
+No game/build/replay is active. Source prior to this documentation checkpoint
+is main `dfaf29b`, SDK `202247a`; no production algorithm/default or SDK pin
+changes. Unrelated SDK kernel/libmspack edits and saves remain preserved.
+Validation covers both Release diagnostic builds, geometry-cache checks,
+live input/capture clocks, decoder/IB accounting, visual review, the B4 dataflow
+check, runtime/source hashes, Markdown links, repository boundary and whitespace.
+B1-B4 and the goal remain active; no preview release occurs.

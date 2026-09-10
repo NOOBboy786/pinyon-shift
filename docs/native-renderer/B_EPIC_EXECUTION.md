@@ -1763,9 +1763,14 @@ verifies all four substituted instructions and their generated owners:
 | `8245846C` | `817F18FC` | `sub_82457E98`; forcing zero makes the mode-is-1 boolean false |
 | `8245849C` | `817F18FC` | `sub_82457E98`; forcing zero selects the mode-not-2 branch |
 
-Motion blur's initialization path loads f8 from `8201F194`, whose stored float
-is 500.0. Skipping its later store does not itself prove pass suppression or
-even zero prior field contents. Trace the destination's lifetime/consumers and
+The earlier f8 load from `8201F194` (500.0) is overwritten before the motion-blur
+hook. Exact instruction `C11F9520` at `82D788D0` reloads f8 from `82129520`,
+whose initial image value is approximately 0.075 (`3D99999A`). Generated dataflow
+confirms no further f8 write before the hook at `82D7894C`. The runnable local
+`b4/trace-motion-blur-store.py` checks both retail instructions and generated
+dataflow; `motion-blur-store-dataflow.json` records the image/source hashes.
+The initial image value still does not establish its live value or zero prior
+destination contents when the store is skipped. Trace lifetime/consumers and
 dynamic calls before attributing savings. Depth-of-field callers, skipped
 side effects and actual GPU work also remain unqualified. Local evidence is
 `b4/post-processing-static-anchors.json`, including generated-source hashes.
@@ -1857,3 +1862,142 @@ reviewing each run with `summarize-retention-v2-run.py`, contact images and
 gate; do not mix these results with v1 or substitute a passing repeat. After
 all six pass, use `summarize-retention-v2-block.py 1`; repeat the prescribed
 block at 2x. No recycling retention or B-item completion is claimed.
+
+### V2 stops on an early HUD gap; trace the indirect-buffer submission
+
+The next four 1x runs finish, but the fourth fails its HUD gate. Preserve the
+entire v2 block; final C2 and all 2x runs are unexecuted. The prior resume
+instructions above are superseded. Do not substitute another A2 or relax the
+early-HUD requirement.
+
+| Run | Session | Result |
+| --- | --- | --- |
+| A1, recycling off | `20260910T101325Z-p2488` | All input/clock/HUD/pose/motion gates pass |
+| B1, recycling on | `20260910T101615Z-p2360` | All gates pass |
+| B2, recycling on | `20260910T101908Z-p4164` | All gates pass |
+| A2, recycling off | `20260910T102201Z-p23016` | Normal exit, all 23 inputs and 12 capture/clock checks; no HUD at 76 s |
+
+A2's six later HUD checks and pose/motion checks pass. Manual review confirms
+the stopped signup and prestart menu, but the missing 76-second race clock
+cannot be inferred from its later 17.592/21.600-second clocks. No GPU errors
+occur, and the correct 22,012-entry pack loads. This is a recurrence of the
+intermittent HUD defect with the updated pack and wider inputs, not another
+shader miss or missed controller pulse. The full six-run summary rejects the
+incomplete failed block; raw A2 logs/images remain available.
+
+The four passing v2 runs have these source-frame results, in ms. Each cell is
+median/p95/p99, with the same conservative capture/clock exclusions as before:
+
+| Window | C1 retained | A1 off | B1 on | B2 on |
+| --- | --- | --- | --- | --- |
+| Early race | 62.656 / 112.635 / 120.540 | 65.954 / 101.961 / 134.789 | 25.345 / 33.317 / 36.573 | 24.907 / 32.289 / 38.088 |
+| Hold | 16.734 / 18.830 / 20.855 | 16.818 / 20.297 / 21.881 | 17.006 / 21.178 / 25.725 | 16.842 / 20.721 / 25.745 |
+| Acceleration | 16.531 / 18.600 / 19.653 | 16.576 / 21.001 / 25.293 | 16.783 / 18.488 / 20.070 | 16.782 / 18.732 / 21.155 |
+| Handbrake | 16.604 / 19.644 / 28.445 | 16.871 / 20.606 / 21.642 | 16.818 / 20.169 / 24.033 | 16.777 / 18.836 / 20.454 |
+| Settled | 16.348 / 18.016 / 18.668 | 16.780 / 18.745 / 20.951 | 16.796 / 18.680 / 20.385 | 16.731 / 19.111 / 20.498 |
+
+The repeated early reduction is promising, but hold p99 is worse in both on
+runs and the required controls/2x/full scenes remain incomplete. No optimization
+is retained. A1/B1/B2 last periodic allocations are 25,367/3,962/4,223; recycles
+are 0/31,541/31,639. These are periodic observations, not exact final totals.
+
+| Whole-process/session measure | A1 off | B1 on | B2 on |
+| --- | ---: | ---: | ---: |
+| Async GPU mean, ms | 12.500 | 12.503 | 12.268 |
+| CPU seconds/second | 3.055 | 3.115 | 3.118 |
+| OS faults/second | 2,864.34 | 2,776.58 | 2,791.99 |
+| Sampled private peak, MiB | 2,743.09 | 2,709.57 | 2,707.07 |
+| Sampled working peak, MiB | 2,210.63 | 2,171.82 | 2,186.14 |
+
+Each passing run has 355 valid GPU-memory counter records, zero sampling
+errors, two invalid simulation deltas and zero GPU timing drops. Per-phase CPU
+usage is now derived from the existing OS samples, with no added game work:
+early C1/A1/B1/B2 use 2.849/2.790/3.255/3.327 CPU-seconds/second over roughly
+6.1-second sampled spans; hold uses 3.135/3.206/3.174/3.211 over roughly
+18.2 seconds. These are process rates on the independently aligned OS clock,
+not renderer CPU durations or CPU/GPU row pairs. Short phases with fewer than
+two samples remain unavailable. Earlier metric reports are preserved and an
+equality check confirms only the added phase-CPU fields changed.
+
+#### Decoder boundary and publication probe
+
+A separate 94-second diagnostic reuses the wider startup inputs and captures
+every half-second from 72 to 84 seconds, plus 88/92. All 32 captures and 21
+inputs are accounted for; the 27 racing captures retain the expected pose.
+Temporary SDK instrumentation counts packets before predication, query-based
+draw kills and backend calls for the three sampled HUD shader groups. It also
+links capture resources to completed output records. Rendering, packet skipping
+and resource algorithms remain unchanged, with recycling off.
+
+Session `20260910T103154Z-p22848` exits 0 and reproduces missing HUD at
+74.5, 75.0, 76.5, 78.5 and 84.0 seconds. Accounting passes for 1,307 source
+frames. The first shader group still has 12/12/4 calls in the first three
+missing captures, while the other two groups have none; all three are absent
+in the last two. Sampled HUD use does not make the first shader HUD-exclusive.
+No observed HUD-group packet is predicated or query-killed. However, hundreds
+of indirect-buffer packets are skipped elsewhere in each source, so this probe
+alone cannot rule out skipping a parent buffer before parsing its HUD draws.
+
+The first analysis incorrectly expected an unchanged submission-frame number
+across `EndSubmission(true)`. Source inspection and all 6,346 output pairs
+show an increment of one with an unchanged source ID. The corrected check
+preserves both identities; the initial assertion log is retained. No observed
+same-resource publication conflict occurs during captures. This remains
+diagnostic output evidence, not proof of continuous host-visible behavior.
+
+#### Indirect-buffer references before predication
+
+A second probe copies the existing `RingBuffer` reader to inspect both IB
+arguments without advancing the production reader. Binary records preserve
+source, opcode, parent/offset, target, length, mask/select and packet header.
+Every record is checked against independent decoder opcode/skip totals.
+
+Session `20260910T103956Z-p30256` exits 0 with all input/clock/pose checks and
+32 captures; HUD is missing at 74.0 and 78.5 seconds (sources 5674 and 5736).
+It records 1,857,941 IB descriptors across 1,285 source frames: 133,771,752
+bytes, SHA256
+`4B454196D100F46D10D3A5E75E49F81CD08512B16A94148CF64EEF5ECE4F126C`.
+All descriptor counts and predicate decisions match the decoder records.
+
+Visible HUD captures include two full IB references of 2,475 and 4,076 words
+to the observed UI buffer pool. In each missing capture, all 28 references
+to those observed addresses are only 16 words long, and none is skipped.
+The full references are absent. For example, visible source 5666 submits
+`16E37620/2475` and `16E0AB60/4076` through wrappers `1317C800/23` and
+`1317C880/46`, reached from primary buffer `12EA12C0`. Headers are `C0013F00`
+with all lower 32 mask/select bits set. Later visible source 5679 uses other
+pool entries through the same 23/46-word wrapper shapes.
+
+This narrows the next investigation to production/submission of the full
+lists and their wrappers. It does not prove what the 16-word contents mean,
+that address reuse preserves contents, or that no other skipped parent could
+matter. Reverse address graphs can include repeated uses within one source;
+they are leads, not a substitute for ordered producer/lifetime evidence.
+
+Both diagnostics use test EXE `EC2E5F...`, the pinned current 1x pack/catalogs,
+and unchanged renderer algorithms from SDK `202247a`. First GPU SHA256 is
+`B809346E65F1A297F8D6F0F3CCF42EAD92550A7E1B2B68948D6202E974BC403F`;
+the IB extension is
+`81CBF64F7A6584D73B638419384A2CF90EB82C2922C93F3A94B6967152CD40AB`.
+Both use capture-logging runtime
+`0558BADA33DB85F57C27C8404F3A0A3076A846BF22378E6E58F00282B2C7A52E`.
+The diagnostic route SHA256 is
+`0154B43DB9BE993C0DFD600B5B82B824722C4581310576BA44B51755C59F5E59`.
+Both have two invalid simulation deltas, zero GPU errors/timing drops and the
+known startup device-path error. These runs cannot establish performance gains.
+
+Evidence and runnable local make/build/run/analyze helpers are under
+`b2/hud-decode-profile/`, `b2/hud-ib-profile/` and the enclosing `b2` directory.
+Reports preserve all missing images; source snapshots and hashes identify the
+temporary instrumentation. Static IB-header candidates include `82416A00`,
+`829E8E00`, `829EC400`, `8246FB98` and `82409398`; two other immediate-value
+matches are unrelated. The existing `PinyonShiftObserveSceneCommandBuffer`
+hook may help identify the live producer, but has not yet been matched to these
+HUD lists. The B4 f8 dataflow correction above also remains a static lead.
+
+**Next:** attribute the 16-word contents, ordered wrapper publication and the
+actual CPU producer before changing behavior or restarting retention. Preserve
+queries, fences and guest-visible side effects. The v2 block remains stopped;
+the full B1 scene set, B2 streaming/lifetime/tails, B3 pre-packet bypass and B4
+visual/NPC/UI timing remain required. All nine retained runtime files and
+original SDK source bytes are restored, with unrelated dirt and saves preserved.
