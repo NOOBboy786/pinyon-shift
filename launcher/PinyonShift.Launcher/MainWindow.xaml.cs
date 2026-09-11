@@ -282,10 +282,37 @@ public partial class MainWindow : Window
 
     private void DetectExistingBuild()
     {
+        _gameExecutable = null;
         if (_repositoryRoot is null) return;
         var candidate = Path.Combine(_repositoryRoot, "out", "build", "win-amd64-release", "pinyon_shift.exe");
         if (File.Exists(candidate))
         {
+            if (!File.Exists(Path.Combine(_repositoryRoot, ".local", "game", "base", "default.xex")))
+            {
+                HeadlineText.Text = "Restore your local game files.";
+                StatusText.Text = "GAME FILES MISSING";
+                AppendLog("Select your disc image and run setup to restore the missing game files. Your save stays in place.");
+                return;
+            }
+            var payloadMarker = Path.Combine(_repositoryRoot, ".pinyon-source-sha256");
+            if (File.Exists(payloadMarker))
+            {
+                var matchesRelease = false;
+                try
+                {
+                    using var build = JsonDocument.Parse(File.ReadAllText(Path.Combine(_repositoryRoot, ".local", "build.json")));
+                    matchesRelease = build.RootElement.TryGetProperty("pinyon_shift_source_payload_sha256", out var hash)
+                        && string.Equals(hash.GetString(), File.ReadAllText(payloadMarker).Trim(), StringComparison.OrdinalIgnoreCase);
+                }
+                catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { }
+                if (!matchesRelease)
+                {
+                    HeadlineText.Text = "Update your local build.";
+                    StatusText.Text = "BUILD UPDATE NEEDED";
+                    AppendLog("Select your disc image and run setup to build this release. Existing game files and your save are preserved.");
+                    return;
+                }
+            }
             _gameExecutable = candidate;
             SetComplete();
             if (_stateRoot is not null && !File.Exists(Path.Combine(_stateRoot, "cache", "fh1-artifacts.json")))

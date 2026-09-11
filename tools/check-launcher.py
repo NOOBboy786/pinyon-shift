@@ -77,8 +77,23 @@ class Check {
         typeof(MainWindow).GetField("_repositoryRoot", flags)!.SetValue(window, root);
         typeof(MainWindow).GetField("_stateRoot", flags)!.SetValue(window, state);
         typeof(MainWindow).GetMethod("DetectExistingBuild", flags)!.Invoke(window, null);
+        Require(typeof(MainWindow).GetField("_gameExecutable", flags)!.GetValue(window) is null,
+            "Executable without game files is considered ready");
+        var game = Path.Combine(root, ".local/game/base/default.xex");
+        Directory.CreateDirectory(Path.GetDirectoryName(game)!);
+        File.WriteAllText(game, "test game");
+        typeof(MainWindow).GetMethod("DetectExistingBuild", flags)!.Invoke(window, null);
         var primary = (Button)window.FindName("PrimaryButton");
         Require((string)primary.Content == "PREPARE & PLAY", "Existing build skips graphics preparation");
+        var marker = Path.Combine(root, ".pinyon-source-sha256");
+        File.WriteAllText(marker, "current payload");
+        typeof(MainWindow).GetMethod("DetectExistingBuild", flags)!.Invoke(window, null);
+        Require(typeof(MainWindow).GetField("_gameExecutable", flags)!.GetValue(window) is null,
+            "Old build without matching release provenance is considered ready");
+        File.WriteAllText(Path.Combine(root, ".local/build.json"), "{\"pinyon_shift_source_payload_sha256\":\"current payload\"}");
+        typeof(MainWindow).GetMethod("DetectExistingBuild", flags)!.Invoke(window, null);
+        Require(typeof(MainWindow).GetField("_gameExecutable", flags)!.GetValue(window) is not null,
+            "Matching release build cannot prepare graphics");
         var output = typeof(MainWindow).GetMethod("HandleOutput", flags)!;
         output.Invoke(window, ["::pinyon::{\"stage\":\"shaders\",\"percent\":20,\"message\":\"Preparing graphics\"}"]);
         Require((string)primary.Content == "PREPARING…", "Shader progress is not shown");

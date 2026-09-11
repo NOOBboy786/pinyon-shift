@@ -34,9 +34,9 @@ $resolvedBuildDirectory = if ($BuildDirectory) {
 }
 $executable = Join-Path $resolvedBuildDirectory 'pinyon_shift.exe'
 $resolvedGameRoot = if ($GameRoot) {
-    (Resolve-Path -LiteralPath $GameRoot).Path
+    [IO.Path]::GetFullPath($GameRoot)
 } else {
-    (Resolve-Path -LiteralPath (Join-Path $repoRoot '.local/game/base')).Path
+    Join-Path $repoRoot '.local/game/base'
 }
 $resolvedStateRoot = if ($StateRoot) {
     [IO.Path]::GetFullPath($StateRoot)
@@ -48,7 +48,7 @@ if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw 'The preview has not been built. Run tools/setup-preview.ps1 first.'
 }
 if (-not (Test-Path -LiteralPath (Join-Path $resolvedGameRoot 'default.xex') -PathType Leaf)) {
-    throw "The verified game files are missing: $resolvedGameRoot"
+    throw "Game files are missing at $resolvedGameRoot. Select your disc image in the launcher and run setup to restore them. Your save will be preserved."
 }
 if (@(Get-Process -Name 'pinyon_shift' -ErrorAction SilentlyContinue).Count -ne 0) {
     throw 'Pinyon Shift is already running.'
