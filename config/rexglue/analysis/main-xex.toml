@@ -141,6 +141,14 @@ address = 0x82651438
 name = "PinyonShiftTraceUiButtonFactory"
 registers = ["r3", "r4", "lr"]
 
+# Observe the per-child UI4 component builder. Its return address names the
+# loop that walks authored scene children, which is the insertion point for an
+# additional item. Read-only and default-off.
+[[midasm_hook]]
+address = 0x82E7A238
+name = "PinyonShiftTraceUiComponentBuilder"
+registers = ["r3", "r4", "lr"]
+
 # Observe embedded CUI4TextElement state after CPauseMenuButton construction.
 # This is read-only and capped; it is the first route-specific label lead.
 [[midasm_hook]]

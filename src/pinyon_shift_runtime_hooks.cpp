@@ -1067,6 +1067,33 @@ void PinyonShiftTraceUiButtonFactory(PPCRegister& r3, PPCRegister& r4,
        {"return_address", Hex32(static_cast<uint32_t>(lr))}});
 }
 
+// Records the caller of the per-child UI4 component builder, which names the
+// loop that walks authored scene children (the insertion point for an extra
+// item) and the child record it is processing.
+void PinyonShiftTraceUiComponentBuilder(PPCRegister& r3, PPCRegister& r4,
+                                        uint64_t& lr) {
+  if (!UiTraceEnabled() ||
+      g_ui_component_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          256u) {
+    return;
+  }
+  const auto read_field = [&](uint32_t offset) {
+    return PinyonShiftGuestRangeReadable(r4.u32 + offset, 4u)
+               ? Hex32(LoadGuestU32(r4.u32 + offset))
+               : std::string("00000000");
+  };
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.component.builder",
+      {{"address", "82E7A238"},
+       {"owner", Hex32(r3.u32)},
+       {"record", Hex32(r4.u32)},
+       {"record_vtable", read_field(0u)},
+       {"record_field_4", read_field(4u)},
+       {"record_field_8", read_field(8u)},
+       {"record_field_12", read_field(12u)},
+       {"return_address", Hex32(static_cast<uint32_t>(lr))}});
+}
+
 void PinyonShiftTraceUiPauseButtonConstructed(PPCRegister& r3,
                                                PPCRegister& r31) {
   const UiExperimentMode experiment = UiExperimentModeValue();

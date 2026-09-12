@@ -440,6 +440,23 @@ after the fact. UI-04's label half stays open with that narrowed target; the
 insertion half is unaffected and still points at
 `sub_82E78078(registry, descriptor, name)`.
 
+The insertion seam now has a driver, and the driver changes the plan. Hooking
+the per-child builder `0x82E7A238` shows 117 invocations per pause route, all
+from `0x82F268F0`, with records in the UI data heap (`0x4170Exxx`) and scene
+owners at `0x2E1A0050` and neighbours. That caller is not a loop over a record
+vector: it repeatedly calls `stream->vtable[1]` to read 4, 4, 4, 1, 1 byte
+fields into stack buffers, accumulating the byte count, and branches on the
+flags it reads. Authored scene children are therefore **deserialized from a
+scene byte stream**, and the builder is a virtual method the deserializer
+invokes per element. An extra item can consequently be added in only two ways:
+synthesize a descriptor at runtime and call the create-by-name entry
+`sub_82E78078(registry, descriptor, name)` through the title's own
+initialization path (the UI-08 route, which needs a host-to-guest call), or
+extend the stream before it is parsed, which is exactly the conditional UI-14
+fallback. Repurposing or appending to an already-built list is not available,
+and the previously probed `+160`/`+84`/string fields are not part of the
+constructed item's contract.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
