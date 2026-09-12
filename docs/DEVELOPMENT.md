@@ -12,6 +12,7 @@ older binary hashes in individual experiment reports describe those experiments.
 | Build or recover an installation | [Building](BUILDING.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Configure experimental graphics | [Graphics recovery/settings](TROUBLESHOOTING.md) |
 | Current findings and remaining work | This document and the [resource migration checklist](native-renderer/NATIVE_RESOURCE_MIGRATION_CHECKLIST.md) |
+| Extend the original game UI | [UI API research and implementation tasks](UI_API_PLAN.md) |
 | Reproduce retained renderer changes | [Owned depth](native-renderer/A6_OWNED_DEPTH_RETENTION.md), [reflection mips](native-renderer/REFLECTION_MIPMAP_REPLACEMENT.md), [Carson cache fix](native-renderer/CARSON_GEOMETRY_CACHE_FIX.md) |
 | Produce and validate artifacts | [Artifact production](native-renderer/P1_ARTIFACT_PRODUCTION.md), [shader pack contract](native-renderer/SHADER_PACK_FORMAT.md), [render tests](native-renderer/FH1_RENDER_TEST_AUTOMATION.md) |
 | Investigate user reports | [September 10 issue review (historical)](https://github.com/arcanite24/pinyon-shift/blob/53f9bf91b470f37cf7efb21c64dc1f8cce50c4c5/docs/GITHUB_ISSUE_TRIAGE_2026-09-10.md) |

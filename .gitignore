@@ -24,6 +24,7 @@ private/
 !/docs/LEGAL.md
 !/docs/TROUBLESHOOTING.md
 !/docs/DEVELOPMENT.md
+!/docs/UI_API_PLAN.md
 !/docs/releases/
 !/docs/releases/*.md
 !/docs/native-renderer/

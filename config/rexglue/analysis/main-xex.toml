@@ -17,6 +17,138 @@ longjmp_address = 0x82A81950
 address = 0x829EFEB8
 name = "PinyonShiftObserveGraphicsFrame"
 
+# Observe the native UI4 scene-registry construction after the title's
+# constructor returns. This is default-off and records registers only.
+[[midasm_hook]]
+address = 0x824850A4
+name = "PinyonShiftTraceUiSceneRegistry"
+registers = ["r3", "r24", "r30"]
+after_instruction = true
+
+# Observe the three UI4 bootstrap dispatches with their resolved virtual
+# targets. These are read-only and default-off; the runtime trace uses them to
+# identify the scene-manager contract before any guest mutation is attempted.
+[[midasm_hook]]
+address = 0x824850CC
+name = "PinyonShiftTraceUiRegistryDispatch"
+registers = ["r3", "r4", "r11"]
+
+[[midasm_hook]]
+address = 0x824850E8
+name = "PinyonShiftTraceUiResourceDispatch"
+registers = ["r3", "r4", "r11"]
+
+[[midasm_hook]]
+address = 0x82485110
+name = "PinyonShiftTraceUiSceneDispatch"
+registers = ["r3", "r4", "r11", "r31", "r30"]
+
+# Observe the bootstrap manager event (302) after the scene/resource setup.
+# This stays read-only and default-off while the event target is identified.
+[[midasm_hook]]
+address = 0x82485128
+name = "PinyonShiftTraceUiManagerEvent"
+registers = ["r3", "r4", "r11"]
+
+# Trace the concrete UI4 method targets used by the bootstrap. Entry traces
+# capture the guest object and argument layout for the first lifecycle calls.
+[[midasm_hook]]
+address = 0x826413C8
+name = "PinyonShiftTraceUiRegistryMethod"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
+address = 0x82E5E0D0
+name = "PinyonShiftTraceUiResourceMethod"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
+address = 0x82E729F8
+name = "PinyonShiftTraceUiSceneMethod"
+registers = ["r3", "r4"]
+
+# Trace the CUserInterface4 indexed component table without changing it. The
+# title fills this table during bootstrap; later calls reveal whether a live
+# screen uses spare slots or replaces existing component instances.
+[[midasm_hook]]
+address = 0x82E5E550
+name = "PinyonShiftTraceUiComponentGet"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
+address = 0x82E5E568
+name = "PinyonShiftTraceUiComponentStore"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82E5E580
+name = "PinyonShiftTraceUiComponentClear"
+registers = ["r3", "r4"]
+
+# Trace the inherited menu/list operations used by ANIMATED_SCROLLING_LIST and
+# CMenuCtrl. These are read-only entry probes for construction/population work.
+[[midasm_hook]]
+address = 0x82E7CD78
+name = "PinyonShiftTraceUiListMethod"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82E77260
+name = "PinyonShiftTraceUiListMethod2"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+# Observe calls whose receiver is the verified CUI4TextElement vtable or the
+# text-resource object owned by a verified CPauseMenuButton. This narrows the
+# generic pair helper without mutating guest state.
+address = 0x82E73BE0
+name = "PinyonShiftTraceUiTextValue"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+# Observe the title's label-resource getter only on verified pause buttons.
+# The receiver and resource fields are read-only; no guest state is changed.
+address = 0x82E74FC8
+name = "PinyonShiftTraceUiPauseButtonTextGet"
+registers = ["r3", "r4"]
+
+# Trace the typed menu wrappers before they route through the list/map methods.
+# The key/value pair and the +312 child pointer are read-only population leads.
+[[midasm_hook]]
+address = 0x82806DD0
+name = "PinyonShiftTraceUiMenuDispatch"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82806E50
+name = "PinyonShiftTraceUiMenuDispatch2"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+# Observe the real list-constructor entry. The static allocation wrapper at
+# 0x82645558 is not reached by the standard pause route; this hook records the
+# object and owner at the shared constructor boundary without mutating them.
+address = 0x828116C8
+name = "PinyonShiftTraceUiListConstructed"
+registers = ["r3", "r4", "r31"]
+
+[[midasm_hook]]
+# Observe the PAUSE_MENU_BUTTON factory entry before it allocates. The contract
+# argument and the return address name the contract-table caller that drives
+# pause-menu item construction. Read-only and default-off.
+[[midasm_hook]]
+address = 0x82651438
+name = "PinyonShiftTraceUiButtonFactory"
+registers = ["r3", "r4", "lr"]
+
+# Observe embedded CUI4TextElement state after CPauseMenuButton construction.
+# This is read-only and capped; it is the first route-specific label lead.
+[[midasm_hook]]
+address = 0x8264FC08
+name = "PinyonShiftTraceUiPauseButtonConstructed"
+registers = ["r3", "r31"]
+after_instruction = true
+
 # Observe the exact indirect target/count before its store. r24 is the command
 # list object retained from 82416A00 entry r4. No guest state is modified.
 [[midasm_hook]]

@@ -23,6 +23,7 @@ if(WIN32)
         src/pinyon_shift_app.cpp
         src/pinyon_shift_diagnostics.cpp
         src/pinyon_shift_runtime_hooks.cpp
+        src/ui/fh1_ui_api.cpp
         src/native_renderer/graphics_hooks.cpp
         src/native_renderer/fh1_gpu_corpus.cpp
         src/native_renderer/fh1_pass_tracker.cpp
@@ -36,6 +37,7 @@ else()
         src/pinyon_shift_app.cpp
         src/pinyon_shift_diagnostics.cpp
         src/pinyon_shift_runtime_hooks.cpp
+        src/ui/fh1_ui_api.cpp
         src/native_renderer/graphics_hooks.cpp
         src/native_renderer/fh1_gpu_corpus.cpp
         src/native_renderer/fh1_pass_tracker.cpp
@@ -47,6 +49,12 @@ endif()
 add_executable(pinyon_shift_fh1_execution_key_tests EXCLUDE_FROM_ALL
     tests/native_renderer/fh1_execution_key_test.cpp
 )
+
+add_executable(pinyon_shift_fh1_ui_api_tests EXCLUDE_FROM_ALL
+    tests/ui/fh1_ui_api_test.cpp
+    src/ui/fh1_ui_api.cpp
+)
+target_include_directories(pinyon_shift_fh1_ui_api_tests PRIVATE src)
 target_include_directories(pinyon_shift_fh1_execution_key_tests PRIVATE
     ${REXSDK_DIR}/include)
 
