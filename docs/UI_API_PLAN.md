@@ -488,6 +488,17 @@ guest memory once it exists and before the pause scene is built. Patching the
 on-disk archive is not an option with the current tooling because the project
 carries LZX decompression only.
 
+Two more runs settle the timing side. Restricting the sweep to the two UI
+regions (`0x2E000000`-`0x30000000`, `0x40000000`-`0x42000000`) so a pass takes
+about five frames still finds no UTF-16 copy of any label and no `PHOTO MODE`
+in any encoding, while the per-frame scan cost perturbs the wall-clock route
+enough that the pause overlay is no longer open at the capture frame. The
+labels therefore never exist as text in the scanned heap in either encoding:
+the string table is converted to glyph data as it is consumed, which is
+consistent with every negative result above. Any future label probe must hook
+the conversion itself (the consumer of the LSB2 strings) rather than search
+memory, and must not add per-frame work while a wall-clock route is running.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205

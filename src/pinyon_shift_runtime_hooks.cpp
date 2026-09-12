@@ -57,10 +57,21 @@ bool g_ui_experiment_applied = false;
 constexpr uint32_t kUiExperimentTextTargets = 16u;
 // Label-scan window: the observed UI allocations span the 0x2E... and 0x40...
 // regions, so the window covers both. Each frame scans a bounded slice.
-constexpr uint32_t kUiLabelScanBegin = 0x10000000u;
-constexpr uint32_t kUiLabelScanEnd = 0x82000000u;
 constexpr uint32_t kUiLabelScanBlockSize = 0x10000u;
 constexpr uint32_t kUiLabelScanBytesPerFrame = 8u * 1024u * 1024u;
+// Observed UI allocations live in these two regions; sweeping only them keeps a
+// full pass under a tenth of a second, so a label string is patched almost as
+// soon as the string table is loaded.
+struct UiLabelScanRegion {
+  uint32_t begin;
+  uint32_t end;
+};
+constexpr std::array<UiLabelScanRegion, 2> kUiLabelScanRegions = {{
+    {0x2E000000u, 0x30000000u},
+    {0x40000000u, 0x42000000u},
+}};
+constexpr uint32_t kUiLabelScanBegin = kUiLabelScanRegions[0].begin;
+constexpr uint32_t kUiLabelScanEnd = kUiLabelScanRegions[1].end;
 constexpr uint32_t kUiLabelMaximumWrites = 64u;
 constexpr uint32_t kUiLabelRescanIntervalFrames = 45u;
 constexpr std::string_view kUiExperimentRequestedLabel = "Pinyon UI";
@@ -1337,6 +1348,7 @@ void ApplyUiTextProbe() {
 // so the whole 128 MiB window costs a few tens of milliseconds and runs only
 // once per process. `write_literal` is empty for the read-only scan mode.
 void ScanAndWriteUiLabel(std::string_view write_literal) {
+  static uint32_t region_index = 0u;
   static uint32_t cursor = kUiLabelScanBegin;
   static uint32_t rescan_wait = 0;
   static uint32_t total_written = 0;
@@ -1345,14 +1357,15 @@ void ScanAndWriteUiLabel(std::string_view write_literal) {
   if (literal_length < 4u || literal_length > 31u) {
     return;
   }
-  if (cursor >= kUiLabelScanEnd) {
+  if (region_index >= kUiLabelScanRegions.size()) {
     // Restart the sweep so a string copied later (for example when the pause
     // overlay is built) is still found while the screen is up.
     if (rescan_wait++ < kUiLabelRescanIntervalFrames) {
       return;
     }
     rescan_wait = 0;
-    cursor = kUiLabelScanBegin;
+    region_index = 0u;
+    cursor = kUiLabelScanRegions[0].begin;
   }
   // A hit is reported once per sweep: `hit_stride` is 1 for ASCII and 2 for
   // UTF-16LE, so the same probe covers both storage forms.
@@ -1399,9 +1412,11 @@ void ScanAndWriteUiLabel(std::string_view write_literal) {
            {"changed", changed ? "1" : "0"}});
     }
   };
-  const uint32_t stop =
-      std::min(kUiLabelScanEnd, cursor + kUiLabelScanBytesPerFrame);
-  for (uint32_t block = cursor; block < stop; block += kUiLabelScanBlockSize) {
+  uint32_t budget = kUiLabelScanBytesPerFrame;
+  while (region_index < kUiLabelScanRegions.size() && budget > 0u) {
+    const UiLabelScanRegion region = kUiLabelScanRegions[region_index];
+    const uint32_t stop = std::min(region.end, cursor + budget);
+    for (uint32_t block = cursor; block < stop; block += kUiLabelScanBlockSize) {
     const uint32_t block_end = std::min(stop, block + kUiLabelScanBlockSize);
     if (!PinyonShiftGuestRangeReadable(block, block_end - block)) {
       continue;
@@ -1447,8 +1462,16 @@ void ScanAndWriteUiLabel(std::string_view write_literal) {
         }
       }
     }
+    }
+    budget -= stop - cursor;
+    cursor = stop;
+    if (cursor >= region.end) {
+      ++region_index;
+      if (region_index < kUiLabelScanRegions.size()) {
+        cursor = kUiLabelScanRegions[region_index].begin;
+      }
+    }
   }
-  cursor = stop;
 }
 
 void ApplyUiMutationExperiment() {
