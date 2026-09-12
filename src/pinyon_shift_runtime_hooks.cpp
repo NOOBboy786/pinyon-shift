@@ -47,6 +47,7 @@ std::atomic<uint32_t> g_ui_menu_field_trace_count{};
 std::atomic<uint32_t> g_ui_menu_dispatch_trace_count{};
 std::atomic<uint32_t> g_ui_text_value_trace_count{};
 std::atomic<uint32_t> g_ui_pause_button_text_get_trace_count{};
+std::atomic<uint32_t> g_ui_insert_entry_trace_count{};
 std::atomic<uint32_t> g_ui_pause_button_count{};
 std::array<uint32_t, 128> g_ui_pause_buttons{};
 pinyon_shift::ui::Api g_ui_experiment_api(4u);
@@ -274,6 +275,7 @@ enum class UiExperimentMode {
   kLabelScan,
   kLabelWrite,
   kLabelPatch,
+  kInsertItem,
 };
 
 UiExperimentMode ComputeUiExperimentMode() {
@@ -305,6 +307,9 @@ UiExperimentMode ComputeUiExperimentMode() {
   }
   if (requested == "label_patch") {
     return UiExperimentMode::kLabelPatch;
+  }
+  if (requested == "insert_item") {
+    return UiExperimentMode::kInsertItem;
   }
   return UiExperimentMode::kNone;
 }
@@ -1596,6 +1601,440 @@ void PinyonShiftTraceUiPauseButtonConstructed(PPCRegister& r3,
        {"text_field_96", read_field(96u)},
        {"text_inline", read_inline_text()}});
 }
+
+// Records the caller of the per-child builder when the call enters at the
+// interior dispatch address 0x82E7A240 instead of the function head. The menu
+// item batches do that, so this is the only place that names the code walking
+// a page's authored element records for the pause menu.
+void PinyonShiftTraceUiItemBuilderEntry(PPCRegister& r3, PPCRegister& r4,
+                                        uint64_t& lr) {
+  if (!UiTraceEnabled()) {
+    return;
+  }
+  // Calls that enter at the function head fall through this instruction with
+  // the internal return address; only an interior entry keeps the caller's
+  // return address here.
+  const uint32_t caller = static_cast<uint32_t>(lr);
+  if (caller == 0x82E7A240u) {
+    return;
+  }
+  if (g_ui_insert_entry_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+      64u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.item.builder_entry",
+      {{"address", "82E7A240"},
+       {"frame",
+        std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+       {"owner", Hex32(r3.u32)},
+       {"record", Hex32(r4.u32)},
+       {"caller", Hex32(caller)},
+       {"record_name_hash", PinyonShiftGuestRangeReadable(r4.u32, 4u)
+                                ? Hex32(LoadGuestU32(r4.u32))
+                                : std::string("00000000")}});
+}
+
+// Diagnostic probes for the per-child builder's dispatch chunks. The menu-item
+// path enters the shared tail of sub_82E7A238 without passing the function
+// head, so these record which chunk it enters and with what register state.
+// Each probe logs only inside the pause window to keep the budget for the
+// item batch and not the startup scene build.
+void PinyonShiftUiRecordBuilderChunk(const char* chunk, uint32_t r1, uint32_t r3,
+                                     uint32_t r4, uint32_t r28, uint32_t r31,
+                                     uint64_t lr) {
+  if (!UiTraceEnabled()) {
+    return;
+  }
+  const uint64_t frame = pinyon_shift::fh1_render_test::CurrentFrame();
+  if (frame < 700u) {
+    return;
+  }
+  if (g_ui_insert_entry_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+      64u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.item.builder_chunk",
+      {{"chunk", chunk},
+       {"frame", std::to_string(frame)},
+       {"r1", Hex32(r1)},
+       {"back_chain", PinyonShiftGuestRangeReadable(r1, 4u)
+                          ? Hex32(LoadGuestU32(r1))
+                          : std::string("00000000")},
+       {"r3", Hex32(r3)},
+       {"r4", Hex32(r4)},
+       {"r28", Hex32(r28)},
+       {"r31", Hex32(r31)},
+       {"lr", Hex32(static_cast<uint32_t>(lr))}});
+}
+
+#define PINYON_UI_BUILDER_CHUNK_PROBE(suffix, chunk)                       \
+  void PinyonShiftUiBuilderChunk##suffix(                                  \
+      PPCRegister& r1, PPCRegister& r3, PPCRegister& r4, PPCRegister& r28, \
+      PPCRegister& r31, uint64_t& lr) {                                    \
+    PinyonShiftUiRecordBuilderChunk(chunk, r1.u32, r3.u32, r4.u32, r28.u32, \
+                                    r31.u32, lr);                          \
+  }
+
+PINYON_UI_BUILDER_CHUNK_PROBE(260, "82E7A260")
+PINYON_UI_BUILDER_CHUNK_PROBE(27C, "82E7A27C")
+PINYON_UI_BUILDER_CHUNK_PROBE(290, "82E7A290")
+PINYON_UI_BUILDER_CHUNK_PROBE(2A0, "82E7A2A0")
+PINYON_UI_BUILDER_CHUNK_PROBE(304, "82E7A304")
+PINYON_UI_BUILDER_CHUNK_PROBE(310, "82E7A310")
+PINYON_UI_BUILDER_CHUNK_PROBE(31C, "82E7A31C")
+PINYON_UI_BUILDER_CHUNK_PROBE(324, "82E7A324")
+PINYON_UI_BUILDER_CHUNK_PROBE(32C, "82E7A32C")
+
+// --- Pause-item insertion (UI-04 insertion half) ---------------------------
+//
+// The title builds each authored element record into a live component inside
+// the per-child builder sub_82E7A238: it allocates a 28-byte CUI4CustomObject
+// descriptor, resolves the record's contract name into the stack object at
+// r1+96, calls the create-by-name entry sub_82E78078, and then links the
+// (descriptor, component) pair into the owner's +8 map and its +40 (and
+// conditionally +56) child containers.
+//
+// The hook below sits on the create-by-name call site and re-runs that same
+// builder for a copy of the current record. The copy keeps the owner's map key
+// distinct from the stock item's record, so the added child coexists with
+// every stock child instead of replacing one. The nested call is the title's
+// own construction path: no descriptor layout, contract name, or container
+// offset is reproduced in host code.
+namespace {
+
+// CPauseMenuButton's primary vtable. The constructor sub_8264FBA0 stores it at
+// +0 (`lis r11,-32253; addi r11,r11,13988` = 0x820336A4); the +8 base at
+// 0x8203363C is a secondary interface table, not the object's first word.
+constexpr uint32_t kUiPauseMenuButtonVtable = 0x820336A4u;
+constexpr uint32_t kUiComponentBuilderAddress = 0x82E7A238u;
+constexpr uint32_t kUiInsertMaximumRecordBytes = 0x800u;
+// Startup builds create dozens of non-button components before the pause items;
+// keep a small generic sample and a separate budget for button creations.
+constexpr uint32_t kUiInsertGenericTraceLimit = 16u;
+constexpr uint32_t kUiInsertButtonTraceLimit = 32u;
+
+std::atomic<bool> g_ui_insert_active{};
+std::atomic<bool> g_ui_insert_done{};
+std::atomic<uint32_t> g_ui_insert_button_count{};
+std::atomic<uint32_t> g_ui_insert_generic_trace_count{};
+std::atomic<uint32_t> g_ui_insert_button_trace_count{};
+
+// Ordinal of the create-by-name call to duplicate, counted over the calls that
+// produced a CPauseMenuButton. The default matches the route's first item
+// batch; PINYON_SHIFT_UI_INSERT_ORDINAL selects another one without a rebuild.
+uint32_t UiInsertOrdinal() {
+  static const uint32_t ordinal = [] {
+    std::string_view requested;
+#if defined(_WIN32)
+    char* value = nullptr;
+    size_t value_size = 0;
+    if (_dupenv_s(&value, &value_size, "PINYON_SHIFT_UI_INSERT_ORDINAL") != 0) {
+      return 1u;
+    }
+    const std::string owned = value ? std::string(value) : std::string();
+    std::free(value);
+    requested = owned;
+#else
+    const char* value = std::getenv("PINYON_SHIFT_UI_INSERT_ORDINAL");
+    requested = value ? std::string_view(value) : std::string_view();
+#endif
+    uint32_t parsed = 0u;
+    for (const char character : requested) {
+      if (character < '0' || character > '9') {
+        return 1u;
+      }
+      parsed = parsed * 10u + static_cast<uint32_t>(character - '0');
+      if (parsed > 64u) {
+        return 1u;
+      }
+    }
+    return parsed == 0u ? 1u : parsed;
+  }();
+  return ordinal;
+}
+
+// Diagnostic switch: reuse the stock record as the added item's key instead of
+// copying it. Default is a copy, which keeps the owner's map entry for the
+// stock record intact.
+bool UiInsertSharesRecord() {
+  static const bool shares = [] {
+#if defined(_WIN32)
+    char* value = nullptr;
+    size_t value_size = 0;
+    if (_dupenv_s(&value, &value_size, "PINYON_SHIFT_UI_INSERT_SHARE_RECORD") !=
+        0) {
+      return false;
+    }
+    const bool result = value != nullptr && std::string_view(value) == "1";
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv("PINYON_SHIFT_UI_INSERT_SHARE_RECORD");
+    return value != nullptr && std::string_view(value) == "1";
+#endif
+  }();
+  return shares;
+}
+
+// Invokes one recompiled guest function from a host hook. The nested context is
+// a copy of the live context, so the callee sees the real thread pointer,
+// nonvolatile registers and stack base, while the outer register state is left
+// untouched. Only the FP control word is restored afterwards: the injected call
+// must not change the mode the interrupted guest code has already committed to.
+uint32_t CallGuestFunction(PPCContext& context, uint8_t* base, uint32_t address,
+                           uint32_t argument0, uint32_t argument1,
+                           uint32_t argument2 = 0u) {
+  PPCFunc* function = rex::runtime::ResolveIndirectFunction(address);
+  if (function == nullptr) {
+    return 0u;
+  }
+  const uint32_t saved_csr = context.fpscr.csr;
+  PPCContext nested = context;
+  nested.dispatch_address = 0;
+  nested.lr = 0;
+  nested.r1.u32 = context.r1.u32 - 0x70u;
+  nested.r3.u64 = argument0;
+  nested.r4.u64 = argument1;
+  nested.r5.u64 = argument2;
+  function(nested, base);
+  const uint32_t result = nested.r3.u32;
+  context.fpscr.csr = saved_csr;
+  context.fpscr.setcsr(saved_csr);
+  return result;
+}
+
+// The authored element record is a variable-size object: a flag word at +28
+// whose bit 0 selects the entry-array base (+32 or +68), and a byte count at
+// +31 for 8-byte entries. Copy everything the record describes plus one spare
+// entry so the duplicate owns its own key and never aliases the stock tail.
+// PINYON_SHIFT_UI_INSERT_SHARE_RECORD=1 reuses the stock record instead, which
+// keeps the original map key; that variant is a diagnostic comparison only.
+uint32_t UiElementRecordCopySize(uint32_t record) {
+  if (!PinyonShiftGuestRangeReadable(record, 32u)) {
+    return 0u;
+  }
+  const uint32_t header = LoadGuestU32(record + 28u);
+  const uint32_t base = (header & 0x00010000u) != 0u ? 68u : 32u;
+  const uint32_t count = header & 0xFFu;
+  uint32_t size = base + count * 8u + 16u;
+  size = (size + 15u) & ~15u;
+  if (size > kUiInsertMaximumRecordBytes) {
+    size = kUiInsertMaximumRecordBytes;
+  }
+  return PinyonShiftGuestRangeReadable(record, size) ? size : 0u;
+}
+
+uint32_t CopyUiElementRecord(uint32_t source, uint32_t size) {
+  auto* memory = rex::system::kernel_state()->memory();
+  if (memory == nullptr) {
+    return 0u;
+  }
+  const uint32_t destination = memory->SystemHeapAlloc(size, 16u);
+  if (destination == 0u) {
+    return 0u;
+  }
+  for (uint32_t offset = 0; offset < size; ++offset) {
+    StoreGuestU8(destination + offset, LoadGuestU8(source + offset));
+  }
+  return destination;
+}
+
+// The builder resolves the record's contract into an MSVC std::string at r1+96
+// (inline buffer at +0, size at +16, capacity at +20) and hands it to the
+// create-by-name entry, which looks the contract up in the UI registry. Reading
+// it back names the component family without guessing a vtable.
+std::string ReadUiContractName(uint32_t object) {
+  if (!PinyonShiftGuestRangeReadable(object, 24u)) {
+    return std::string();
+  }
+  const uint32_t size = LoadGuestU32(object + 16u);
+  const uint32_t capacity = LoadGuestU32(object + 20u);
+  if (size == 0u || size > 64u) {
+    return std::string();
+  }
+  const uint32_t data = capacity >= 16u ? LoadGuestU32(object) : object;
+  std::string text;
+  text.reserve(size);
+  for (uint32_t index = 0; index < size; ++index) {
+    if (!PinyonShiftGuestRangeReadable(data + index, 1u)) {
+      break;
+    }
+    const uint8_t byte = LoadGuestU8(data + index);
+    text.push_back(byte >= 0x20u && byte <= 0x7Eu ? static_cast<char>(byte)
+                                                  : '.');
+  }
+  return text;
+}
+
+// Guards the nested builder run so the hook it re-enters is not itself a
+// second insertion target.
+struct UiInsertGuard {
+  ~UiInsertGuard() {
+    g_ui_insert_active.store(false, std::memory_order_release);
+  }
+};
+
+}  // namespace
+
+// Called after every create-by-name call in the per-child builder: r3 is the
+// created component, r28 the authored element record, r30 the 28-byte
+// descriptor, and r31 the owning scene element. The configured `context` hook
+// option supplies the live guest context and memory base, which is what lets
+// the experiment run the title's builder a second time.
+void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
+                                  PPCRegister& r3, PPCRegister& r28,
+                                  PPCRegister& r30, PPCRegister& r31) {
+  const uint32_t component = r3.u32;
+  const uint32_t record = r28.u32;
+  const uint32_t descriptor = r30.u32;
+  const uint32_t owner = r31.u32;
+  const uint32_t component_vtable =
+      PinyonShiftGuestRangeReadable(component, 4u) ? LoadGuestU32(component)
+                                                  : 0u;
+  const uint32_t name_object = context.r1.u32 + 96u;
+  const auto read_word = [](uint32_t address) {
+    return PinyonShiftGuestRangeReadable(address, 4u)
+               ? Hex32(LoadGuestU32(address))
+               : std::string("00000000");
+  };
+  const bool is_menu_item = component_vtable == kUiPauseMenuButtonVtable;
+  const uint32_t trace_budget =
+      is_menu_item
+          ? g_ui_insert_button_trace_count.fetch_add(1, std::memory_order_relaxed)
+          : g_ui_insert_generic_trace_count.fetch_add(1, std::memory_order_relaxed);
+  if (UiTraceEnabled() &&
+      trace_budget < (is_menu_item ? kUiInsertButtonTraceLimit
+                                   : kUiInsertGenericTraceLimit)) {
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.item.create",
+        {{"address", "82E7A394"},
+         {"frame",
+          std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+         {"contract", ReadUiContractName(name_object)},
+         {"owner", Hex32(owner)},
+         {"record", Hex32(record)},
+         {"record_name_hash",
+          PinyonShiftGuestRangeReadable(record, 4u)
+              ? Hex32(LoadGuestU32(record))
+              : std::string("00000000")},
+         {"descriptor", Hex32(descriptor)},
+         {"descriptor_owner", read_word(descriptor + 8u)},
+         {"component", Hex32(component)},
+         {"component_vtable", Hex32(component_vtable)},
+         {"menu_item", is_menu_item ? "1" : "0"},
+         {"registry_global", read_word(0x834B53D4u)},
+         {"frame_saved_owner", read_word(context.r1.u32 + 160u)},
+         {"frame_saved_lr", read_word(context.r1.u32 + 168u)}});
+  }
+  if (UiExperimentModeValue() != UiExperimentMode::kInsertItem) {
+    return;
+  }
+  if (g_ui_insert_active.exchange(true, std::memory_order_acq_rel)) {
+    // The nested builder run reaches this hook again; only the outer call is a
+    // target.
+    return;
+  }
+  UiInsertGuard insert_guard;
+  if (!is_menu_item) {
+    return;
+  }
+  const uint32_t ordinal =
+      g_ui_insert_button_count.fetch_add(1, std::memory_order_relaxed) + 1u;
+  if (ordinal != UiInsertOrdinal()) {
+    return;
+  }
+  if (g_ui_insert_done.exchange(true, std::memory_order_acq_rel)) {
+    return;
+  }
+  const uint32_t record_size = UiElementRecordCopySize(record);
+  if (record_size == 0u) {
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.item.insert",
+        {{"result", "unreadable_record"},
+         {"frame",
+          std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+         {"owner", Hex32(owner)},
+         {"record", Hex32(record)}});
+    return;
+  }
+  const bool share_record = UiInsertSharesRecord();
+  const uint32_t record_copy =
+      share_record ? record : CopyUiElementRecord(record, record_size);
+  if (record_copy == 0u) {
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.item.insert",
+        {{"result", "allocation_failed"},
+         {"frame",
+          std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+         {"owner", Hex32(owner)},
+         {"record", Hex32(record)},
+         {"record_size", Hex32(record_size)}});
+    return;
+  }
+  const uint32_t child_begin_before =
+      PinyonShiftGuestRangeReadable(owner + 40u, 4u) ? LoadGuestU32(owner + 40u)
+                                                     : 0u;
+  const uint32_t child_end_before =
+      PinyonShiftGuestRangeReadable(owner + 44u, 4u) ? LoadGuestU32(owner + 44u)
+                                                     : 0u;
+  const uint32_t child_count_before =
+      child_end_before >= child_begin_before
+          ? (child_end_before - child_begin_before) / 8u
+          : 0u;
+  const uint32_t builder_result =
+      CallGuestFunction(context, base, kUiComponentBuilderAddress, owner,
+                        record_copy);
+  const uint32_t child_begin_after =
+      PinyonShiftGuestRangeReadable(owner + 40u, 4u) ? LoadGuestU32(owner + 40u)
+                                                     : 0u;
+  const uint32_t child_end_after =
+      PinyonShiftGuestRangeReadable(owner + 44u, 4u) ? LoadGuestU32(owner + 44u)
+                                                     : 0u;
+  const uint32_t child_count_after =
+      child_end_after >= child_begin_after
+          ? (child_end_after - child_begin_after) / 8u
+          : 0u;
+  // The builder's return value is not the created component, so take the new
+  // pair the container gained: {descriptor, component}. The push may relocate
+  // the buffer, so compare entry counts, not buffer addresses.
+  uint32_t added = 0u;
+  if (child_count_after > child_count_before) {
+    added = LoadGuestU32(child_end_after - 4u);
+  }
+  const uint32_t added_vtable =
+      PinyonShiftGuestRangeReadable(added, 4u) ? LoadGuestU32(added) : 0u;
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.item.insert",
+      {{"result", added != 0u ? "created" : "no_container_growth"},
+       {"frame", std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+       {"ordinal", Hex32(ordinal)},
+       {"owner", Hex32(owner)},
+       {"record", Hex32(record)},
+       {"record_copy", Hex32(record_copy)},
+       {"record_size", Hex32(record_size)},
+       {"record_header", read_word(record + 28u)},
+       {"shared_record", share_record ? "1" : "0"},
+       {"descriptor", Hex32(descriptor)},
+       {"stock_component", Hex32(component)},
+       {"stock_vtable", Hex32(component_vtable)},
+       {"stock_field_84", read_word(component + 84u)},
+       {"stock_field_160", PinyonShiftGuestRangeReadable(component + 160u, 1u)
+                               ? Hex32(LoadGuestU8(component + 160u))
+                               : std::string("00")},
+       {"added_component", Hex32(added)},
+       {"added_vtable", Hex32(added_vtable)},
+       {"added_field_84", read_word(added + 84u)},
+       {"added_field_160", PinyonShiftGuestRangeReadable(added + 160u, 1u)
+                               ? Hex32(LoadGuestU8(added + 160u))
+                               : std::string("00")},
+       {"builder_result", Hex32(builder_result)},
+       {"child_begin", Hex32(child_begin_before)},
+       {"child_end_before", Hex32(child_end_before)},
+       {"child_end_after", Hex32(child_end_after)}});
+}
+
 
 // Samples the two embedded 12-byte CUI4TextElement objects of every observed
 // pause button. The element layout is verified statically as

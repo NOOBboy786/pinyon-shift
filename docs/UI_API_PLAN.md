@@ -523,6 +523,27 @@ Two earlier claims are corrected: the labels do exist in guest memory (as BE
 UTF-16), and the LSB2 reader is an emitted function that references
 `0x82230470`.
 
+The insertion half now has the missing capability and a sharper blocker. A new
+codegen option (`context = true` on a midasm hook) publishes the live
+`PPCContext` and `base` to the host function, so a hook can call recompiled
+title code through the runtime's indirect-function table with an isolated
+context copy. Re-entering the title's own builder `sub_82E7A238` with a copied
+element record does create a genuine second `CPauseMenuButton` (component
+vtable `0x820336A4`, its own 28-byte descriptor and enabled state), and the
+title's own code links it into the owner's `+8` map and `+40`/`+56` child
+vectors. The rendered pause capture is nevertheless unchanged: rows come from
+the per-item element records the scene deserializer (`sub_82F268F0`) allocates
+from the scene byte stream at a 4 KiB stride and feeds to the builder, not from
+the containers the builder populates. Insertion therefore needs the stream side
+(UI-14, duplicating or extending a per-item record) or another consumer of
+those records; the container path alone cannot produce a row. The construction
+path is now fully characterised: create-by-name is called only from
+`0x82E7A38C` inside `sub_82E7A238`, the contract name is an MSVC `std::string`
+at `r1+96` (observed values `menu`, `breadcrumb_menu`, `button_text`,
+`super_stacker`, `help_button_bar`, `slider_tracker`, `spinner`,
+`scrolling_text`, `pause_menu_button`), and the registry pointer is the global
+at `0x834B53D4`.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205

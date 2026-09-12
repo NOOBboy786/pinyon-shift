@@ -526,6 +526,13 @@ void ObserveVehiclePose(float x, float y, float z) {
   g_test.vehicle_z = z;
 }
 
+uint64_t CurrentFrame() {
+  if (!g_test.enabled) {
+    return 0;
+  }
+  return g_test.frame.load(std::memory_order_acquire);
+}
+
 void Start(rex::system::IGraphicsSystem* graphics_system,
            rex::ui::WindowedAppContext* app_context, rex::ui::Window* window,
            std::function<void()> before_close) {

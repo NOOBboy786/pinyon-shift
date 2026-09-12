@@ -149,6 +149,81 @@ address = 0x82E7A238
 name = "PinyonShiftTraceUiComponentBuilder"
 registers = ["r3", "r4", "lr"]
 
+# Interior entry of the per-child builder. Menu-item batches do not reach the
+# entry hook above, so their calls enter the builder at a dispatch chunk. This
+# hook catches the post-prologue chunk; the probes below cover the remaining
+# registered chunks and record which one the menu-item path enters. Read-only
+# and default-off.
+[[midasm_hook]]
+address = 0x82E7A240
+name = "PinyonShiftTraceUiItemBuilderEntry"
+registers = ["r3", "r4", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A260
+name = "PinyonShiftUiBuilderChunk260"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A27C
+name = "PinyonShiftUiBuilderChunk27C"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A290
+name = "PinyonShiftUiBuilderChunk290"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A2A0
+name = "PinyonShiftUiBuilderChunk2A0"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A304
+name = "PinyonShiftUiBuilderChunk304"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A310
+name = "PinyonShiftUiBuilderChunk310"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A31C
+name = "PinyonShiftUiBuilderChunk31C"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A324
+name = "PinyonShiftUiBuilderChunk324"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+[[midasm_hook]]
+address = 0x82E7A32C
+name = "PinyonShiftUiBuilderChunk32C"
+registers = ["r1", "r3", "r4", "r28", "r31", "lr"]
+
+# Pause-item insertion experiment (UI-04 insertion half). The title's
+# create-by-name entry sub_82E78078 has exactly one call site: 0x82E7A38C in
+# the per-child builder sub_82E7A238, after the builder has resolved the
+# element record's contract name into the stack object at r1+96. A hook on the
+# following instruction observes the created component (r3), its parent
+# container (r31), the 28-byte CUI4CustomObject descriptor (r30) and the
+# authored element record (r28). Menu-item batches do not reach the entry hook
+# at 0x82E7A238 (their calls enter the builder through an interior dispatch
+# address), so this call site is the only place that sees every item
+# construction. `context = true` hands the live guest context and memory base
+# to the host function so it can invoke recompiled guest code. Default-off:
+# every host path returns immediately unless
+# PINYON_SHIFT_UI_EXPERIMENT=insert_item.
+[[midasm_hook]]
+address = 0x82E7A394
+name = "PinyonShiftUiPauseItemInsert"
+registers = ["r3", "r28", "r30", "r31"]
+after_instruction = true
+context = true
+
 # Observe embedded CUI4TextElement state after CPauseMenuButton construction.
 # This is read-only and capped; it is the first route-specific label lead.
 [[midasm_hook]]

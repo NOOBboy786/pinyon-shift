@@ -31,6 +31,11 @@ bool ObserveOutput(const rex::system::NativeGuestOutputRenderContext& context);
 // This is consumed only by the deterministic render-test capture events.
 void ObserveVehiclePose(float x, float y, float z);
 
+// Most recent scripted-route frame. Zero when no route is running. Host-side
+// UI experiments use it to scope a mutation to one part of the route instead
+// of guessing from a creation ordinal.
+uint64_t CurrentFrame();
+
 void Start(rex::system::IGraphicsSystem* graphics_system,
            rex::ui::WindowedAppContext* app_context, rex::ui::Window* window,
            std::function<void()> before_close = {});
