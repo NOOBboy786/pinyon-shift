@@ -567,6 +567,31 @@ precise remaining gap: the replay needs the document, element and section
 identities the deserializer uses for a real row, which the new
 `PinyonShiftTraceUiItemBuildCall` hook publishes at `0x82F268D0`.
 
+The replay now runs, and it establishes the real limit. The earlier guard was
+wrong: at `0x82F268EC` the deserializer calls `element->vtable[15]`, which is
+`0x82F2A250`; that reads `*(element+32)` and tail-calls its vtable slot 1, so
+the builder's owner is the `CUI4CustomObject` at `element+32` (vtable
+`0x8224BFC4`), never the element itself, and the document is `element+0x1F4`.
+With the precondition corrected (`element == *(owner+4)`,
+`*(element+32) == owner`, `document+80 == record`) the probe replays the
+sequence with the title's own allocators: the wrapper record and element record
+are byte-identical to a source row in the fixed field region and in all nine
+property entries, the section pool grows `0xFB -> 0xFD`, a real
+`CPauseMenuButton` is created and one container pair is added.
+
+The title then crashes anyway. Every variant that leaves the extra records in
+the live scene document during deserialization dies with a guest access
+violation (`0xC0000005`, read at `0x400000000` / `0x100000000`) 50-90 frames
+after the insert and before the first capture, while a control run on the same
+binary and route completes; the bisect shows that omitting the builder, the
+pool push, the properties, the parent link, or the header copy each still
+crashes, and only a heavily reduced variant reaches the capture frames. The
+live document therefore cannot admit an extra record at all, reachable or not.
+That closes the runtime-construction route for insertion and leaves the UI-14
+stream route: patch the scene payload at its loader boundary so the title's own
+deserializer builds the extra item from authored data, the same interception
+pattern that already works for the string table.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205

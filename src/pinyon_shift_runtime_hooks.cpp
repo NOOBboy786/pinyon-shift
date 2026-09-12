@@ -1672,11 +1672,16 @@ void PinyonShiftUiRecordBuilderChunk(const char* chunk, uint32_t r1, uint32_t r3
 // Live deserializer state captured at 0x82F268D0 (the item construction site of
 // sub_82F26560) while the insertion experiment runs: r24 is the document that owns
 // the item records (arena at +84, pool vector at +92 / data +124 / size +132), r25
-// the element the component builder is called on and r31 the section context whose
-// +92 vector is the record pool the stream's parent index resolves through.
+// the element the component builder is called on, r26 the item record the builder
+// receives and r31 the section context whose +92 vector is the record pool the
+// stream's parent index resolves through. r26 proves that the published document is
+// the one that produced the record the builder is now working on: both allocators
+// store every new record at document+80, so a published document whose +80 is this
+// record is this record's own document.
 std::atomic<uint32_t> g_ui_insert_document{};
 std::atomic<uint32_t> g_ui_insert_element{};
 std::atomic<uint32_t> g_ui_insert_section{};
+std::atomic<uint32_t> g_ui_insert_record{};
 std::atomic<uint32_t> g_ui_deserialize_trace_count{};
 
 // Item construction site of the scene deserializer sub_82F26560 (0x82F268D0).
@@ -1691,6 +1696,7 @@ void PinyonShiftTraceUiItemBuildCall(PPCRegister& r24, PPCRegister& r25,
     g_ui_insert_document.store(r24.u32, std::memory_order_relaxed);
     g_ui_insert_element.store(r25.u32, std::memory_order_relaxed);
     g_ui_insert_section.store(r31.u32, std::memory_order_relaxed);
+    g_ui_insert_record.store(r26.u32, std::memory_order_relaxed);
   }
   if (!UiTraceEnabled() ||
       g_ui_deserialize_trace_count.fetch_add(1, std::memory_order_relaxed) >=
@@ -2163,6 +2169,124 @@ bool UiInsertLinksTree() {
   return links;
 }
 
+// Parses PINYON_SHIFT_UI_INSERT_IDENTITY as a hex name hash for the added
+// wrapper record. The authored rows carry one distinct hash each in the wrapper
+// record at +0, so a replay that duplicates the source hash also duplicates the
+// row's identity; this override gives the added wrapper a hash of its own
+// without a rebuild. Unset keeps the source record's hash.
+struct UiInsertIdentity {
+  bool requested = false;
+  uint32_t hash = 0u;
+};
+
+const UiInsertIdentity& UiInsertIdentityValue() {
+  static const UiInsertIdentity identity = [] {
+    UiInsertIdentity parsed;
+    std::string_view text;
+#if defined(_WIN32)
+    char* raw = nullptr;
+    size_t raw_size = 0;
+    if (_dupenv_s(&raw, &raw_size, "PINYON_SHIFT_UI_INSERT_IDENTITY") != 0) {
+      return parsed;
+    }
+    const std::string owned = raw ? std::string(raw) : std::string();
+    std::free(raw);
+    text = owned;
+    if (text.empty()) {
+      return parsed;
+    }
+#else
+    const char* raw = std::getenv("PINYON_SHIFT_UI_INSERT_IDENTITY");
+    text = raw ? std::string_view(raw) : std::string_view();
+#endif
+    if (text.size() > 2u && text[0] == '0' &&
+        (text[1] == 'x' || text[1] == 'X')) {
+      text.remove_prefix(2u);
+    }
+    uint32_t value = 0u;
+    for (const char character : text) {
+      uint32_t digit = 0u;
+      if (character >= '0' && character <= '9') {
+        digit = static_cast<uint32_t>(character - '0');
+      } else if (character >= 'a' && character <= 'f') {
+        digit = static_cast<uint32_t>(character - 'a') + 10u;
+      } else if (character >= 'A' && character <= 'F') {
+        digit = static_cast<uint32_t>(character - 'A') + 10u;
+      } else {
+        return parsed;
+      }
+      value = value * 16u + digit;
+    }
+    parsed.hash = value;
+    parsed.requested = true;
+    return parsed;
+  }();
+  return identity;
+}
+
+// Bit mask over the replay's individual steps, so a run can bisect which step
+// makes the title's later passes fail without a rebuild. Unset or zero runs
+// every step:
+//   1 create the wrapper record        2 append the wrapper's properties
+//   4 create the element record        8 append the element's properties
+//  16 push both records to the pool   32 run the component builder
+//  64 copy the source records' headers (flag word, kind and count)
+// 128 link the wrapper into the authored sibling chain
+uint32_t UiInsertSteps() {
+  static const uint32_t steps = [] {
+    std::string_view text;
+#if defined(_WIN32)
+    char* raw = nullptr;
+    size_t raw_size = 0;
+    if (_dupenv_s(&raw, &raw_size, "PINYON_SHIFT_UI_INSERT_STEPS") != 0) {
+      return 0xFFFFFFFFu;
+    }
+    const std::string owned = raw ? std::string(raw) : std::string();
+    std::free(raw);
+    text = owned;
+#else
+    const char* raw = std::getenv("PINYON_SHIFT_UI_INSERT_STEPS");
+    text = raw ? std::string_view(raw) : std::string_view();
+#endif
+    if (text.empty()) {
+      return 0xFFFFFFFFu;
+    }
+    if (text.size() > 2u && text[0] == '0' &&
+        (text[1] == 'x' || text[1] == 'X')) {
+      text.remove_prefix(2u);
+    }
+    uint32_t value = 0u;
+    for (const char character : text) {
+      uint32_t digit = 0u;
+      if (character >= '0' && character <= '9') {
+        digit = static_cast<uint32_t>(character - '0');
+      } else if (character >= 'a' && character <= 'f') {
+        digit = static_cast<uint32_t>(character - 'a') + 10u;
+      } else if (character >= 'A' && character <= 'F') {
+        digit = static_cast<uint32_t>(character - 'A') + 10u;
+      } else {
+        break;
+      }
+      value = value * 16u + digit;
+    }
+    return value == 0u ? 0xFFFFFFFFu : value;
+  }();
+  return steps;
+}
+
+constexpr uint32_t kUiInsertStepWrapper = 1u;
+constexpr uint32_t kUiInsertStepWrapperProperties = 2u;
+constexpr uint32_t kUiInsertStepElement = 4u;
+constexpr uint32_t kUiInsertStepElementProperties = 8u;
+constexpr uint32_t kUiInsertStepPoolPush = 16u;
+constexpr uint32_t kUiInsertStepBuilder = 32u;
+constexpr uint32_t kUiInsertStepHeader = 64u;
+constexpr uint32_t kUiInsertStepLink = 128u;
+// Diagnostic-only restores of the bookkeeping the allocators advance.
+constexpr uint32_t kUiInsertStepRestoreCounters = 256u;
+constexpr uint32_t kUiInsertStepRestoreCursor = 512u;
+constexpr uint32_t kUiInsertStepRestorePool = 1024u;
+
 // Parses PINYON_SHIFT_UI_INSERT_PROPERTY as `<id>:<value>` (both hex, with or
 // without a 0x prefix) and rewrites the copied record's matching property entry.
 // The deserializer stores each stream property as {id, value} through
@@ -2366,6 +2490,147 @@ void PushUiSectionRecord(PPCContext& context, uint8_t* base, uint32_t section,
   CallGuestFunction(context, base, kUiSectionRecordPush, section + 92u, scratch);
 }
 
+// Bounded hex read of a guest byte range, for the record-field dumps below.
+std::string HexBytes(uint32_t address, uint32_t count) {
+  if (count > 48u || address == 0u ||
+      !PinyonShiftGuestRangeReadable(address, count)) {
+    return std::string();
+  }
+  static constexpr char kDigits[] = "0123456789ABCDEF";
+  std::string text;
+  text.reserve(count * 2u);
+  for (uint32_t index = 0; index < count; ++index) {
+    const uint8_t byte = LoadGuestU8(address + index);
+    text.push_back(kDigits[byte >> 4]);
+    text.push_back(kDigits[byte & 0x0Fu]);
+  }
+  return text;
+}
+
+// Copies the fixed field region of an authored record onto a record the title's
+// own allocator just created: the flag halfword at +28/+29 and everything between
+// +32 and the first property entry, which is +68 for a wrapper record and +32 for
+// an element record. The allocator only writes the fields it owns (link pointers,
+// name hash, stream value and the reserve's own flag state); an authored record
+// also carries authored or per-row values in that range (a wrapper record holds a
+// float block at +48), and a later pass over the document reads them, so a record
+// that leaves them at whatever the arena held is what makes the pass fail.
+//
+// The kind byte at +30 and the property count at +31 are deliberately not copied:
+// the allocator sets the kind and each property append advances the count from
+// zero, so copying an authored count would make the replay's own appends start
+// past the entries it owns and leave the first slots uninitialised.
+void CopyUiInsertFixedFields(uint32_t target, uint32_t source) {
+  if (target == 0u || source == 0u ||
+      !PinyonShiftGuestRangeReadable(source + 28u, 4u)) {
+    return;
+  }
+  const uint32_t header = LoadGuestU32(source + 28u);
+  const uint32_t base = (header & 0x00010000u) != 0u ? 68u : 32u;
+  if (!PinyonShiftGuestRangeReadable(target + 28u, 2u) ||
+      !PinyonShiftGuestRangeReadable(source + 28u, 2u)) {
+    return;
+  }
+  StoreGuestU8(target + 28u, LoadGuestU8(source + 28u));
+  StoreGuestU8(target + 29u, LoadGuestU8(source + 29u));
+  for (uint32_t offset = 32u; offset < base; ++offset) {
+    StoreGuestU8(target + offset, LoadGuestU8(source + offset));
+  }
+}
+
+// One bounded read of the shapes a replayed row depends on: the wrapper record's
+// single property (the row's own authored value) and the element record's four
+// type-0x14 object references (the per-row geometry/identity objects the
+// deserializer parsed). A replay that reuses the source record's stored values
+// reuses these objects, so naming them is what tells a distinct added row apart
+// from a duplicate of the row it was copied from. The document fields named here
+// are the counters and cursors a later pass over the same document advances, so
+// a run shows whether the replay's records are visible to those passes.
+void LogUiInsertRecordShape(uint32_t wrapper, uint32_t record, uint32_t section,
+                            uint32_t document, uint32_t wrapper_target,
+                            uint32_t record_target) {
+  const auto word = [](uint32_t address) {
+    return PinyonShiftGuestRangeReadable(address, 4u)
+               ? Hex32(LoadGuestU32(address))
+               : std::string("00000000");
+  };
+  const auto entry = [&](uint32_t target, uint32_t index) {
+    if (!PinyonShiftGuestRangeReadable(target + 28u, 4u)) {
+      return std::pair<uint32_t, uint32_t>{0u, 0u};
+    }
+    const uint32_t header = LoadGuestU32(target + 28u);
+    const uint32_t base = (header & 0x00010000u) != 0u ? 68u : 32u;
+    if (index * 8u >= (header & 0xFFu) * 8u) {
+      return std::pair<uint32_t, uint32_t>{0u, 0u};
+    }
+    const uint32_t at = target + base + index * 8u;
+    if (!PinyonShiftGuestRangeReadable(at, 8u)) {
+      return std::pair<uint32_t, uint32_t>{0u, 0u};
+    }
+    return std::pair<uint32_t, uint32_t>{LoadGuestU32(at), LoadGuestU32(at + 4u)};
+  };
+  const auto wrapper_property = entry(wrapper, 0u);
+  const uint32_t document_vtable =
+      PinyonShiftGuestRangeReadable(document, 4u) ? LoadGuestU32(document) : 0u;
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.item.insert.shape",
+      {{"wrapper", Hex32(wrapper)},
+       {"wrapper_hash", word(wrapper)},
+       {"wrapper_flag", word(wrapper + 28u)},
+       {"wrapper_field_4", word(wrapper + 4u)},
+       {"wrapper_field_8", word(wrapper + 8u)},
+       {"wrapper_field_24", word(wrapper + 24u)},
+       {"wrapper_field_36", word(wrapper + 36u)},
+       {"wrapper_field_44", word(wrapper + 44u)},
+       {"wrapper_field_48", word(wrapper + 48u)},
+       {"wrapper_property_id", Hex32(wrapper_property.first)},
+       {"wrapper_property_value", Hex32(wrapper_property.second)},
+       {"record", Hex32(record)},
+       {"record_field_8", word(record + 8u)},
+       {"record_field_24", word(record + 24u)},
+       {"record_field_36", word(record + 36u)},
+       {"record_field_44", word(record + 44u)},
+       {"record_field_48", word(record + 48u)},
+       {"record_flag", word(record + 28u)},
+       {"wrapper_fixed_hex", HexBytes(wrapper + 28u, 40u)},
+       {"wrapper_target_fixed_hex", HexBytes(wrapper_target + 28u, 40u)},
+       {"record_fixed_hex", HexBytes(record + 28u, 40u)},
+       {"record_target_fixed_hex", HexBytes(record_target + 28u, 40u)},
+       {"document_vtable", Hex32(document_vtable)},
+       {"document_reserve_fn",
+        document_vtable != 0u ? word(document_vtable + 88u)
+                              : std::string("00000000")},
+       {"document_field_12", word(document + 12u)},
+       {"document_field_16", word(document + 16u)},
+       {"document_last_record", word(document + 80u)},
+       {"document_cursor", word(document + 84u)},
+       {"section_field_16", word(section + 16u)},
+       {"section_field_20", word(section + 20u)},
+       {"section_field_28", word(section + 28u)},
+       {"section_capacity",
+        PinyonShiftGuestRangeReadable(section + 128u, 4u)
+            ? Hex32(LoadGuestU32(section + 128u))
+            : std::string("00000000")},
+       {"section_data",
+        PinyonShiftGuestRangeReadable(section + 124u, 4u)
+            ? Hex32(LoadGuestU32(section + 124u))
+            : std::string("00000000")}});
+  for (const uint32_t index : {2u, 4u, 5u, 8u}) {
+    const auto row_entry = entry(record, index);
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.item.insert.object",
+        {{"record", Hex32(record)},
+         {"index", Hex32(index)},
+         {"id", Hex32(row_entry.first)},
+         {"value", Hex32(row_entry.second)},
+         {"object_0", word(row_entry.second)},
+         {"object_4", word(row_entry.second + 4u)},
+         {"object_8", word(row_entry.second + 8u)},
+         {"object_12", word(row_entry.second + 12u)},
+         {"object_16", word(row_entry.second + 16u)}});
+  }
+}
+
 // Guards the nested builder run so the hook it re-enters is not itself a
 // second insertion target.
 struct UiInsertGuard {
@@ -2456,16 +2721,36 @@ void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
   if (g_ui_insert_done.exchange(true, std::memory_order_acq_rel)) {
     return;
   }
-  // Replay the title's own construction when the deserializer has published the
-  // document, element and section for this item. The wrapper record carries the
-  // item's own identity and the element record carries the contract name hash;
-  // both come from the document's allocators, so the arena, the sibling chain and
-  // the record pool advance exactly as they do for an authored item. The replay
-  // only runs when the publisher's element is the object the builder is called on,
-  // which is what makes the captured document the right one for this record.
+  // Replay the title's own construction when the deserializer's published
+  // document, element and section belong to this item. The deserializer reaches
+  // the builder through the element's own vtable slot 15, whose thunk loads the
+  // CUI4CustomObject at element+32 and tail-calls slot 1 of its vtable, so the
+  // builder's owner is element+32 -- not the element. Both record allocators also
+  // leave the record they just created at document+80, and the element's slot 32
+  // thunk returns element+500, which is that document. Checking those three
+  // relations is what makes the captured pointers the item's own; the earlier
+  // attempt compared the published element with the builder's owner, a relation
+  // that never holds, so the replay was always skipped and the probe fell back to
+  // the container-only copy.
   const uint32_t document = g_ui_insert_document.load(std::memory_order_relaxed);
   const uint32_t element = g_ui_insert_element.load(std::memory_order_relaxed);
   const uint32_t section = g_ui_insert_section.load(std::memory_order_relaxed);
+  const uint32_t published_record =
+      g_ui_insert_record.load(std::memory_order_relaxed);
+  const uint32_t owner_element =
+      PinyonShiftGuestRangeReadable(owner + 4u, 4u) ? LoadGuestU32(owner + 4u)
+                                                    : 0u;
+  const uint32_t element_owner =
+      PinyonShiftGuestRangeReadable(element + 32u, 4u)
+          ? LoadGuestU32(element + 32u)
+          : 0u;
+  const uint32_t document_last_record =
+      PinyonShiftGuestRangeReadable(document + 80u, 4u)
+          ? LoadGuestU32(document + 80u)
+          : 0u;
+  const bool document_current =
+      document != 0u && document_last_record == record;
+  const bool element_current = element_owner == owner || element == owner_element;
   const uint32_t source_parent =
       PinyonShiftGuestRangeReadable(record + 12u, 4u) ? LoadGuestU32(record + 12u)
                                                       : 0u;
@@ -2479,29 +2764,98 @@ void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
           : 0u;
   uint32_t wrapper_record = 0u;
   uint32_t target_record = 0u;
-  const bool replays = UiInsertReplaysItem() && document != 0u &&
-                       element == owner && source_parent != 0u &&
+  const uint32_t steps = UiInsertSteps();
+  // The allocators advance the document's record counters, its last-record slot,
+  // its arena cursor and the section pool's size, exactly as they do for an
+  // authored item. A later pass over the same document reads those, so the
+  // experiment records them before the replay and can put any of them back with
+  // the restore steps below.
+  const uint32_t counter_before_12 =
+      PinyonShiftGuestRangeReadable(document + 12u, 4u) ? LoadGuestU32(document + 12u)
+                                                        : 0u;
+  const uint32_t counter_before_16 =
+      PinyonShiftGuestRangeReadable(document + 16u, 4u) ? LoadGuestU32(document + 16u)
+                                                        : 0u;
+  const uint32_t cursor_before =
+      PinyonShiftGuestRangeReadable(document + 84u, 4u) ? LoadGuestU32(document + 84u)
+                                                        : 0u;
+  const uint32_t last_record_before =
+      PinyonShiftGuestRangeReadable(document + 80u, 4u) ? LoadGuestU32(document + 80u)
+                                                        : 0u;
+  const bool replays = UiInsertReplaysItem() && document_current &&
+                       published_record == record && element != 0u &&
+                       element_current && source_parent != 0u &&
                        source_container != 0u && section != 0u &&
-                       PinyonShiftGuestRangeReadable(source_parent + 36u, 4u);
+                       PinyonShiftGuestRangeReadable(source_parent + 36u, 4u) &&
+                       (steps & kUiInsertStepWrapper) != 0u;
   if (replays) {
     wrapper_record = CallGuestFunction(
         context, base, kUiWrapperRecordAllocator, document, source_container,
         LoadGuestU32(source_parent), LoadGuestU32(source_parent + 4u),
         UiRecordFlag(source_parent), LoadGuestU32(source_parent + 36u));
     if (wrapper_record != 0u) {
-      ReplayUiRecordProperties(context, base, document, source_parent);
-      target_record = CallGuestFunction(
-          context, base, kUiElementRecordAllocator, document, wrapper_record,
-          LoadGuestU32(record), LoadGuestU32(record + 4u), UiRecordFlag(record),
-          UiRecordKind(record));
+      const UiInsertIdentity& identity = UiInsertIdentityValue();
+      if (identity.requested) {
+        StoreGuestU32(wrapper_record, identity.hash);
+      }
+      if ((steps & kUiInsertStepHeader) != 0u) {
+        // The allocators leave the flag/tag bytes at +28/+29 and the authored
+        // values above them in the state their own reserve produced, which is not
+        // always the state an authored record of the same shape carries (an
+        // authored element record reads 0x200A where a freshly created one reads
+        // 0x0002, and an authored wrapper carries 0x22302E30 at +48). Copy the
+        // fixed field region so every later reader sees the authored encoding;
+        // the link pointers and the property entries stay the replay's own.
+        CopyUiInsertFixedFields(wrapper_record, source_parent);
+      }
+      if (!UiInsertLinksTree() ||
+          (steps & kUiInsertStepLink) == 0u) {
+        // Unlink the wrapper from the parent's child chain: the allocator already
+        // appended it, so the last sibling now points at it.
+        if (PinyonShiftGuestRangeReadable(source_parent + 16u, 4u) &&
+            LoadGuestU32(source_parent + 16u) == wrapper_record) {
+          StoreGuestU32(source_parent + 16u, 0u);
+          StoreGuestU32(wrapper_record + 12u, 0u);
+        }
+      }
+      if ((steps & kUiInsertStepWrapperProperties) != 0u) {
+        ReplayUiRecordProperties(context, base, document, source_parent);
+      }
+      UiInsertPatchProperty(wrapper_record);
+      if ((steps & kUiInsertStepElement) != 0u) {
+        target_record = CallGuestFunction(
+            context, base, kUiElementRecordAllocator, document, wrapper_record,
+            LoadGuestU32(record), LoadGuestU32(record + 4u),
+            UiRecordFlag(record), UiRecordKind(record));
+      }
       if (target_record != 0u) {
-        ReplayUiRecordProperties(context, base, document, record);
+        if ((steps & kUiInsertStepHeader) != 0u) {
+          CopyUiInsertFixedFields(target_record, record);
+        }
+        if ((steps & kUiInsertStepElementProperties) != 0u) {
+          ReplayUiRecordProperties(context, base, document, record);
+        }
         // The deserializer appends every record it creates to the section's pool
         // right after creating it, and the stream's parent index resolves through
         // that array. Append both records with the title's own push so the pool
         // keeps one entry per authored record, in creation order.
-        PushUiSectionRecord(context, base, section, wrapper_record);
-        PushUiSectionRecord(context, base, section, target_record);
+        if ((steps & kUiInsertStepPoolPush) != 0u) {
+          PushUiSectionRecord(context, base, section, wrapper_record);
+          PushUiSectionRecord(context, base, section, target_record);
+        }
+      }
+      // Diagnostic restores, so a run can name which bookkeeping change a later
+      // pass is reading. They are off by default.
+      if ((steps & kUiInsertStepRestoreCounters) != 0u) {
+        StoreGuestU32(document + 12u, counter_before_12);
+        StoreGuestU32(document + 16u, counter_before_16);
+      }
+      if ((steps & kUiInsertStepRestoreCursor) != 0u) {
+        StoreGuestU32(document + 80u, last_record_before);
+        StoreGuestU32(document + 84u, cursor_before);
+      }
+      if ((steps & kUiInsertStepRestorePool) != 0u) {
+        StoreGuestU32(section + 132u, pool_size_before);
       }
     }
   }
@@ -2511,7 +2865,11 @@ void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
   uint32_t tree_next_before = 0u;
   bool link_tree = false;
   bool share_record = false;
-  if (record_target == 0u) {
+  // The container-only copy is the comparison path for a replay that was never
+  // attempted (its precondition did not hold). A replay that ran and stopped
+  // before producing a record leaves the target at zero so the bisect mask keeps
+  // the run comparable instead of silently switching paths.
+  if (record_target == 0u && !replays) {
     if (record_size == 0u) {
       pinyon_shift::diagnostics::RecordEvent(
           "ui.item.insert",
@@ -2561,9 +2919,12 @@ void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
           ? (child_end_before - child_begin_before) / 8u
           : 0u;
   const uint32_t property_result = UiInsertPatchProperty(record_target);
-  const uint32_t builder_result =
-      CallGuestFunction(context, base, kUiComponentBuilderAddress, owner,
-                        record_target);
+  uint32_t builder_result = 0u;
+  if (record_target != 0u && (steps & kUiInsertStepBuilder) != 0u) {
+    builder_result =
+        CallGuestFunction(context, base, kUiComponentBuilderAddress, owner,
+                          record_target);
+  }
   const uint32_t child_begin_after =
       PinyonShiftGuestRangeReadable(owner + 40u, 4u) ? LoadGuestU32(owner + 40u)
                                                      : 0u;
@@ -2590,12 +2951,17 @@ void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
   if (UiTraceEnabled() && record_target != 0u) {
     DumpUiElementRecord(record_target, owner, 0xFFFFFFFFu);
   }
+  if (UiTraceEnabled() && replays) {
+    LogUiInsertRecordShape(source_parent, record, section, document,
+                           wrapper_record, target_record);
+  }
   pinyon_shift::diagnostics::RecordEvent(
       "ui.item.insert",
       {{"result", added != 0u ? "created" : "no_container_growth"},
        {"frame", std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
        {"ordinal", Hex32(ordinal)},
        {"mode", replays ? "replay" : (share_record ? "shared_copy" : "copy")},
+       {"steps", Hex32(steps)},
        {"owner", Hex32(owner)},
        {"record", Hex32(record)},
        {"record_copy", Hex32(record_target)},
@@ -2605,7 +2971,22 @@ void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
        {"document", Hex32(document)},
        {"element", Hex32(element)},
        {"element_matches_owner", element == owner ? "1" : "0"},
+       {"owner_element", Hex32(owner_element)},
+       {"element_owner", Hex32(element_owner)},
+       {"element_current", element_current ? "1" : "0"},
+       {"element_plus_500", Hex32(element + 500u)},
+       {"document_current", document_current ? "1" : "0"},
+       {"document_last_record", Hex32(document_last_record)},
+       {"published_record", Hex32(published_record)},
+       {"replay_blocked",
+        replays ? std::string()
+                : (document_current ? std::string("precondition")
+                                    : std::string("stale_publish"))},
        {"section", Hex32(section)},
+       {"section_capacity",
+        PinyonShiftGuestRangeReadable(section + 128u, 4u)
+            ? Hex32(LoadGuestU32(section + 128u))
+            : std::string("00000000")},
        {"source_parent", Hex32(source_parent)},
        {"source_container", Hex32(source_container)},
        {"wrapper_record", Hex32(wrapper_record)},
