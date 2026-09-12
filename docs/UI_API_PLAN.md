@@ -469,6 +469,25 @@ substitution at submission time or a re-authored scene, which is the UI-14
 asset path. That is the precise blocker for UI-04's label half, and it is
 independent of the insertion half.
 
+The label source is no longer unknown. `media/stringtables/` holds one archive
+per language (`EN.zip`, `DE.zip`, ...); inside `EN.zip`, `PauseMenu.str` is an
+`LSB2` localization blob whose strings are UTF-16LE. It contains every visible
+pause label at these byte offsets: `MESSAGE CENTER` 447, `RESUME` 477,
+`SPONSOR CHALLENGES` 491, `QUIT` 681, `MULTIPLAYER` 4895, `MY PROFILE` 4919,
+`PHOTO MODE` 5653, `MAP` 5707. `GameStrings.str` and `MainMenu.str` use the
+same layout. Nothing in the archive holds these labels as ASCII, which is why
+the earlier game-data searches came up empty, and why the runtime ASCII copies
+found by the probe are derived text rather than the table itself.
+
+The label half of UI-04 therefore reduces to one bounded probe: patch the
+string table at its loader boundary, so the title's own text layout resolves
+the modified string. Two candidate boundaries, in preference order: the
+archive read that produces `PauseMenu.str` (the game reads the member through
+the VFS, so the bytes can be substituted before parsing), or the loaded blob in
+guest memory once it exists and before the pause scene is built. Patching the
+on-disk archive is not an option with the current tooling because the project
+carries LZX decompression only.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
