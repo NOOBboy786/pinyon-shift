@@ -22,6 +22,7 @@ class ShaderPreparationTests(unittest.TestCase):
                 "config/release-toolchain.json", "config/supported-dumps.json",
                 "config/render-tests/fh1-shader-preparation.fh1test",
                 "tools/extract-fh1-shader-corpus.py", "tools/build-fh1-gpu-prewarm.py",
+                "tools/fh1_archive_extract.cpp",
                 "tools/native-shader-pack.py",
             ):
                 target = root / path

@@ -2,6 +2,7 @@ import importlib.util
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -26,6 +27,37 @@ def container(code: bytes, vertex: bool = True, interpolators: int = 0) -> bytes
 
 
 class ExtractFh1ShaderCorpusTests(unittest.TestCase):
+    def test_extracts_executable_shaders_through_the_existing_helper(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "media" / "shaders").mkdir(parents=True)
+            (root / "default.xex").write_bytes(b"local executable")
+            helper = root / "extractor.exe"
+            helper.touch()
+
+            def dump_image(arguments, **kwargs):
+                self.assertEqual(arguments[:3], [helper, "--xex-image", root / "default.xex"])
+                arguments[3].write_bytes(container(b"\x01\x02\x03\x04" * 3))
+                return MODULE.subprocess.CompletedProcess(arguments, 0)
+
+            with patch.object(MODULE.subprocess, "run", side_effect=dump_image):
+                manifest = MODULE.extract(root, root / "manifest.json", archive_extractor=helper)
+            self.assertEqual(manifest["shader_count"], 1)
+            self.assertEqual(manifest["entries"][0]["sources"][0]["path"], "default.xex")
+
+    def test_executable_declaration_is_derived_from_terminated_elements(self):
+        data = (b"\xff" * 12
+                + struct.pack(">HHIBBBB", 0, 0, 0x002C23A5, 0, 0, 0, 0)
+                + struct.pack(">HHIBBBB", 0, 8, 0x002C23A5, 0, 5, 0, 0)
+                + bytes.fromhex("00ff0000ffffffff00000000"))
+        expected = {(((0, 0, 0x002C23A5, 0, 0),
+                      (0, 8, 0x002C23A5, 5, 0)), (16,))}
+        self.assertEqual(MODULE.extract_executable_declarations(data), expected)
+        self.assertEqual(MODULE.extract_executable_declarations(data[:-1]), set())
+        malformed = bytearray(data)
+        malformed[20] = 1  # Unsupported declaration method.
+        self.assertNotEqual(MODULE.extract_executable_declarations(malformed), expected)
+
     def test_specialization_preserves_other_instructions_and_export_bits(self):
         words = [0xFFFFFFFF] * 12
         result = MODULE.specialize_vertex_shader(

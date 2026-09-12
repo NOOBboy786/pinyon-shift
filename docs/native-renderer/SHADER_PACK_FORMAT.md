@@ -144,13 +144,18 @@ Strict 1x HFR session `20260904T044521Z-p45072` also completed the combined
 mode route with zero misses and duplicate presents. Capture-light strict 3x
 session `20260904T045529Z-p556` rendered a true 3840x2160 world frame with zero
 misses, 75.066 source frames/s, 74.860 presents/s, zero duplicate presents,
-and title time at 0.995x wall time. This completes the scale matrix for the
-current NVIDIA translator configuration; other GPU vendors remain unproven.
+and title time at 0.995x wall time. These captures do not qualify moving-car
+rendering: subsequent gameplay reproduced severe 3x vehicle glow. Other GPU
+vendors also remain unproven.
 
-`tools/extract-fh1-shader-corpus.py` now reads loose assets and FH1's LZX track
-archives, finding 3,349 unique raw programs in 4,293 containers. It combines
-the embedded 34 vertex declarations with the retail vertex templates to emit
-8,377 deterministic patched variants, producing 11,726 programs total.
+`tools/extract-fh1-shader-corpus.py` reads loose assets, FH1's LZX track
+archives, and the locally loaded `default.xex` image. The executable contains
+additional programs and vertex declarations needed by the map and motion
+passes; omitting them caused a blank SELECT map and smeared moving cars at 1x.
+The current supported dump yields 3,819 raw programs in 4,770 containers and
+12,846 programs including locally derived vertex variants. Use
+`config/render-tests/fh1-moving-map.fh1test` with a free-roam save to check
+moving vehicles and the map; startup-only qualification is insufficient.
 
 At 2x, automated corpus session `20260904T055222Z-p28564` translated 9,600
 vertex and 12,098 pixel specializations with zero failures. The merged pack has

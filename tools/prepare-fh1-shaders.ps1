@@ -80,7 +80,8 @@ try {
         'config/release-toolchain.json', 'config/supported-dumps.json',
         'config/render-tests/fh1-shader-preparation.fh1test',
         'tools/prepare-fh1-shaders.ps1', 'tools/produce-fh1-artifacts.ps1',
-        'tools/extract-fh1-shader-corpus.py', 'tools/build-fh1-gpu-prewarm.py',
+        'tools/extract-fh1-shader-corpus.py', 'tools/fh1_archive_extract.cpp',
+        'tools/build-fh1-gpu-prewarm.py',
         'tools/native-shader-pack.py'
     )) { $inputs.files[$relative] = (Get-FileHash -LiteralPath (Join-Path $root $relative)).Hash }
     foreach ($binary in @('pinyon_shift.exe', 'rexgpu-fh1.dll', 'rexruntime.dll')) {

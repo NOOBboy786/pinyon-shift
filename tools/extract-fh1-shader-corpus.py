@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract the Forza Horizon 1 Xenos shader corpus from retail .fxobj files."""
+"""Extract FH1 Xenos shaders from retail assets and the game executable."""
 
 from __future__ import annotations
 
@@ -37,6 +37,15 @@ CAR_SELECTION_VARIANTS = {
     "F04A96BBC78367A5BFD9CE5253F3EDCF29E76494D2B52103A05FF8A5E21ECE80":
         (9, (26, 27, 29, 30, 32), (*[(i, 7) for i in range(38, 42)], *[(i, 8) for i in range(42, 46)], (60, 6)),
          ((21, 1 << 27), (37, 1 << 30))),
+}
+
+# This embedded UI program also uses a declaration assembled at runtime:
+# float3 position, float2 UV, packed color. Keep the recipe tied to the exact
+# locally extracted program, as with the material specializations above.
+RUNTIME_VERTEX_DECLARATIONS = {
+    "64F1304050A2CDD0D8E036EA9672586F91BD8C5500C093CEC736223306111267":
+        (((0, 0, 0x002A23B9, 0, 0), (0, 12, 0x002C23A5, 5, 0),
+          (0, 20, 0x00182886, 10, 0)), (24,)),
 }
 
 
@@ -139,6 +148,37 @@ def patch_vertex_shader(code: bytes, shader_elements: tuple, declaration: tuple)
     return struct.pack(f">{len(words)}I", *words)
 
 
+def extract_executable_declarations(data: bytes) -> set[tuple]:
+    """Read terminated D3DVERTEXELEMENT9 arrays used by embedded shaders."""
+    result = set()
+    terminator = bytes.fromhex("00ff0000ffffffff00000000")
+    end = data.find(terminator)
+    while end >= 0:
+        elements = []
+        strides = {}
+        offset = end - 12
+        while offset >= 0:
+            stream, byte_offset, element_type, method, usage, index, padding = (
+                struct.unpack_from(">HHIBBBB", data, offset)
+            )
+            vertex_format = element_type & 0x3F
+            if (stream >= 16 or byte_offset % 4 or byte_offset > 2048
+                    or vertex_format not in FORMAT_WORDS or method or padding
+                    or usage > 13 or index > 15):
+                break
+            elements.append((stream, byte_offset, element_type, usage, index))
+            strides[stream] = max(strides.get(stream, 0),
+                                  byte_offset + FORMAT_WORDS[vertex_format] * 4)
+            offset -= 12
+        if elements:
+            # Embedded declarations use tightly packed streams; asset effects
+            # supply explicit strides through extract_declarations instead.
+            result.add((tuple(reversed(elements)),
+                        tuple(strides.get(i, 0) for i in range(max(strides) + 1))))
+        end = data.find(terminator, end + len(terminator))
+    return result
+
+
 def extract(game_root: Path, output: Path, binary_dir: Path | None = None,
             archive_extractor: Path | None = None) -> dict:
     shader_root = game_root / "media" / "shaders"
@@ -148,6 +188,7 @@ def extract(game_root: Path, output: Path, binary_dir: Path | None = None,
     entries: dict[tuple[str, str], dict] = {}
     binaries: dict[tuple[str, str], bytes] = {}
     declarations = set()
+    executable_declarations = set()
     vertex_sources = []
     container_count = 0
 
@@ -246,6 +287,20 @@ def extract(game_root: Path, output: Path, binary_dir: Path | None = None,
     if archive_extractor is not None and not archive_extractor.is_file():
         raise ValueError(f"FH1 archive extractor is unavailable: {archive_extractor}")
     with tempfile.TemporaryDirectory() as temporary:
+        executable = game_root / "default.xex"
+        if executable.is_file():
+            if archive_extractor is None:
+                raise ValueError("FH1 executable shaders require --archive-extractor")
+            image = Path(temporary) / "default-image.bin"
+            result = subprocess.run(
+                [archive_extractor, "--xex-image", executable, image],
+                capture_output=True, text=True,
+            )
+            if result.returncode:
+                raise ValueError(f"failed to extract executable shaders: {result.stderr.strip()}")
+            image_data = image.read_bytes()
+            executable_declarations.update(extract_executable_declarations(image_data))
+            extract_source("default.xex", image_data)
         extracted = Path(temporary) / "shader.fxobj"
         for archive in sorted((game_root / "media").rglob("*.zip")):
             with ZipFile(archive) as zipped:
@@ -278,7 +333,11 @@ def extract(game_root: Path, output: Path, binary_dir: Path | None = None,
 
     raw_shader_count = len(entries)
     for code, shader_elements, interpolator_count, source in vertex_sources:
-        for declaration in declarations:
+        layouts = executable_declarations if source["path"] == "default.xex" else declarations
+        runtime_layout = RUNTIME_VERTEX_DECLARATIONS.get(hashlib.sha256(code).hexdigest().upper())
+        if runtime_layout is not None:
+            layouts = layouts | {runtime_layout}
+        for declaration in layouts:
             variant = patch_vertex_shader(code, shader_elements, declaration)
             if variant is not None and variant != code:
                 add_shader("vertex", variant, interpolator_count, source, True)
@@ -298,6 +357,7 @@ def extract(game_root: Path, output: Path, binary_dir: Path | None = None,
         "container_count": container_count,
         "raw_shader_count": raw_shader_count,
         "vertex_declaration_count": len(declarations),
+        "executable_vertex_declaration_count": len(executable_declarations),
         "asset_derived_vertex_variant_count": len(entries) - raw_shader_count,
         "shader_count": len(entries),
         "entries": [entries[key] for key in sorted(entries)],
