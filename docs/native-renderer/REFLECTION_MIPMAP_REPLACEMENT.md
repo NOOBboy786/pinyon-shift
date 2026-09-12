@@ -1,7 +1,7 @@
 # Experimental reflection mipmap replacement — 2026-09-10
 
 Status: **focused mipmap implementation complete; enabled by default at symmetric
-1x/2x with compatibility fallback.** The remaining B epic is deferred and open.
+1x/2x/3x with compatibility fallback.** The remaining B epic is deferred and open.
 This is a bounded renderer improvement, not complete Xenos retirement or a
 new hardware-requirement claim. Subsequent user testing reports green reflection
 flashes and severe Carson slowdowns; see the open follow-up below. The bounded
@@ -15,7 +15,7 @@ and copies; the setting requires restarting the game.
 
 For an admitted six-face reflection cube, eight native compute dispatches per
 face replace **48 legacy render draws and 48 resolve copies**. The filter uses
-existing shared memory at 1x and existing scaled resolve storage at 2x. It adds
+existing shared memory at 1x and existing scaled resolve storage at 2x and 3x. It adds
 no persistent texture mirror. Root signatures and compute pipelines are reused.
 
 The renderer checks a fresh private command snapshot, an address-independent
@@ -213,3 +213,30 @@ reproduced; a clean-frame native mip publication check cannot close that issue.
 Capture the affected car and failing reflection frame next. Other B work remains
 deferred. The hashes above describe the original mipmap milestone; the linked
 follow-up records the newer tested renderer identity.
+
+## 3x extension — 2026-09-12
+
+The replacement now covers symmetric 3x, which previously fell back to the
+legacy mip draws and resolves. Two defects were removed:
+
+- `GenerateFh1ReflectionMips` rejected scale 3 and had no 3x ScaledOffset. The
+  added `fh1_reflection_mip_3x` compute shader filters the 3x3 subpixel block of
+  each source texel using the group-based scaled resolve layout (guest groups of
+  four guest texels of one guest row, `scale_x * scale_y` sixteen-byte host
+  groups stored column-major). The 2x specialization of that addressing is
+  byte-identical to the shipped, GPU-validated 2x shader.
+- The native path's scaled base offset was `uint64_t(base_address) * 4`, the 2x
+  area scale, so at 3x the compute shader ran 4/9 of the way into the scaled
+  range and hung the device (`0x887A0006`) during the offline producer. It now
+  uses the current area scale. 1x and 2x are unchanged.
+
+Route-J (outpost to open road) before/after at 3x, pose-matched: the car-region
+clipped-pixel fraction falls from 1.97 % mean / 4.28 % max with 46 of 78 pairs
+above 1 % to 0.013 % mean / 0.02 % max with none, the blown magenta glass and
+roof and its halo are gone in native-resolution crops, and 30 036 of 30 037
+candidate faces are published natively (`native_faces=0` before). 1x comparison
+of the same route shows no change. The 3x shader is checked byte-exactly against
+a CPU reference on the GPU (19 906 560-byte chain, zero differences, live poison
+control) before any game run. Why the legacy mip chain is wrong at 3x — the
+suspects are the sub-tile mip render targets and their scaled resolves — is not
+established; the fix bypasses that path instead of repairing it.
