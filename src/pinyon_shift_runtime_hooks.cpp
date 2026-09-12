@@ -57,8 +57,8 @@ bool g_ui_experiment_applied = false;
 constexpr uint32_t kUiExperimentTextTargets = 16u;
 // Label-scan window: the observed UI allocations span the 0x2E... and 0x40...
 // regions, so the window covers both. Each frame scans a bounded slice.
-constexpr uint32_t kUiLabelScanBegin = 0x2C000000u;
-constexpr uint32_t kUiLabelScanEnd = 0x52000000u;
+constexpr uint32_t kUiLabelScanBegin = 0x10000000u;
+constexpr uint32_t kUiLabelScanEnd = 0x82000000u;
 constexpr uint32_t kUiLabelScanBlockSize = 0x10000u;
 constexpr uint32_t kUiLabelScanBytesPerFrame = 8u * 1024u * 1024u;
 constexpr uint32_t kUiLabelMaximumWrites = 64u;
@@ -1318,7 +1318,6 @@ void ScanAndWriteUiLabel(std::string_view write_literal) {
   if (literal_length < 4u || literal_length > 31u) {
     return;
   }
-  auto read_byte = [](uint32_t address) { return LoadGuestU8(address); };
   if (cursor >= kUiLabelScanEnd) {
     // Restart the sweep so a string copied later (for example when the pause
     // overlay is built) is still found while the screen is up.
@@ -1328,6 +1327,51 @@ void ScanAndWriteUiLabel(std::string_view write_literal) {
     rescan_wait = 0;
     cursor = kUiLabelScanBegin;
   }
+  // A hit is reported once per sweep: `hit_stride` is 1 for ASCII and 2 for
+  // UTF-16LE, so the same probe covers both storage forms.
+  const auto handle_hit = [&](uint32_t address, uint32_t stride) {
+    const auto read_literal = [&](uint32_t at) {
+      std::string text;
+      text.reserve(literal_length);
+      for (uint32_t step = 0; step < literal_length; ++step) {
+        const uint8_t byte = LoadGuestU8(at + step * stride);
+        if (stride == 1u && byte == 0u) {
+          break;
+        }
+        text.push_back(
+            static_cast<char>(byte < 0x20u || byte > 0x7Eu ? '.' : byte));
+      }
+      return text;
+    };
+    std::string before;
+    bool changed = false;
+    if (!write_literal.empty() && total_written < kUiLabelMaximumWrites) {
+      before = read_literal(address);
+      for (uint32_t step = 0; step < literal_length; ++step) {
+        const char replacement =
+            step < write_literal.size()
+                ? write_literal[step]
+                : write_literal[write_literal.size() - 1u];
+        StoreGuestU8(address + step * stride, static_cast<uint8_t>(replacement));
+        if (stride == 2u) {
+          StoreGuestU8(address + step * stride + 1u, 0u);
+        }
+      }
+      ++total_written;
+      changed = read_literal(address) != before;
+    }
+    if (total_written <= kUiLabelMaximumWrites) {
+      pinyon_shift::diagnostics::RecordEvent(
+          "ui.experiment.label_scan",
+          {{"literal", std::string(literal)},
+           {"encoding", stride == 1u ? "ascii" : "utf16"},
+           {"address", Hex32(address)},
+           {"ascii", read_literal(address)},
+           {"replacement", std::string(write_literal)},
+           {"before", before},
+           {"changed", changed ? "1" : "0"}});
+    }
+  };
   const uint32_t stop =
       std::min(kUiLabelScanEnd, cursor + kUiLabelScanBytesPerFrame);
   for (uint32_t block = cursor; block < stop; block += kUiLabelScanBlockSize) {
@@ -1335,75 +1379,45 @@ void ScanAndWriteUiLabel(std::string_view write_literal) {
     if (!PinyonShiftGuestRangeReadable(block, block_end - block)) {
       continue;
     }
-    for (uint32_t base = block; base + 8u < block_end; base += 4u) {
-      const uint32_t word0 = LoadGuestU32(base);
-      const uint32_t word1 = LoadGuestU32(base + 4u);
-      const std::array<uint8_t, 8> window = {
-          static_cast<uint8_t>(word0 >> 24), static_cast<uint8_t>(word0 >> 16),
-          static_cast<uint8_t>(word0 >> 8),  static_cast<uint8_t>(word0),
-          static_cast<uint8_t>(word1 >> 24), static_cast<uint8_t>(word1 >> 16),
-          static_cast<uint8_t>(word1 >> 8),  static_cast<uint8_t>(word1)};
+    for (uint32_t base = block; base + 4u < block_end; base += 4u) {
+      const uint32_t word = LoadGuestU32(base);
+      const std::array<uint8_t, 4> bytes = {static_cast<uint8_t>(word >> 24),
+                                            static_cast<uint8_t>(word >> 16),
+                                            static_cast<uint8_t>(word >> 8),
+                                            static_cast<uint8_t>(word)};
       for (uint32_t offset = 0; offset < 4u; ++offset) {
-        if (window[offset] != static_cast<uint8_t>(literal[0])) {
+        const uint32_t address = base + offset;
+        if (address + (literal_length - 1u) * 2u + 1u >= block_end) {
+          // Keep every candidate read inside the block that was validated.
           continue;
         }
-        bool match = true;
-        for (uint32_t index = 1; index < literal_length; ++index) {
-          const uint32_t position = offset + index;
-          const uint8_t byte = position < window.size()
-                                   ? window[position]
-                                   : read_byte(base + position);
-          if (byte != static_cast<uint8_t>(literal[index])) {
-            match = false;
+        for (const uint32_t stride : {1u, 2u}) {
+          if (stride == 2u && (offset & 1u) != 0u) {
+            continue;
+          }
+          if (bytes[offset] != static_cast<uint8_t>(literal[0])) {
+            continue;
+          }
+          if (stride == 2u &&
+              (offset + 1u >= bytes.size() || bytes[offset + 1u] != 0u)) {
+            continue;
+          }
+          bool match = true;
+          for (uint32_t index = 1; index < literal_length; ++index) {
+            // Reads outside the validated block are re-checked by the block
+            // granularity above; the addresses stay inside the sweep.
+            if (LoadGuestU8(address + index * stride) !=
+                    static_cast<uint8_t>(literal[index]) ||
+                (stride == 2u && LoadGuestU8(address + index * stride + 1u) != 0u)) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            handle_hit(address, stride);
             break;
           }
         }
-        if (!match) {
-          continue;
-        }
-        const uint32_t address = base + offset;
-        // Direct loads only: the address sits inside a block that
-        // PinyonShiftGuestRangeReadable already validated, while the strict
-        // per-byte helper rejects these pages even though they hold text.
-        const auto read_literal = [&](uint32_t at) {
-          std::string text;
-          text.reserve(literal_length);
-          for (uint32_t step = 0; step < literal_length; ++step) {
-            const uint8_t byte = LoadGuestU8(at + step);
-            if (byte == 0u) {
-              break;
-            }
-            text.push_back(
-                static_cast<char>(byte < 0x20u || byte > 0x7Eu ? '.' : byte));
-          }
-          return text;
-        };
-        std::string before;
-        bool changed = false;
-        if (!write_literal.empty() && total_written < kUiLabelMaximumWrites) {
-          before = read_literal(address);
-          for (uint32_t step = 0; step < literal_length; ++step) {
-            const char replacement =
-                step < write_literal.size()
-                    ? write_literal[step]
-                    : write_literal[write_literal.size() - 1u];
-            StoreGuestU8(address + step, static_cast<uint8_t>(replacement));
-          }
-          ++total_written;
-          changed = read_literal(address) != before;
-        }
-        if (total_written <= kUiLabelMaximumWrites) {
-          pinyon_shift::diagnostics::RecordEvent(
-              "ui.experiment.label_scan",
-              {{"literal", std::string(literal)},
-               {"address", Hex32(address)},
-               {"ascii", read_literal(address)},
-               {"replacement", std::string(write_literal)},
-               {"before", before},
-               {"changed", changed ? "1" : "0"}});
-        }
-        base += 3u;
-        break;
       }
     }
   }

@@ -425,6 +425,21 @@ probe has to hook the text-layout path (string to glyph run) rather than poking
 strings, and the second UI allocation region observed at `0x40...` is the place
 to look for the layout objects.
 
+The widened probe settles the question. With the window covering
+`0x10000000`-`0x82000000` and both ASCII and UTF-16LE encodings, a pause-route
+run found 75 ASCII copies of `MULTIPLAYER` and rewrote every one to
+`PINYONSHIFT` with read-back confirmation; 66 of those writes landed before the
+pause capture (10 at 06:18:34, 2 at :35, 54 at :36, capture at :37). The
+rendered pause item still reads `MULTIPLAYER`. The same probe rewrote 11 ASCII
+copies of the car name `Corrado` in an earlier run without changing the pause
+header. Pause-menu labels are therefore not drawn from any writable ASCII
+buffer: the engine lays text out into glyph data when the scene is built and
+renders that, so the label path has to be intercepted at the text-layout or
+text-property stage, during scene construction, instead of by rewriting strings
+after the fact. UI-04's label half stays open with that narrowed target; the
+insertion half is unaffected and still points at
+`sub_82E78078(registry, descriptor, name)`.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
