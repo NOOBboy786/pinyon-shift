@@ -174,6 +174,39 @@ address = 0x82F268D0
 name = "PinyonShiftTraceUiItemBuildCall"
 registers = ["r24", "r25", "r26", "r29", "r31"]
 
+# UI-14 stream route reconnaissance. The scene item deserializer sub_82F26560
+# reads every authored item through the 12-byte reader at section+12, whose
+# slot-1 method sub_82F25568 copies out of the MSVC FILE* at reader+4. These
+# three read-only probes record the section/reader/FILE state, the section's
+# declared byte length and the parsed item fields, and (once) whether the whole
+# decompressed member is present in the UI heap regions. Default-off: they run
+# only for PINYON_SHIFT_UI_EXPERIMENT=scene_probe.
+[[midasm_hook]]
+address = 0x82F26560
+name = "PinyonShiftTraceUiSceneDeserializerEntry"
+registers = ["r3", "r4", "lr"]
+
+[[midasm_hook]]
+address = 0x82F265D4
+name = "PinyonShiftTraceUiSceneItemLength"
+registers = ["r1", "r3", "r31"]
+
+[[midasm_hook]]
+address = 0x82F267C0
+name = "PinyonShiftTraceUiSceneItemFields"
+registers = ["r1", "r3", "r31"]
+
+[[midasm_hook]]
+address = 0x82F25568
+name = "PinyonShiftTraceUiSceneStreamRead"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
+address = 0x82F255EC
+name = "PinyonShiftTraceUiSceneReadResult"
+registers = ["r3", "r28", "r30"]
+after_instruction = true
+
 [[midasm_hook]]
 address = 0x82E7A260
 name = "PinyonShiftUiBuilderChunk260"

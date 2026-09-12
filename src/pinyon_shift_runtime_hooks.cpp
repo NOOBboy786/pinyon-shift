@@ -276,6 +276,7 @@ enum class UiExperimentMode {
   kLabelWrite,
   kLabelPatch,
   kInsertItem,
+  kSceneProbe,
 };
 
 UiExperimentMode ComputeUiExperimentMode() {
@@ -310,6 +311,9 @@ UiExperimentMode ComputeUiExperimentMode() {
   }
   if (requested == "insert_item") {
     return UiExperimentMode::kInsertItem;
+  }
+  if (requested == "scene_probe") {
+    return UiExperimentMode::kSceneProbe;
   }
   return UiExperimentMode::kNone;
 }
@@ -3818,6 +3822,406 @@ static std::string PinyonShiftReadGuestAscii(uint32_t address,
     value.push_back(static_cast<char>(character));
   }
   return {};
+}
+
+// --- UI-14 scene-payload interception (pause insertion, stream side) -------
+//
+// The pause screen is built from `GAME:\Media\UI\Scenes\UI4\925_PAUSE_MENU.bgf`
+// (image format string 0x82036AD4). Every authored item of that scene is
+// produced by the deserializer sub_82F26560, which reads its per-item bytes
+// through the 12-byte reader stored at section+12. That reader's slot-1 method
+// sub_82F25568 copies from the source object held at reader+4, so the item
+// stream is already a derived stream rather than a plain guest array.
+//
+// This probe answers the two questions the UI-14 stream route needs before any
+// payload rewrite is attempted, read-only and default-off
+// (`PINYON_SHIFT_UI_EXPERIMENT=scene_probe`):
+//   1. where the pause item stream is, by dumping the section/reader/source
+//      state and the parsed item fields in the pause window;
+//   2. whether the pause item stream and the decompressed member exist writable
+//      in guest memory, which a one-shot load-time rewrite would require.
+namespace {
+
+constexpr uint32_t kUiSceneProbeEventLimit = 24u;
+constexpr uint32_t kUiSceneProbeBlockSize = 0x10000u;
+constexpr uint32_t kUiSceneProbeFrameMinimum = 900u;
+constexpr uint32_t kUiSceneProbeMaximumWordHits = 8u;
+std::atomic<uint32_t> g_ui_scene_entry_count{};
+std::atomic<uint32_t> g_ui_scene_length_count{};
+std::atomic<uint32_t> g_ui_scene_item_count{};
+std::atomic<uint32_t> g_ui_scene_read_count{};
+std::atomic<uint32_t> g_ui_scene_read_result_count{};
+std::atomic<bool> g_ui_scene_payload_scanned{};
+// 0x22352942 is the first pause row's wrapper name hash and 0xBDF05338 the
+// pause_menu_button element contract hash; both appear seven times in the
+// decompressed 925_PAUSE_MENU.bgf, so a scan that finds them names the item
+// stream (or its source buffer) directly.
+constexpr uint32_t kUiSceneRowWord = 0x22352942u;
+constexpr uint32_t kUiSceneItemWord = 0xBDF05338u;
+
+uint32_t UiSceneWordOrZero(uint32_t address) {
+  return PinyonShiftGuestRangeReadable(address, 4u) ? LoadGuestU32(address) : 0u;
+}
+
+std::string UiSceneHexWords(uint32_t address, uint32_t count) {
+  if (address == 0u ||
+      !PinyonShiftGuestRangeReadable(address, count * 4u)) {
+    return "unreadable";
+  }
+  std::string text;
+  text.reserve(count * 9u);
+  for (uint32_t index = 0; index < count; ++index) {
+    if (index != 0u) {
+      text.push_back(' ');
+    }
+    text += Hex32(LoadGuestU32(address + index * 4u));
+  }
+  return text;
+}
+
+std::string UiSceneGuestBytes(uint32_t address, uint32_t size) {
+  if (address == 0u || !PinyonShiftGuestRangeReadable(address, size)) {
+    return "unreadable";
+  }
+  std::string text;
+  text.reserve(size * 3u);
+  for (uint32_t index = 0; index < size; ++index) {
+    if (index != 0u) {
+      text.push_back(' ');
+    }
+    text += fmt::format("{:02X}", LoadGuestU8(address + index));
+  }
+  return text;
+}
+
+// One bounded host-side pass over one guest region for the pause wrapper name
+// and the pause_menu_button contract hash. The scene builder runs it once.
+void UiSceneScanRegion(uint32_t begin, uint32_t end,
+                       std::array<uint32_t, kUiSceneProbeMaximumWordHits>&
+                           row_hits,
+                       uint32_t& row_count,
+                       std::array<uint32_t, kUiSceneProbeMaximumWordHits>&
+                           item_hits,
+                       uint32_t& item_count) {
+  for (uint32_t block = begin; block < end; block += kUiSceneProbeBlockSize) {
+    const uint32_t block_end = std::min(end, block + kUiSceneProbeBlockSize);
+    if (!PinyonShiftGuestRangeReadable(block, block_end - block)) {
+      continue;
+    }
+    for (uint32_t base = block; base + 4u <= block_end; base += 4u) {
+      const uint32_t word = LoadGuestU32(base);
+      if (word == kUiSceneRowWord && row_count < kUiSceneProbeMaximumWordHits) {
+        row_hits[row_count++] = base;
+      }
+      if (word == kUiSceneItemWord &&
+          item_count < kUiSceneProbeMaximumWordHits) {
+        item_hits[item_count++] = base;
+      }
+    }
+  }
+}
+
+// The seven pause row wrapper name hashes as they appear in the authored
+// 925_PAUSE_MENU.bgf; locating them inside the derived item stream is what
+// ties the stream back to the file.
+constexpr std::array<uint32_t, 7> kUiSceneRowWords = {
+    0x22352942u, 0x22362981u, 0x223729C0u, 0x223829FFu,
+    0x22392A3Eu, 0x223A2A7Du, 0x223B2ABCu};
+std::atomic<uint32_t> g_ui_scene_stream_scan_count{};
+
+const auto UiSceneHitsText = [](const auto& hits, uint32_t count) {
+  std::string text;
+  for (uint32_t index = 0; index < count; ++index) {
+    if (!text.empty()) {
+      text.push_back(',');
+    }
+    text += Hex32(hits[index]);
+  }
+  return text;
+};
+
+void UiSceneScanPayloadOnce(uint32_t section) {
+  bool expected = false;
+  if (!g_ui_scene_payload_scanned.compare_exchange_strong(
+          expected, true, std::memory_order_relaxed)) {
+    return;
+  }
+  std::array<uint32_t, kUiSceneProbeMaximumWordHits> row_hits{};
+  std::array<uint32_t, kUiSceneProbeMaximumWordHits> item_hits{};
+  uint32_t row_count = 0;
+  uint32_t item_count = 0;
+  for (const UiLabelScanRegion& region : kUiLabelScanRegions) {
+    UiSceneScanRegion(region.begin, region.end, row_hits, row_count, item_hits,
+                      item_count);
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.payload_scan",
+      {{"address", "82F26560"},
+       {"frame",
+        std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+       {"section", Hex32(section)},
+       {"row_hits", std::to_string(row_count)},
+       {"row_addresses", UiSceneHitsText(row_hits, row_count)},
+       {"item_hits", std::to_string(item_count)},
+       {"item_addresses", UiSceneHitsText(item_hits, item_count)},
+       {"row_context",
+        row_count > 0u ? UiSceneGuestBytes(row_hits[0], 64u)
+                       : std::string("-")}});
+}
+
+// Describes one item section of the derived document stream: where its cursor
+// sits, what it declares, and where the authored pause row records live inside
+// it. Runs for every section until the row records have been located.
+uint32_t g_ui_scene_buffer_base{};
+
+void UiSceneStreamScanOnce(uint32_t cursor) {
+  if (cursor == 0u || !PinyonShiftGuestRangeReadable(cursor, 8u)) {
+    return;
+  }
+  const uint32_t declared = LoadGuestU32(cursor);
+  std::string row_offsets;
+  uint32_t row_hits = 0;
+  for (const uint32_t row : kUiSceneRowWords) {
+    for (uint32_t offset = 0; offset + 4u <= declared; offset += 4u) {
+      if (!PinyonShiftGuestRangeReadable(cursor + offset, 4u)) {
+        break;
+      }
+      if (LoadGuestU32(cursor + offset) == row) {
+        if (!row_offsets.empty()) {
+          row_offsets.push_back(',');
+        }
+        row_offsets += fmt::format("{}:{}", Hex32(row), std::to_string(offset));
+        ++row_hits;
+        break;
+      }
+    }
+  }
+  uint32_t item_hits = 0;
+  uint32_t first_item_offset = 0;
+  for (uint32_t offset = 0; offset + 4u <= declared; offset += 4u) {
+    if (!PinyonShiftGuestRangeReadable(cursor + offset, 4u)) {
+      break;
+    }
+    if (LoadGuestU32(cursor + offset) == kUiSceneItemWord) {
+      if (item_hits == 0u) {
+        first_item_offset = offset;
+      }
+      ++item_hits;
+    }
+  }
+  const bool interesting = row_hits > 0u || item_hits > 0u;
+  const uint32_t index =
+      g_ui_scene_stream_scan_count.fetch_add(1, std::memory_order_relaxed);
+  if (!interesting && index >= 6u) {
+    return;
+  }
+  if (index >= 96u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.stream_scan",
+      {{"address", "82F265D4"},
+       {"frame",
+        std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+       {"index", std::to_string(index)},
+       {"cursor", Hex32(cursor)},
+       {"buffer_base", Hex32(g_ui_scene_buffer_base)},
+       {"buffer_offset", Hex32(cursor - g_ui_scene_buffer_base)},
+       {"declared", Hex32(declared)},
+       {"after_section", Hex32(UiSceneWordOrZero(cursor + declared))},
+       {"head", UiSceneGuestBytes(cursor, 48u)},
+       {"row_hits", std::to_string(row_hits)},
+       {"row_offsets", row_offsets},
+       {"item_hits", std::to_string(item_hits)},
+       {"first_item_offset", std::to_string(first_item_offset)}});
+}
+
+}  // namespace
+
+// Entry of the scene item deserializer sub_82F26560 (0x82F26560): r3 is the
+// section context, r4 the element the document belongs to and lr the caller.
+void PinyonShiftTraceUiSceneDeserializerEntry(PPCRegister& r3, PPCRegister& r4,
+                                              uint64_t& lr) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
+    return;
+  }
+  const uint32_t frame = pinyon_shift::fh1_render_test::CurrentFrame();
+  const uint32_t section = r3.u32;
+  const uint32_t reader = UiSceneWordOrZero(section + 12u);
+  const uint32_t source = reader != 0u ? UiSceneWordOrZero(reader + 4u) : 0u;
+  // reader+4 is a sequential cursor object: +0 holds the buffer base and +4 the
+  // number of bytes already consumed, so the section starts at base + consumed.
+  const uint32_t buffer_base = source != 0u ? UiSceneWordOrZero(source) : 0u;
+  const uint32_t consumed = source != 0u ? UiSceneWordOrZero(source + 4u) : 0u;
+  const uint32_t cursor = buffer_base != 0u ? buffer_base + consumed : 0u;
+  const uint32_t remaining = consumed;
+  UiSceneScanPayloadOnce(section);
+  g_ui_scene_buffer_base = buffer_base;
+  UiSceneStreamScanOnce(cursor);
+  const uint32_t index =
+      g_ui_scene_entry_count.fetch_add(1, std::memory_order_relaxed);
+  if (index >= kUiSceneProbeEventLimit) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.deserializer",
+      {{"address", "82F26560"},
+       {"frame", std::to_string(frame)},
+       {"index", std::to_string(index)},
+       {"caller", Hex32(static_cast<uint32_t>(lr))},
+       {"section", Hex32(section)},
+       {"element", Hex32(r4.u32)},
+       {"section_words", UiSceneHexWords(section, 8u)},
+       {"section_20", Hex32(UiSceneWordOrZero(section + 20u))},
+       {"section_92_pool", Hex32(UiSceneWordOrZero(section + 92u))},
+       {"section_124_data", Hex32(UiSceneWordOrZero(section + 124u))},
+       {"section_132_size", Hex32(UiSceneWordOrZero(section + 132u))},
+       {"reader", Hex32(reader)},
+       {"reader_words", UiSceneHexWords(reader, 4u)},
+       {"source", Hex32(source)},
+       {"source_words", UiSceneHexWords(source, 12u)},
+       {"cursor", Hex32(cursor)},
+       {"remaining", Hex32(remaining)},
+       {"declared_at_cursor",
+        cursor != 0u ? Hex32(UiSceneWordOrZero(cursor)) : "-"},
+       {"cursor_head", UiSceneGuestBytes(cursor, 48u)}});
+}
+
+// Continuation of sub_82F26560 after the section's declared byte length has
+// been read into the frame at r1+116. r3 is the read return.
+void PinyonShiftTraceUiSceneItemLength(PPCRegister& r1, PPCRegister& r3,
+                                       PPCRegister& r31) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
+    return;
+  }
+  const uint32_t index =
+      g_ui_scene_length_count.fetch_add(1, std::memory_order_relaxed);
+  if (index >= kUiSceneProbeEventLimit) {
+    return;
+  }
+  const uint32_t section = r31.u32;
+  const uint32_t reader = UiSceneWordOrZero(section + 12u);
+  const uint32_t source = reader != 0u ? UiSceneWordOrZero(reader + 4u) : 0u;
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.item_length",
+      {{"address", "82F265D4"},
+       {"frame",
+        std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+       {"index", std::to_string(index)},
+       {"declared_bytes", Hex32(UiSceneWordOrZero(r1.u32 + 116u))},
+       {"read_return", Hex32(r3.u32)},
+       {"section_16", Hex32(UiSceneWordOrZero(section + 16u))},
+       {"section_20", Hex32(UiSceneWordOrZero(section + 20u))},
+       {"source", Hex32(source)},
+       {"source_words", UiSceneHexWords(source, 16u)},
+       {"declared_bytes_raw", UiSceneGuestBytes(r1.u32 + 116u, 32u)}});
+}
+
+// 0x82F267C0 is where both record allocator branches of sub_82F26560 converge,
+// so the stack slots still hold the fields read for this item: F1 at r1+96,
+// F2 at r1+88, F3 at r1+92, the flag bytes at r1+80 (B2) and r1+81 (B1) and the
+// wrapper's extra word at r1+112. r3 is the allocated record.
+void PinyonShiftTraceUiSceneItemFields(PPCRegister& r1, PPCRegister& r3,
+                                       PPCRegister& r31) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
+    return;
+  }
+  const uint32_t frame = pinyon_shift::fh1_render_test::CurrentFrame();
+  const uint32_t index =
+      g_ui_scene_item_count.fetch_add(1, std::memory_order_relaxed);
+  if (index >= kUiSceneProbeEventLimit) {
+    return;
+  }
+  const uint32_t record = r3.u32;
+  const uint32_t section = r31.u32;
+  const uint32_t reader = UiSceneWordOrZero(section + 12u);
+  const uint32_t source = reader != 0u ? UiSceneWordOrZero(reader + 4u) : 0u;
+  const uint32_t b2 = PinyonShiftGuestRangeReadable(r1.u32 + 80u, 1u)
+                          ? LoadGuestU8(r1.u32 + 80u)
+                          : 0u;
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.item_fields",
+      {{"address", "82F267C0"},
+       {"frame", std::to_string(frame)},
+       {"index", std::to_string(index)},
+       {"f1", Hex32(UiSceneWordOrZero(r1.u32 + 96u))},
+       {"f2", Hex32(UiSceneWordOrZero(r1.u32 + 88u))},
+       {"f3", Hex32(UiSceneWordOrZero(r1.u32 + 92u))},
+       {"b1", Hex32(PinyonShiftGuestRangeReadable(r1.u32 + 81u, 1u)
+                        ? LoadGuestU8(r1.u32 + 81u)
+                        : 0u)},
+       {"b2", Hex32(b2)},
+       {"extra", Hex32(UiSceneWordOrZero(r1.u32 + 112u))},
+       {"branch", (b2 & 0x04u) != 0u ? "wrapper" : "element"},
+       {"record", Hex32(record)},
+       {"record_0", Hex32(UiSceneWordOrZero(record))},
+       {"record_4", Hex32(UiSceneWordOrZero(record + 4u))},
+       {"record_kind", Hex32(PinyonShiftGuestRangeReadable(record + 30u, 1u)
+                                 ? LoadGuestU8(record + 30u)
+                                 : 0u)},
+       {"source", Hex32(source)},
+       {"source_words", UiSceneHexWords(source, 12u)}});
+}
+
+// Reader slot-1 method sub_82F25568 (0x82F25568) hands its per-read arguments
+// to the copy helper, so this records where each item byte comes from.
+void PinyonShiftTraceUiSceneStreamRead(PPCRegister& r3, PPCRegister& r4,
+                                       PPCRegister& r5) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
+    return;
+  }
+  const uint32_t frame = pinyon_shift::fh1_render_test::CurrentFrame();
+  const uint32_t index =
+      g_ui_scene_read_count.fetch_add(1, std::memory_order_relaxed);
+  if (index >= kUiSceneProbeEventLimit) {
+    return;
+  }
+  const uint32_t reader = r3.u32;
+  const uint32_t source = UiSceneWordOrZero(reader + 4u);
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.stream_read",
+      {{"address", "82F25568"},
+       {"frame", std::to_string(frame)},
+       {"index", std::to_string(index)},
+       {"reader", Hex32(reader)},
+       {"destination", Hex32(r4.u32)},
+       {"count", Hex32(r5.u32)},
+       {"source", Hex32(source)},
+       {"source_words", UiSceneHexWords(source, 12u)},
+       {"image", UiSceneGuestBytes(source, 32u)}});
+}
+
+
+// Continuation of the reader slot-1 method sub_82F25568 after the bulk copy
+// (0x82F255EC): r3 is the byte count the copy returned, r28 the destination
+// buffer the reader validated at entry and r30 the reader object. Recording the
+// delivered bytes next to the source cursor and its remaining count is what
+// shows whether the stream is a plain memory copy or a decoding stream.
+void PinyonShiftTraceUiSceneReadResult(PPCRegister& r3, PPCRegister& r28,
+                                       PPCRegister& r30) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
+    return;
+  }
+  const uint32_t index =
+      g_ui_scene_read_result_count.fetch_add(1, std::memory_order_relaxed);
+  if (index >= 48u) {
+    return;
+  }
+  const uint32_t reader = r30.u32;
+  const uint32_t source = UiSceneWordOrZero(reader + 4u);
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.read_result",
+      {{"address", "82F255EC"},
+       {"frame",
+        std::to_string(pinyon_shift::fh1_render_test::CurrentFrame())},
+       {"index", std::to_string(index)},
+       {"read", Hex32(r3.u32)},
+       {"destination", Hex32(r28.u32)},
+       {"delivered", UiSceneGuestBytes(r28.u32, 16u)},
+       {"source", Hex32(source)},
+       {"source_cursor", Hex32(UiSceneWordOrZero(source))},
+       {"source_remaining", Hex32(UiSceneWordOrZero(source + 4u))},
+       {"source_words", UiSceneHexWords(source, 12u)}});
 }
 
 void PinyonShiftValidateGeometryOutput(PPCRegister& r4, PPCRegister& r5,

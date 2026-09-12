@@ -592,6 +592,55 @@ stream route: patch the scene payload at its loader boundary so the title's own
 deserializer builds the extra item from authored data, the same interception
 pattern that already works for the string table.
 
+The UI-14 stream boundary is now characterised, and it does not admit an
+authored extra item either. The scene path format is
+`GAME:\Media\UI\Scenes\UI4\%s.bgf` (image string `0x82036AD4`), and the bytes
+reach the scene builder
+through the 12-byte reader at `document+12` (vtable `0x82274BEC`) whose slot-1
+method `sub_82F25568` copies sequentially from the cursor object at
+`reader+4`. That the reader hands over the authored member verbatim is proved
+directly: with `PINYON_SHIFT_UI_EXPERIMENT=scene_probe`, the delivered bytes at
+the start of `925_PAUSE_MENU` are `01 04 00 00 00 1A "AnarkBGF"`, identical to
+the extracted file header.
+
+One item section is read by `sub_82F26560`: a 4-byte declared byte length and
+then `*(document+16) + *(document+20)` items. Each item is
+`F1(4) F2(4) F3(4) B1(1) B2(1)`, followed by one extra byte and one extra word
+when bit 2 of `B2` is set (wrapper: `sub_82F2E870`, kind 7, entry base `+68`) or
+by `B1` as the kind byte (element: `sub_82F2DF08`, kind 8, entry base `+32`),
+then a 4-byte property count and `N * {4-byte id, 4-byte value}` appended with
+`sub_82F2E000` and pushed with `sub_82F2EA38`. The parsed fields are
+byte-identical to the authored stream: the observed wrapper
+`068C6274 FFFFFFFF 00000001 07 05` matches `925_PAUSE_MENU.bgf` at `0x3AE2`,
+and the seven pause rows are seven consecutive wrapper+element pairs of 121
+bytes (31-byte wrapper + 90-byte element) at `0x40DF + k * 3461`.
+
+Extension is defeated by two fields that live outside the item stream. The
+count is `*(document+16) + *(document+20)` read at `0x82F26630`, not a stream
+value, so it can only be raised by writing a private document field. The
+stream itself is length-checked: after the last item `r27` must equal the
+4-byte declared length or `0x82F268F8` reports an error through `sub_82F30550`
+and returns 0, aborting the whole scene build. Adding one row therefore needs
+the count, the declared length, and 121 contiguous item bytes to change
+together. Because the reader is one sequential cursor shared with the element's
+other sections, the only way to place the extra bytes is to insert them into
+the in-memory scene image and shift the remainder; there is no spare item slot
+to repurpose (all seven wrapper records are live list rows, and the scene's
+remaining items belong to other components). UI-14 therefore needs a scene
+re-encoder that rewrites the length and count fields together with the shifted
+document, not an in-place payload patch. The read-only probe hooks
+(`PinyonShiftTraceUiSceneDeserializerEntry`, `…ItemLength`, `…ItemFields`,
+`…StreamRead`, `…ReadResult`) stay default-off and are the tooling for that
+work; a default-off run and a `scene_probe` run both render the seven stock
+labels (captures under `.local/ui-insert4/`).
+
+The loader boundary is identified as well: the pause scene is read as
+`GAME:\Media\UI\Scenes\UI4\925_PAUSE_MENU.bgf` by a 12-byte reader object at
+`document+12` (vtable `0x82274BEC`, slot-1 method `sub_82F25568`, sequential
+cursor at `reader+4`), and the decompressed member sits in the UI heap
+byte-identical to the extracted member — that is the buffer a re-encoder's
+output would have to reach.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
