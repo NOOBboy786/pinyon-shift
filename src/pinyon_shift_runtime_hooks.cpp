@@ -75,6 +75,34 @@ constexpr uint32_t kUiLabelScanEnd = kUiLabelScanRegions[1].end;
 constexpr uint32_t kUiLabelMaximumWrites = 64u;
 constexpr uint32_t kUiLabelRescanIntervalFrames = 45u;
 constexpr std::string_view kUiExperimentRequestedLabel = "Pinyon UI";
+// LSB2 string-table interception. The title's LSB2 reader sub_82CAC5B8 loads a
+// table into a fresh allocation and copies the payload verbatim when r5 bit 0 is
+// set, so the first writable copy of every visible label exists between
+// 0x82CAC740 (the read call returns) and the parse return. `label_patch`
+// rewrites these literals there, at the same byte length, before the title can
+// shape them into glyph runs.
+struct UiLabelPatch {
+  std::string_view source;
+  std::string_view replacement;
+};
+constexpr std::array<UiLabelPatch, 2> kUiLabelPatches = {{
+    {"MULTIPLAYER", "PINYONSHIFT"},
+    {"PHOTO MODE", "PINYON MOD"},
+}};
+constexpr uint32_t kUiStringTraceLimit = 256u;
+constexpr uint32_t kUiStringChunkMaximumBytes = 256u * 1024u;
+constexpr uint32_t kUiStringChunkMaximumPatchHits = 64u;
+std::atomic<uint32_t> g_ui_string_load_count{};
+std::atomic<uint32_t> g_ui_string_chunk_count{};
+std::atomic<uint32_t> g_ui_string_parsed_count{};
+std::atomic<uint32_t> g_ui_string_patch_count{};
+std::atomic<uint32_t> g_ui_string_lookup_count{};
+std::atomic<uint32_t> g_ui_string_buffer{};
+std::atomic<uint32_t> g_ui_string_buffer_size{};
+// The loader runs on the guest thread, so the current path can be kept in a
+// plain string: only the event-recording cap is bounded, never the patch.
+std::string g_ui_string_current_path;
+std::string g_ui_string_patched_path;
 std::array<uint32_t, kUiExperimentTextTargets> g_ui_experiment_buttons{};
 std::atomic<uint32_t> g_ui_experiment_buttons_count{};
 std::atomic<bool> g_ui_experiment_buttons_queued{};
@@ -245,6 +273,7 @@ enum class UiExperimentMode {
   kTextProbe,
   kLabelScan,
   kLabelWrite,
+  kLabelPatch,
 };
 
 UiExperimentMode ComputeUiExperimentMode() {
@@ -273,6 +302,9 @@ UiExperimentMode ComputeUiExperimentMode() {
   }
   if (requested == "label_write") {
     return UiExperimentMode::kLabelWrite;
+  }
+  if (requested == "label_patch") {
+    return UiExperimentMode::kLabelPatch;
   }
   return UiExperimentMode::kNone;
 }
@@ -1105,6 +1137,345 @@ void PinyonShiftTraceUiComponentBuilder(PPCRegister& r3, PPCRegister& r4,
        {"return_address", Hex32(static_cast<uint32_t>(lr))}});
 }
 
+// One storage form an LSB2 string pool can use. The pool holds 16-bit code
+// units, so the file's little-endian bytes appear byte-for-byte or byte-swapped
+// once the stream layer has normalized them; a narrow pool would be ASCII.
+struct UiLabelEncoding {
+  std::string_view name;
+  uint32_t stride;
+  bool big_endian;
+};
+constexpr std::array<UiLabelEncoding, 3> kUiLabelEncodings = {{
+    {"ascii", 1u, false},
+    {"utf16le", 2u, false},
+    {"utf16be", 2u, true},
+}};
+
+std::string EncodeUiLabelPattern(std::string_view text,
+                                 const UiLabelEncoding& encoding) {
+  std::string pattern;
+  pattern.reserve(text.size() * encoding.stride);
+  for (const char character : text) {
+    if (encoding.stride == 2u && encoding.big_endian) {
+      pattern.push_back('\0');
+    }
+    pattern.push_back(character);
+    if (encoding.stride == 2u && !encoding.big_endian) {
+      pattern.push_back('\0');
+    }
+  }
+  return pattern;
+}
+
+std::string ReadUiLabelAt(uint32_t address, const UiLabelEncoding& encoding,
+                          uint32_t length) {
+  const uint32_t char_offset =
+      encoding.stride == 2u && encoding.big_endian ? 1u : 0u;
+  std::string text;
+  text.reserve(length);
+  for (uint32_t index = 0; index < length; ++index) {
+    const uint8_t byte = LoadGuestU8(
+        address + static_cast<uint32_t>(index * encoding.stride) + char_offset);
+    text.push_back(byte >= 0x20u && byte <= 0x7Eu ? static_cast<char>(byte)
+                                                  : '.');
+  }
+  return text;
+}
+
+// Rewrite every configured literal found in one LSB2 chunk. The chunk is copied
+// into host memory once, so the sweep is one bounded pass over the payload; the
+// same-length write plus the search for the source literal make the patch
+// idempotent. `raw_copy` is the reader's ownership flag: only that form holds
+// the verbatim payload (the other form expands the chunk into a fixed-stride
+// table, where a text write would corrupt neighboring entries).
+uint32_t ApplyUiStringTableLabelPatch(uint32_t buffer, uint32_t size,
+                                      bool raw_copy, bool verbose) {
+  uint32_t total_patched = 0;
+  std::string bytes(size, '\0');
+  for (uint32_t offset = 0; offset < size; ++offset) {
+    bytes[offset] = static_cast<char>(LoadGuestU8(buffer + offset));
+  }
+  for (const UiLabelPatch& patch : kUiLabelPatches) {
+    for (const UiLabelEncoding& encoding : kUiLabelEncodings) {
+      const std::string pattern = EncodeUiLabelPattern(patch.source, encoding);
+      const std::string replacement =
+          EncodeUiLabelPattern(patch.replacement, encoding);
+      if (pattern.size() != replacement.size()) {
+        continue;
+      }
+      uint32_t hits = 0;
+      uint32_t patched = 0;
+      uint32_t first_address = 0;
+      for (std::size_t at = bytes.find(pattern); at != std::string::npos;
+           at = bytes.find(pattern, at + 1u)) {
+        if (hits == 0u) {
+          first_address = buffer + static_cast<uint32_t>(at);
+        }
+        ++hits;
+        if (!raw_copy || patched >= kUiStringChunkMaximumPatchHits) {
+          continue;
+        }
+        for (std::size_t index = 0; index < replacement.size(); ++index) {
+          StoreGuestU8(buffer + static_cast<uint32_t>(at + index),
+                       static_cast<uint8_t>(replacement[index]));
+        }
+        ++patched;
+      }
+      if (hits == 0u) {
+        continue;
+      }
+      total_patched += patched;
+      g_ui_string_patch_count.fetch_add(patched, std::memory_order_relaxed);
+      if (!verbose) {
+        continue;
+      }
+      pinyon_shift::diagnostics::RecordEvent(
+          "ui.experiment.string_table_patch",
+          {{"literal", std::string(patch.source)},
+           {"replacement", std::string(patch.replacement)},
+           {"encoding", std::string(encoding.name)},
+           {"table", g_ui_string_current_path},
+           {"hits", std::to_string(hits)},
+           {"patched", std::to_string(patched)},
+           {"address", Hex32(first_address)},
+           {"after", ReadUiLabelAt(first_address, encoding,
+                                   static_cast<uint32_t>(patch.source.size()))},
+           {"source_present",
+            bytes.find(pattern) != std::string::npos ? "1" : "0"}});
+    }
+  }
+  if (!verbose) {
+    return total_patched;
+  }
+  // Report the two literals that were looked for and not found in any form, so
+  // a run that patches nothing still says what the chunk held.
+  for (const UiLabelPatch& patch : kUiLabelPatches) {
+    bool present = false;
+    for (const UiLabelEncoding& encoding : kUiLabelEncodings) {
+      if (bytes.find(EncodeUiLabelPattern(patch.source, encoding)) !=
+          std::string::npos) {
+        present = true;
+      }
+    }
+    if (present) {
+      continue;
+    }
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.experiment.string_table_absent",
+        {{"literal", std::string(patch.source)},
+         {"table", g_ui_string_current_path},
+         {"buffer", Hex32(buffer)},
+         {"size", std::to_string(size)},
+         {"head", ReadUiLabelAt(buffer, kUiLabelEncodings[0],
+                                std::min(size, 32u))}});
+  }
+  return total_patched;
+}
+
+// 0x82CAFFA0 is just after the loader appended the ".str" suffix to the table
+// path, so the stack string at r1+96 holds the final VFS path.
+void PinyonShiftTraceUiStringTableLoad(PPCRegister& r1) {
+  if (UiExperimentModeValue() != UiExperimentMode::kLabelPatch) {
+    return;
+  }
+  // MSVC std::string: data/capacity at +0/+20, size at +16.
+  const uint32_t object = r1.u32 + 96u;
+  if (!PinyonShiftGuestRangeReadable(object, 24u)) {
+    return;
+  }
+  const uint32_t capacity = LoadGuestU32(object + 20u);
+  const uint32_t length = std::min(LoadGuestU32(object + 16u), 160u);
+  const uint32_t data =
+      capacity >= 16u ? LoadGuestU32(object) : object;
+  std::string path;
+  if (PinyonShiftGuestRangeReadable(data, length)) {
+    path.reserve(length);
+    for (uint32_t index = 0; index < length; ++index) {
+      path.push_back(static_cast<char>(LoadGuestU8(data + index)));
+    }
+  }
+  // The path is the label of the next chunk even when its event is capped.
+  g_ui_string_current_path = path;
+  if (g_ui_string_load_count.fetch_add(1, std::memory_order_relaxed) >=
+      kUiStringTraceLimit) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.string_table_load",
+      {{"address", "82CAFFA0"}, {"path", path}});
+}
+
+// 0x82CAC740 is the instruction after the payload read inside sub_82CAC5B8:
+// r30 is the payload start, r29 its length, r26 the ownership/verbatim flag.
+void PinyonShiftTraceUiStringTableChunk(PPCRegister& r3, PPCRegister& r26,
+                                        PPCRegister& r29, PPCRegister& r30,
+                                        PPCRegister& r31) {
+  if (UiExperimentModeValue() != UiExperimentMode::kLabelPatch) {
+    return;
+  }
+  const uint32_t buffer = r30.u32;
+  const uint32_t size = r29.u32;
+  const uint32_t index =
+      g_ui_string_chunk_count.fetch_add(1, std::memory_order_relaxed);
+  if (buffer == 0u || size < 8u || size > kUiStringChunkMaximumBytes ||
+      !PinyonShiftGuestRangeReadable(buffer, size)) {
+    return;
+  }
+  const bool verbose = index < kUiStringTraceLimit;
+  const bool raw_copy = r26.u32 != 0u;
+  if (verbose) {
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.experiment.string_table_chunk",
+        {{"address", "82CAC740"},
+         {"index", std::to_string(index)},
+         {"table", g_ui_string_current_path},
+         {"buffer", Hex32(buffer)},
+         {"size", std::to_string(size)},
+         {"read", std::to_string(r3.u32)},
+         {"handle", Hex32(r31.u32)},
+         {"form", raw_copy ? "verbatim" : "expanded"},
+         {"head", ReadUiLabelAt(buffer, kUiLabelEncodings[0],
+                                std::min(size, 32u))}});
+  }
+  // Every chunk is patched; only the recording above is capped. Tables load in
+  // name order, so a cap that skipped the write would miss the pause table.
+  if (ApplyUiStringTableLabelPatch(buffer, size, raw_copy, verbose) > 0u) {
+    g_ui_string_buffer.store(buffer, std::memory_order_relaxed);
+    g_ui_string_buffer_size.store(size, std::memory_order_relaxed);
+    g_ui_string_patched_path = g_ui_string_current_path;
+  }
+}
+
+// 0x82CB00AC is where the string-table loader stores the parsed handle, so this
+// records which allocation the localization manager keeps.
+void PinyonShiftTraceUiStringTableParsed(PPCRegister& r3) {
+  if (UiExperimentModeValue() != UiExperimentMode::kLabelPatch) {
+    return;
+  }
+  if (g_ui_string_parsed_count.fetch_add(1, std::memory_order_relaxed) >=
+      kUiStringTraceLimit) {
+    return;
+  }
+  const auto field = [&](uint32_t offset) {
+    return PinyonShiftGuestRangeReadable(r3.u32 + offset, 4u)
+               ? Hex32(LoadGuestU32(r3.u32 + offset))
+               : std::string("00000000");
+  };
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.string_table_parsed",
+      {{"address", "82CB00AC"},
+       {"handle", Hex32(r3.u32)},
+       {"field_4", field(4u)},
+       {"field_8", field(8u)},
+       {"field_12", field(12u)},
+       {"field_16", field(16u)}});
+}
+
+// Read the recorded chunk back at the first pause interaction so the run shows
+// whether the patched text is still in the pool when the menu is built.
+void VerifyUiStringTablePatch() {
+  const uint32_t buffer = g_ui_string_buffer.load(std::memory_order_relaxed);
+  const uint32_t size = g_ui_string_buffer_size.load(std::memory_order_relaxed);
+  if (buffer == 0u || size == 0u ||
+      !PinyonShiftGuestRangeReadable(buffer, size)) {
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.experiment.string_table_patch_state",
+        {{"buffer", Hex32(buffer)}, {"size", std::to_string(size)},
+         {"state", "unreadable"}});
+    return;
+  }
+  std::string bytes(size, '\0');
+  for (uint32_t offset = 0; offset < size; ++offset) {
+    bytes[offset] = static_cast<char>(LoadGuestU8(buffer + offset));
+  }
+  for (const UiLabelPatch& patch : kUiLabelPatches) {
+    const auto count = [&](std::string_view needle) {
+      uint32_t hits = 0;
+      for (std::size_t at = bytes.find(needle); at != std::string::npos;
+           at = bytes.find(needle, at + 1u)) {
+        ++hits;
+      }
+      return hits;
+    };
+    for (const UiLabelEncoding& encoding : kUiLabelEncodings) {
+      pinyon_shift::diagnostics::RecordEvent(
+          "ui.experiment.string_table_patch_state",
+          {{"buffer", Hex32(buffer)},
+           {"size", std::to_string(size)},
+           {"state", "readable"},
+           {"table", g_ui_string_patched_path},
+           {"encoding", std::string(encoding.name)},
+           {"literal", std::string(patch.source)},
+           {"literal_hits",
+            std::to_string(count(EncodeUiLabelPattern(patch.source, encoding)))},
+           {"replacement", std::string(patch.replacement)},
+           {"replacement_hits", std::to_string(count(
+                                    EncodeUiLabelPattern(patch.replacement,
+                                                         encoding)))}});
+    }
+  }
+}
+
+// The wrapper sub_82CB1FB0 resolves a table key to text at 0x82CB2018 (r3 is
+// the resolved string, r29 the key), so that continuation is the seam a label
+// replacement has to survive.
+bool UiLabelTextIsInteresting(std::string_view text) {
+  static constexpr std::array<std::string_view, 8> kFragments = {
+      "multiplayer", "photo mode", "pinyonshift", "pinyon mod",
+      "pause",       "resume",     "message",    "profile",
+  };
+  for (const std::string_view fragment : kFragments) {
+    if (text.size() < fragment.size()) {
+      continue;
+    }
+    for (std::size_t at = 0; at + fragment.size() <= text.size(); ++at) {
+      bool match = true;
+      for (std::size_t index = 0; index < fragment.size(); ++index) {
+        const char left = text[at + index];
+        const char lowered =
+            left >= 'A' && left <= 'Z' ? static_cast<char>(left + 32) : left;
+        if (lowered != fragment[index]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void PinyonShiftTraceUiStringLookup(PPCRegister& r3, PPCRegister& r29) {
+  if (UiExperimentModeValue() != UiExperimentMode::kLabelPatch) {
+    return;
+  }
+  if (g_ui_string_lookup_count.load(std::memory_order_relaxed) >=
+      kUiStringTraceLimit) {
+    return;
+  }
+  const std::string resolved =
+      PinyonShiftGuestRangeReadable(r3.u32, 48u)
+          ? ReadUiLabelAt(r3.u32, kUiLabelEncodings[2], 24u)
+          : std::string();
+  std::string key;
+  if (PinyonShiftGuestRangeReadable(r29.u32, 2u)) {
+    key = ReadUiLabelAt(r29.u32, kUiLabelEncodings[0], 48u);
+  }
+  if (!UiLabelTextIsInteresting(resolved) && !UiLabelTextIsInteresting(key)) {
+    return;
+  }
+  g_ui_string_lookup_count.fetch_add(1, std::memory_order_relaxed);
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.string_lookup",
+      {{"address", "82CB2018"},
+       {"key", key},
+       {"resolved", resolved},
+       {"result", Hex32(r3.u32)},
+       {"key_address", Hex32(r29.u32)}});
+}
+
 void PinyonShiftTraceUiPauseButtonConstructed(PPCRegister& r3,
                                                PPCRegister& r31) {
   const UiExperimentMode experiment = UiExperimentModeValue();
@@ -1116,6 +1487,9 @@ void PinyonShiftTraceUiPauseButtonConstructed(PPCRegister& r3,
       g_ui_pause_button_count.fetch_add(1, std::memory_order_relaxed);
   if (slot < g_ui_pause_buttons.size()) {
     g_ui_pause_buttons[slot] = button;
+  }
+  if (experiment == UiExperimentMode::kLabelPatch && slot == 0u) {
+    VerifyUiStringTablePatch();
   }
   if (experiment == UiExperimentMode::kHideFirst && slot == 0u) {
     ++g_ui_experiment_generation;

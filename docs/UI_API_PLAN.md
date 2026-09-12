@@ -506,6 +506,23 @@ the emitted functions, so the conversion consumer has to be reached by a
 targeted image scan for the `0x82230470` reference or by a runtime hook rather
 than by grepping the generated sources.
 
+The label half of UI-04 is proven. `sub_82CAFF28` is the string-table loader:
+it builds `game:\media\StringTables\en\<name>.str`, opens a VFS stream, and
+calls `sub_82CAC5B8`, the LSB2 reader, which compares the magic at
+`0x82230470`, allocates `8 + payload_size` and reads the payload. `handle+4` is
+the payload, `handle+8` the string pool, whose 6-byte index is searched by
+`sub_82A831B0` and resolved by `sub_82CAB7D8` into a pointer straight into the
+pool. The pool holds **big-endian UTF-16** code units, so the earlier
+"UTF-16LE" reading of the `.str` file was one byte off — the same bytes seen
+from the neighbouring byte. Because every consumer reads the pool directly, a
+same-length in-place rewrite at load is visible everywhere: with the
+default-off `PINYON_SHIFT_UI_EXPERIMENT=label_patch` the pause menu renders
+`PINYONSHIFT` where `MULTIPLAYER` was and `PNYON MOD` where `PHOTO MODE` was,
+while a control run on the same binary, pack and route shows the originals.
+Two earlier claims are corrected: the labels do exist in guest memory (as BE
+UTF-16), and the LSB2 reader is an emitted function that references
+`0x82230470`.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205

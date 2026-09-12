@@ -157,6 +157,39 @@ name = "PinyonShiftTraceUiPauseButtonConstructed"
 registers = ["r3", "r31"]
 after_instruction = true
 
+# LSB2 string-table interception (UI-04 label half). sub_82CAFF28 builds
+# `game:\media\StringTables\<table><language>.str` and hands it to the LSB2
+# reader sub_82CAC5B8. The four hooks below are default-off: every host
+# function returns immediately unless PINYON_SHIFT_UI_EXPERIMENT=label_patch.
+# 0x82CAFFA0 records the final VFS path, 0x82CAC740 records the freshly read
+# payload (r30 = start, r29 = length, r26 = verbatim flag) and rewrites the
+# configured labels in place at the same byte length, and 0x82CB00AC records
+# the handle the localization manager keeps.
+[[midasm_hook]]
+address = 0x82CAFFA0
+name = "PinyonShiftTraceUiStringTableLoad"
+registers = ["r1"]
+
+[[midasm_hook]]
+address = 0x82CAC740
+name = "PinyonShiftTraceUiStringTableChunk"
+registers = ["r3", "r26", "r29", "r30", "r31"]
+after_instruction = true
+
+[[midasm_hook]]
+address = 0x82CB00AC
+name = "PinyonShiftTraceUiStringTableParsed"
+registers = ["r3"]
+
+# 0x82CB2018 continues the localization wrapper sub_82CB1FB0 with r3 = resolved
+# text and r29 = the key. Only keys or results that mention a watched label are
+# recorded, so this stays a bounded read-only probe on the real lookup path.
+[[midasm_hook]]
+address = 0x82CB2018
+name = "PinyonShiftTraceUiStringLookup"
+registers = ["r3", "r29"]
+after_instruction = true
+
 # Observe the exact indirect target/count before its store. r24 is the command
 # list object retained from 82416A00 entry r4. No guest state is modified.
 [[midasm_hook]]
