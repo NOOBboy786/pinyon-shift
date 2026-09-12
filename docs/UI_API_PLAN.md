@@ -544,6 +544,29 @@ at `r1+96` (observed values `menu`, `breadcrumb_menu`, `button_text`,
 `scrolling_text`, `pause_menu_button`), and the registry pointer is the global
 at `0x834B53D4`.
 
+Row creation is now characterised. The deserializer is `sub_82F26560`; per
+authored item it allocates a wrapper record with `sub_82F2E870` (entry base
+`+68`, kind 7), or an element record with `sub_82F2DF08` (entry base `+32`,
+kind from the stream), appends each property through `sub_82F2E000` into the
+document at `+80`, appends the record to the section pool with `sub_82F2EA38`
+(vector at `section+92`, data `+124`, capacity `+128`, size `+132`), and finally
+calls the component builder `sub_82E7A238` indirectly at `0x82F268EC`. Record
+fields: `+0` name hash, `+4` stream value, `+12` parent, `+16` next sibling,
+`+20` first child, `+28` flag halfword whose bit 0 selects the `+32` or `+68`
+entry base, `+30` kind, `+31` property count, then `{id, value}` entries. The
+seven pause rows are seven wrapper records at `0x1004` stride whose sibling
+chain grows by exactly one entry per parsed row, and each item record carries
+nine properties that differ only in four type-`0x14` object references — the
+per-row geometry/identity object lives there, not in the owner containers.
+
+A faithful replay of that sequence is implemented behind
+`PINYON_SHIFT_UI_INSERT_MODE=replay` but its preconditions did not hold at
+runtime (`pool_growth=0`, `element_matches_owner=0`), so the probe fell back to
+the container-only path and still produced no eighth row. That fallback is the
+precise remaining gap: the replay needs the document, element and section
+identities the deserializer uses for a real row, which the new
+`PinyonShiftTraceUiItemBuildCall` hook publishes at `0x82F268D0`.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205

@@ -159,6 +159,21 @@ address = 0x82E7A240
 name = "PinyonShiftTraceUiItemBuilderEntry"
 registers = ["r3", "r4", "lr"]
 
+# Item construction site of the scene deserializer sub_82F26560: 0x82F268D0
+# checks whether the parsed item has a component builder call, and the indirect
+# call at 0x82F268EC is the one that enters sub_82E7A238. At this point r24 is the
+# document the deserializer got from the element (records, arena and pool live
+# there), r25 is the element the builder is called on, r26 the created item
+# record and r31 the section context whose +92 vector is the record pool the
+# stream's parent index resolves through. The insertion experiment reads those
+# pointers here so it can replay the title's own item construction; tracing reads
+# the document and section state. Read-only and default-off, apart from three
+# pointer stores that only happen when PINYON_SHIFT_UI_EXPERIMENT=insert_item.
+[[midasm_hook]]
+address = 0x82F268D0
+name = "PinyonShiftTraceUiItemBuildCall"
+registers = ["r24", "r25", "r26", "r29", "r31"]
+
 [[midasm_hook]]
 address = 0x82E7A260
 name = "PinyonShiftUiBuilderChunk260"
