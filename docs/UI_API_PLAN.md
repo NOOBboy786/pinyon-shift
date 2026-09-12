@@ -457,6 +457,18 @@ fallback. Repurposing or appending to an already-built list is not available,
 and the previously probed `+160`/`+84`/string fields are not part of the
 constructed item's contract.
 
+The last two candidates close the question. The same probe searched
+`0x10000000`-`0x82000000` for the two labels that contain a space, `PHOTO MODE`
+and `MESSAGE CENTER`, in ASCII and UTF-16LE: **zero hits for either**. The
+`MULTIPLAYER` copies found earlier are therefore state identifiers
+(`SET_FOR_MULTIPLAYER` and friends), not the visible label. Pause-menu item
+labels are not stored as text anywhere in guest memory; the scene carries
+pre-shaped glyph data and the renderer submits that. Changing a menu label is
+consequently not a text write at all: it needs either glyph-level
+substitution at submission time or a re-authored scene, which is the UI-14
+asset path. That is the precise blocker for UI-04's label half, and it is
+independent of the insertion half.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
