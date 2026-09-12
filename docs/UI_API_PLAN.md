@@ -499,6 +499,13 @@ consistent with every negative result above. Any future label probe must hook
 the conversion itself (the consumer of the LSB2 strings) rather than search
 memory, and must not add per-frame work while a wall-clock route is running.
 
+The `LSB2` magic itself sits at `0x82230470` inside a data table whose
+neighbour at `0x8223046C` is a destructor vtable (its first entry `0x82CAB8B0`
+is a plain `store vtable, free-if-flag` stub). That parser/loader is not among
+the emitted functions, so the conversion consumer has to be reached by a
+targeted image scan for the `0x82230470` reference or by a runtime hook rather
+than by grepping the generated sources.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
