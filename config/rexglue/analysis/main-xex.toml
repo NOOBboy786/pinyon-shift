@@ -207,6 +207,15 @@ name = "PinyonShiftTraceUiSceneReadResult"
 registers = ["r3", "r28", "r30"]
 after_instruction = true
 
+# Byte-at-a-time continuation of the same reader method (0x82F255C0): the call
+# above returned one byte into r28 + r31 for the reader at r30. The same
+# load-time scene insertion also rewrites this path, so the pause member's
+# re-encoded bytes are delivered whichever branch the reader takes.
+[[midasm_hook]]
+address = 0x82F255C0
+name = "PinyonShiftTraceUiSceneReadStep"
+registers = ["r3", "r28", "r30", "r31"]
+
 [[midasm_hook]]
 address = 0x82E7A260
 name = "PinyonShiftUiBuilderChunk260"

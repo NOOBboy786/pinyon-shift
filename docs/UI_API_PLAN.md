@@ -641,6 +641,36 @@ cursor at `reader+4`), and the decompressed member sits in the UI heap
 byte-identical to the extracted member — that is the buffer a re-encoder's
 output would have to reach.
 
+The UI-14 workstream now has its tooling and a proven feed, with only the
+visual confirmation outstanding. `tools/fh1-ui-scene-insert.py` parses the
+pause member strictly (the item section must consume exactly its 4-byte
+declared length, and the seven authored row wrapper+element pairs must be
+present with matching parent indices), and re-encodes it without changes
+byte-for-byte (roundtrip reproduces the 168329-byte stock member, sha256
+`c03bb7c4…`). Its insert mode duplicates row 0's 121-byte wrapper+element pair
+at the section end, rewrites the copy's element parent index to the appended
+wrapper's record index, raises the declared length `0xB25B -> 0xB2D4`, and
+increments the header count words at `0x24`/`0x28` and their mirrors at
+`0x70`/`0x74`. The count question is settled in the member's favour: the item
+count is copied out of those header words by the scene header parse, so a
+re-encoded member alone yields count+2 — confirmed by a run that consumed the
+re-encoded declaration `0xB2D4` and reported `elements=504, wrappers=52`.
+
+Feeding works too: the object at `reader+4` is a stream cursor whose `+4` is
+the member's byte offset but whose `+0` is an internal buffer, so there is no
+single base pointer to swap; instead the reader method `sub_82F25568` is
+intercepted (bulk continuation `0x82F255EC` and the byte loop `0x82F255C0`) and
+every byte delivered for the pause member is served from a guest copy of the
+re-encoded member allocated with `SystemHeapAlloc`. The member is recognised
+from the first `0x24` delivered bytes. All of this stays behind
+`PINYON_SHIFT_UI_EXPERIMENT=scene_insert` and is one-shot.
+
+What remains is the verification run: insert-mode captures showed the world
+still loading at the pause capture frame, and one variant died with a null
+indirect call inside the per-child builder loop, so the eighth row has not yet
+been confirmed on screen. That is now a timing/crash question about the
+substituted payload, not a format or capability question.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205

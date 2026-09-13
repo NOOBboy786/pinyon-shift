@@ -6,10 +6,13 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <fmt/format.h>
 #include <rex/cvar.h>
@@ -277,6 +280,7 @@ enum class UiExperimentMode {
   kLabelPatch,
   kInsertItem,
   kSceneProbe,
+  kSceneInsert,
 };
 
 UiExperimentMode ComputeUiExperimentMode() {
@@ -314,6 +318,9 @@ UiExperimentMode ComputeUiExperimentMode() {
   }
   if (requested == "scene_probe") {
     return UiExperimentMode::kSceneProbe;
+  }
+  if (requested == "scene_insert") {
+    return UiExperimentMode::kSceneInsert;
   }
   return UiExperimentMode::kNone;
 }
@@ -4038,10 +4045,421 @@ void UiSceneStreamScanOnce(uint32_t cursor) {
 
 }  // namespace
 
+// --- UI-14 loader-boundary scene payload substitution (pause insertion) ----
+//
+// The pause member reaches the scene deserializer through the 12-byte reader at
+// document+12 whose slot-1 method sub_82F25568 copies out of the object at
+// reader+4. That object is a stream cursor: +4 is the member's byte offset
+// already consumed (a run that reached the pause window read 0x3AE2 as the
+// first item offset and 0x607/0x106 as the section's header counts) while +0
+// is an internal buffer/index pointer of the file stream, not the member
+// image, so the loader cannot be redirected by swapping that word. The bytes
+// the loader actually receives are still the authored member verbatim, and the
+// reader hands every one of them to its destination buffer inside slot 1, so
+// the boundary is intercepted there: the re-encoded member is materialised in
+// guest memory once and every byte the reader delivers for the pause member's
+// stream is rewritten from it.
+//
+// `PINYON_SHIFT_UI_EXPERIMENT=scene_insert` enables this route. It is
+// default-off, one-shot at load and does no per-frame work. The re-encoded
+// member named by PINYON_SHIFT_UI_SCENE_INSERT_FILE is read from disk once and
+// copied into one SystemHeapAlloc buffer; a stream is recognised as the pause
+// member by the first 0x24 bytes it delivers (identical in the authored and
+// re-encoded members), and from then on its deliveries are served from that
+// guest copy. The item count sub_82F26560 reads as
+// `*(section+16) + *(section+20)` is verified at the deserializer entry and
+// repaired to the re-encoded count only when the member's header words did not
+// already carry it, which covers the reads that preceded recognition.
+namespace {
+
+constexpr uint32_t kUiSceneInsertMaximumBytes = 4u * 1024u * 1024u;
+constexpr uint32_t kUiSceneInsertEventLimit = 96u;
+// Bytes of the member prefix the recognition compares. The authored member's
+// first 0x24 bytes carry the container header and its member-specific id-space
+// word, and the re-encoder leaves all of them untouched.
+constexpr uint32_t kUiSceneInsertDecisionBytes = 0x24u;
+constexpr uint32_t kUiSceneInsertMaximumTailEvents = 4u;
+
+std::atomic<bool> g_ui_scene_insert_load_attempted{};
+std::atomic<uint32_t> g_ui_scene_insert_buffer{};
+std::atomic<uint32_t> g_ui_scene_insert_size{};
+std::atomic<uint32_t> g_ui_scene_insert_expected_items{};
+std::atomic<uint32_t> g_ui_scene_insert_expected_declared{};
+std::atomic<uint32_t> g_ui_scene_insert_events{};
+std::atomic<uint32_t> g_ui_scene_insert_tail_events{};
+std::vector<uint8_t> g_ui_scene_insert_bytes;
+// Guest direction word -> recognition and delivery state for that stream. The
+// objects are recycled by the allocator, so a delivery that moves the offset
+// backwards starts a new stream lifetime and is recognised again.
+struct UiSceneInsertStreamState {
+  std::array<uint8_t, kUiSceneInsertDecisionBytes> prefix{};
+  std::array<bool, kUiSceneInsertDecisionBytes> seen{};
+  bool decided = false;
+  bool ours = false;
+  uint32_t deliveries = 0;
+  uint32_t substituted = 0;
+  uint32_t maximum_position = 0;
+};
+std::mutex g_ui_scene_insert_mutex;
+std::map<uint32_t, UiSceneInsertStreamState> g_ui_scene_insert_streams;
+
+std::string UiSceneInsertEnvironment(const char* name) {
+#if defined(_WIN32)
+  char* value = nullptr;
+  size_t value_size = 0;
+  if (_dupenv_s(&value, &value_size, name) != 0) {
+    return {};
+  }
+  const std::string owned = value ? std::string(value) : std::string();
+  std::free(value);
+  return owned;
+#else
+  const char* value = std::getenv(name);
+  return value ? std::string(value) : std::string();
+#endif
+}
+
+uint32_t UiSceneInsertEnvironmentWord(const char* name) {
+  const std::string text = UiSceneInsertEnvironment(name);
+  if (text.empty()) {
+    return 0u;
+  }
+  char* end = nullptr;
+  const unsigned long parsed = std::strtoul(text.c_str(), &end, 0);
+  return end != text.c_str() ? static_cast<uint32_t>(parsed) : 0u;
+}
+
+uint32_t UiSceneInsertPayloadWord(uint32_t offset) {
+  const std::vector<uint8_t>& bytes = g_ui_scene_insert_bytes;
+  if (offset + 4u > bytes.size()) {
+    return 0u;
+  }
+  return (static_cast<uint32_t>(bytes[offset]) << 24) |
+         (static_cast<uint32_t>(bytes[offset + 1u]) << 16) |
+         (static_cast<uint32_t>(bytes[offset + 2u]) << 8) |
+         static_cast<uint32_t>(bytes[offset + 3u]);
+}
+
+void UiSceneInsertRecord(
+    const char* event,
+    std::initializer_list<pinyon_shift::diagnostics::Field> fields) {
+  if (g_ui_scene_insert_events.fetch_add(1u, std::memory_order_relaxed) >=
+      kUiSceneInsertEventLimit) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(event, fields);
+}
+
+// Read the re-encoded member once and place one guest copy of it. Returns false
+// while no payload is available, which leaves the guest stream untouched.
+bool EnsureUiSceneInsertPayload() {
+  if (g_ui_scene_insert_load_attempted.exchange(true,
+                                                std::memory_order_acq_rel)) {
+    return g_ui_scene_insert_buffer.load(std::memory_order_acquire) != 0u;
+  }
+  const std::string path =
+      UiSceneInsertEnvironment("PINYON_SHIFT_UI_SCENE_INSERT_FILE");
+  if (path.empty()) {
+    UiSceneInsertRecord("ui.experiment.scene_insert.declined",
+                        {{"reason", "missing_file"}});
+    return false;
+  }
+  std::ifstream stream(path, std::ios::binary);
+  if (!stream) {
+    UiSceneInsertRecord("ui.experiment.scene_insert.declined",
+                        {{"reason", "unreadable"}, {"path", path}});
+    return false;
+  }
+  stream.seekg(0, std::ios::end);
+  const std::streamoff length = stream.tellg();
+  if (length <= 0 ||
+      length > static_cast<std::streamoff>(kUiSceneInsertMaximumBytes)) {
+    UiSceneInsertRecord("ui.experiment.scene_insert.declined",
+                        {{"reason", "size"},
+                         {"bytes", std::to_string(length)}});
+    return false;
+  }
+  stream.seekg(0, std::ios::beg);
+  g_ui_scene_insert_bytes.assign(static_cast<std::size_t>(length), 0u);
+  stream.read(reinterpret_cast<char*>(g_ui_scene_insert_bytes.data()),
+              static_cast<std::streamsize>(length));
+  if (!stream) {
+    g_ui_scene_insert_bytes.clear();
+    UiSceneInsertRecord("ui.experiment.scene_insert.declined",
+                        {{"reason", "short_read"}, {"path", path}});
+    return false;
+  }
+  const std::vector<uint8_t>& bytes = g_ui_scene_insert_bytes;
+  if (bytes.size() < 0x140u ||
+      std::string_view(reinterpret_cast<const char*>(bytes.data() + 6u), 8u) !=
+          "AnarkBGF") {
+    UiSceneInsertRecord("ui.experiment.scene_insert.declined",
+                        {{"reason", "not_a_scene"},
+                         {"head", Hex32(UiSceneInsertPayloadWord(0u))}});
+    return false;
+  }
+  // The re-encoded member carries its own item counts at the two header words
+  // the title copies into the section, so the expected loop count is read from
+  // it rather than trusted from the environment.
+  const uint32_t elements = UiSceneInsertPayloadWord(0x24u);
+  const uint32_t wrappers = UiSceneInsertPayloadWord(0x28u);
+  const uint32_t declared =
+      UiSceneInsertEnvironmentWord("PINYON_SHIFT_UI_SCENE_EXPECT_DECLARED");
+  g_ui_scene_insert_expected_items.store(elements + wrappers,
+                                         std::memory_order_release);
+  g_ui_scene_insert_expected_declared.store(declared,
+                                            std::memory_order_release);
+  auto* memory = rex::system::kernel_state()->memory();
+  const uint32_t buffer = memory->SystemHeapAlloc(
+      static_cast<uint32_t>(bytes.size()), 16u);
+  auto* base = memory->virtual_membase();
+  std::memcpy(base + buffer, bytes.data(), bytes.size());
+  g_ui_scene_insert_buffer.store(buffer, std::memory_order_release);
+  g_ui_scene_insert_size.store(static_cast<uint32_t>(bytes.size()),
+                               std::memory_order_release);
+  UiSceneInsertRecord("ui.experiment.scene_insert.payload",
+                      {{"path", path},
+                       {"bytes", std::to_string(bytes.size())},
+                       {"buffer", Hex32(buffer)},
+                       {"elements", Hex32(elements)},
+                       {"wrappers", Hex32(wrappers)},
+                       {"expected_items", Hex32(elements + wrappers)},
+                       {"expected_declared", Hex32(declared)}});
+  return true;
+}
+
+std::string UiSceneInsertPrefixText(
+    const UiSceneInsertStreamState& state) {
+  std::string text;
+  text.reserve(kUiSceneInsertDecisionBytes * 3u);
+  for (uint32_t index = 0; index < kUiSceneInsertDecisionBytes; ++index) {
+    if (index != 0u) {
+      text.push_back(' ');
+    }
+    text += fmt::format("{:02X}", state.seen[index] ? state.prefix[index] : 0u);
+  }
+  return text;
+}
+
+// True when the guest stream at `stream` already delivers the re-encoded
+// member. Used by the load-time checks that run outside the reader.
+bool UiSceneInsertStreamIsOurs(uint32_t stream) {
+  if (stream == 0u) {
+    return false;
+  }
+  std::lock_guard lock(g_ui_scene_insert_mutex);
+  const auto found = g_ui_scene_insert_streams.find(stream);
+  return found != g_ui_scene_insert_streams.end() && found->second.decided &&
+         found->second.ours;
+}
+
+// One reader delivery: `delivered` bytes were just written to `destination`
+// for the member offset `position`. Recognition happens on the first 0x24
+// delivered bytes; afterwards the bytes are replaced by the re-encoded member's
+// bytes at the same offsets.
+void UiSceneInsertDeliver(uint32_t stream, uint32_t destination,
+                          uint32_t delivered, uint32_t position) {
+  if (stream == 0u || delivered == 0u || delivered > 0x10000u) {
+    return;
+  }
+  if (!EnsureUiSceneInsertPayload()) {
+    return;
+  }
+  const std::vector<uint8_t>& payload = g_ui_scene_insert_bytes;
+  std::lock_guard lock(g_ui_scene_insert_mutex);
+  UiSceneInsertStreamState& state = g_ui_scene_insert_streams[stream];
+  // The allocator recycles the stream objects. A delivery at offset zero, or a
+  // large backwards jump, starts a new stream lifetime; a one or two byte
+  // unget stays inside the current one.
+  constexpr uint32_t kUiSceneInsertRewindBytes = 0x1000u;
+  if (state.maximum_position > 0u &&
+      (position == 0u ||
+       position + kUiSceneInsertRewindBytes < state.maximum_position)) {
+    state = UiSceneInsertStreamState{};
+  }
+  state.deliveries += 1u;
+  if (position + delivered > state.maximum_position) {
+    state.maximum_position = position + delivered;
+  }
+  if (!state.decided && position < kUiSceneInsertDecisionBytes) {
+    const uint32_t limit =
+        std::min(delivered, kUiSceneInsertDecisionBytes - position);
+    for (uint32_t index = 0; index < limit; ++index) {
+      state.prefix[position + index] = LoadGuestU8(destination + index);
+      state.seen[position + index] = true;
+    }
+  }
+  if (!state.decided) {
+    for (uint32_t index = 0; index < kUiSceneInsertDecisionBytes; ++index) {
+      if (!state.seen[index]) {
+        return;
+      }
+    }
+    bool matches = payload.size() > kUiSceneInsertDecisionBytes;
+    for (uint32_t index = 0; matches && index < kUiSceneInsertDecisionBytes;
+         ++index) {
+      matches = state.prefix[index] == payload[index];
+    }
+    state.decided = true;
+    state.ours = matches;
+    UiSceneInsertRecord("ui.experiment.scene_insert.stream",
+                        {{"stream", Hex32(stream)},
+                         {"decision", matches ? "pause_member" : "other"},
+                         {"bytes_seen", Hex32(state.maximum_position)},
+                         {"deliveries", Hex32(state.deliveries)},
+                         {"prefix", UiSceneInsertPrefixText(state)},
+                         {"words", UiSceneHexWords(stream, 12u)}});
+  }
+  if (!state.ours) {
+    return;
+  }
+  const uint32_t buffer =
+      g_ui_scene_insert_buffer.load(std::memory_order_acquire);
+  const uint32_t buffer_size =
+      g_ui_scene_insert_size.load(std::memory_order_acquire);
+  if (buffer == 0u) {
+    return;
+  }
+  const bool first = state.substituted == 0u;
+  const std::string before =
+      first ? UiSceneGuestBytes(destination, std::min(delivered, 16u))
+            : std::string();
+  for (uint32_t index = 0; index < delivered; ++index) {
+    const uint32_t offset = position + index;
+    if (offset >= buffer_size) {
+      break;
+    }
+    StoreGuestU8(destination + index, LoadGuestU8(buffer + offset));
+  }
+  state.substituted += delivered;
+  if (first) {
+    UiSceneInsertRecord(
+        "ui.experiment.scene_insert.substituted",
+        {{"stream", Hex32(stream)},
+         {"position", Hex32(position)},
+         {"delivered", Hex32(delivered)},
+         {"buffer", Hex32(buffer)},
+         {"size", Hex32(buffer_size)},
+         {"member_bytes", UiSceneGuestBytes(buffer + position,
+                                            std::min(delivered, 16u))},
+         {"delivered_before", before}});
+  }
+  if (position + delivered + 0x200u >= buffer_size && position != 0u) {
+    if (g_ui_scene_insert_tail_events.fetch_add(1u, std::memory_order_relaxed) <
+        kUiSceneInsertMaximumTailEvents) {
+      UiSceneInsertRecord("ui.experiment.scene_insert.tail",
+                          {{"stream", Hex32(stream)},
+                           {"position", Hex32(position)},
+                           {"delivered", Hex32(delivered)},
+                           {"member_bytes", Hex32(buffer_size)},
+                           {"count", Hex32(delivered)}});
+    }
+  }
+}
+
+// Bulk path of the reader slot-1 method: r28 is the destination buffer and r3
+// the byte count the copy returned; r30 is the reader object.
+void PinyonShiftUiSceneInsertReadResult(PPCRegister& r3, PPCRegister& r28,
+                                        PPCRegister& r30) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  if (r3.u32 == 0u || !PinyonShiftGuestRangeReadable(r30.u32 + 4u, 4u)) {
+    return;
+  }
+  const uint32_t stream = LoadGuestU32(r30.u32 + 4u);
+  if (stream == 0u || !PinyonShiftGuestRangeReadable(stream, 8u)) {
+    return;
+  }
+  const uint32_t position_after = LoadGuestU32(stream + 4u);
+  if (position_after < r3.u32) {
+    return;
+  }
+  UiSceneInsertDeliver(stream, r28.u32, r3.u32, position_after - r3.u32);
+}
+
+// Byte-at-a-time path of the reader slot-1 method: one byte was just copied to
+// r28 + r31; r30 is the reader object.
+void PinyonShiftUiSceneInsertReadStep(PPCRegister& r3, PPCRegister& r28,
+                                      PPCRegister& r30, PPCRegister& r31) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  if (r3.u32 == 0u || !PinyonShiftGuestRangeReadable(r30.u32 + 4u, 4u)) {
+    return;
+  }
+  const uint32_t stream = LoadGuestU32(r30.u32 + 4u);
+  if (stream == 0u || !PinyonShiftGuestRangeReadable(stream, 8u)) {
+    return;
+  }
+  const uint32_t position_after = LoadGuestU32(stream + 4u);
+  UiSceneInsertDeliver(stream, r28.u32 + r31.u32, 1u, position_after - 1u);
+}
+
+// Runs at the entry of the item deserializer sub_82F26560 with r3 = section:
+// the loop bound is *(section+16) + *(section+20). The re-encoded member's
+// header supplies the extra item count, so this repairs the field only when the
+// header parse did not, and records which case held.
+void PinyonShiftUiSceneInsertCount(PPCRegister& r3) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  const uint32_t buffer =
+      g_ui_scene_insert_buffer.load(std::memory_order_acquire);
+  if (buffer == 0u || !PinyonShiftGuestRangeReadable(r3.u32 + 20u, 4u)) {
+    return;
+  }
+  const uint32_t reader =
+      PinyonShiftGuestRangeReadable(r3.u32 + 12u, 4u) ? LoadGuestU32(r3.u32 + 12u)
+                                                     : 0u;
+  if (reader == 0u || !PinyonShiftGuestRangeReadable(reader + 4u, 4u) ||
+      LoadGuestU32(reader + 4u) == 0u) {
+    return;
+  }
+  const uint32_t stream = LoadGuestU32(reader + 4u);
+  if (!UiSceneInsertStreamIsOurs(stream)) {
+    return;
+  }
+  const uint32_t expected =
+      g_ui_scene_insert_expected_items.load(std::memory_order_relaxed);
+  const uint32_t elements = LoadGuestU32(r3.u32 + 16u);
+  const uint32_t wrappers = LoadGuestU32(r3.u32 + 20u);
+  const uint32_t total = elements + wrappers;
+  if (expected == 0u || total == expected) {
+    UiSceneInsertRecord("ui.experiment.scene_insert.count",
+                        {{"state", "member"},
+                         {"section", Hex32(r3.u32)},
+                         {"elements", Hex32(elements)},
+                         {"wrappers", Hex32(wrappers)},
+                         {"expected", Hex32(expected)}});
+    return;
+  }
+  const int32_t delta = static_cast<int32_t>(expected) - static_cast<int32_t>(total);
+  if (delta < 0 || elements + static_cast<uint32_t>(delta) < elements) {
+    UiSceneInsertRecord("ui.experiment.scene_insert.count",
+                        {{"state", "unrepairable"},
+                         {"elements", Hex32(elements)},
+                         {"wrappers", Hex32(wrappers)},
+                         {"expected", Hex32(expected)}});
+    return;
+  }
+  StoreGuestU32(r3.u32 + 16u, elements + static_cast<uint32_t>(delta));
+  UiSceneInsertRecord("ui.experiment.scene_insert.count",
+                      {{"state", "repaired"},
+                       {"section", Hex32(r3.u32)},
+                       {"elements_before", Hex32(elements)},
+                       {"wrappers_before", Hex32(wrappers)},
+                       {"elements_after", Hex32(elements + static_cast<uint32_t>(delta))},
+                       {"expected", Hex32(expected)}});
+}
+
+}  // namespace
+
 // Entry of the scene item deserializer sub_82F26560 (0x82F26560): r3 is the
 // section context, r4 the element the document belongs to and lr the caller.
 void PinyonShiftTraceUiSceneDeserializerEntry(PPCRegister& r3, PPCRegister& r4,
                                               uint64_t& lr) {
+  PinyonShiftUiSceneInsertCount(r3);
   if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
     return;
   }
@@ -4091,6 +4509,30 @@ void PinyonShiftTraceUiSceneDeserializerEntry(PPCRegister& r3, PPCRegister& r4,
 // been read into the frame at r1+116. r3 is the read return.
 void PinyonShiftTraceUiSceneItemLength(PPCRegister& r1, PPCRegister& r3,
                                        PPCRegister& r31) {
+  if (UiExperimentModeValue() == UiExperimentMode::kSceneInsert) {
+    const uint32_t section = r31.u32;
+    const uint32_t reader =
+        PinyonShiftGuestRangeReadable(section + 12u, 4u)
+            ? LoadGuestU32(section + 12u)
+            : 0u;
+    const uint32_t stream =
+        reader != 0u && PinyonShiftGuestRangeReadable(reader + 4u, 4u)
+            ? LoadGuestU32(reader + 4u)
+            : 0u;
+    if (stream != 0u && UiSceneInsertStreamIsOurs(stream)) {
+      const uint32_t declared = LoadGuestU32(r1.u32 + 116u);
+      const uint32_t expected =
+          g_ui_scene_insert_expected_declared.load(std::memory_order_relaxed);
+      UiSceneInsertRecord(
+          "ui.experiment.scene_insert.declared",
+          {{"state", expected == 0u || declared == expected ? "reencoded"
+                                                            : "mismatch"},
+           {"declared", Hex32(declared)},
+           {"expected", Hex32(expected)},
+           {"elements", Hex32(LoadGuestU32(section + 16u))},
+           {"wrappers", Hex32(LoadGuestU32(section + 20u))}});
+    }
+  }
   if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
     return;
   }
@@ -4163,6 +4605,13 @@ void PinyonShiftTraceUiSceneItemFields(PPCRegister& r1, PPCRegister& r3,
        {"source_words", UiSceneHexWords(source, 12u)}});
 }
 
+// Byte-at-a-time continuation of the same reader method (0x82F255C0), wired by
+// its own hook so the loader-boundary scene insertion also covers this path.
+void PinyonShiftTraceUiSceneReadStep(PPCRegister& r3, PPCRegister& r28,
+                                     PPCRegister& r30, PPCRegister& r31) {
+  PinyonShiftUiSceneInsertReadStep(r3, r28, r30, r31);
+}
+
 // Reader slot-1 method sub_82F25568 (0x82F25568) hands its per-read arguments
 // to the copy helper, so this records where each item byte comes from.
 void PinyonShiftTraceUiSceneStreamRead(PPCRegister& r3, PPCRegister& r4,
@@ -4199,6 +4648,7 @@ void PinyonShiftTraceUiSceneStreamRead(PPCRegister& r3, PPCRegister& r4,
 // shows whether the stream is a plain memory copy or a decoding stream.
 void PinyonShiftTraceUiSceneReadResult(PPCRegister& r3, PPCRegister& r28,
                                        PPCRegister& r30) {
+  PinyonShiftUiSceneInsertReadResult(r3, r28, r30);
   if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
     return;
   }
