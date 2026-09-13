@@ -671,6 +671,27 @@ indirect call inside the per-child builder loop, so the eighth row has not yet
 been confirmed on screen. That is now a timing/crash question about the
 substituted payload, not a format or capability question.
 
+The stream route's limit is now precise, and two real defects were fixed on
+the way. The document arena is sized as
+`(elements*4 + properties)*8 + wrappers*68` from the member's header words at
+`0x24`/`0x28`/`0x2C`, so the property count must be raised together with the
+element and wrapper counts; raising only two of the three left nine property
+entries unaccounted and produced a teardown fast-fail. And a duplicated row
+that reuses row 0's object slots builds an eighth `CPauseMenuButton` whose
+entries resolve to row 0's objects — ids `090F6631`, `C1FD86B1`, `49F4AB75`
+carry the same pointers as the first row. With `--clone subtree` the encoder
+copies the row's contiguous 39-record block and rebases its 72 type-`0x14` slot
+references onto the free block `794..865`, but those slots are not resolvable
+at parse time from the item section alone; reusing the source row's slots is
+the only admitting option and it duplicates row 0's identity objects.
+
+The item-stream re-encoder is therefore insufficient: extending the pause list
+needs the scene's object/identity table extended in tandem — a companion-section
+re-encoder — and the remaining gate is that object-resolution stage, not list
+capacity, because the runtime does accept the eighth child record. Control runs
+on the shifted route render all seven stock rows, and every insert-mode run
+still shows free roam at the capture frames.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
