@@ -692,6 +692,39 @@ capacity, because the runtime does accept the eighth child record. Control runs
 on the shifted route render all seven stock rows, and every insert-mode run
 still shows free roam at the capture frames.
 
+Object resolution is now located. For a property whose shuffled id has bits 2..4
+equal to `0x14`, the item deserializer (`sub_82F26560`, `0x82F26864`-`0x82F2688C`)
+calls `resolver->vtable[1](value)` and stores the returned pointer; the resolver
+is `element + 776` (vtable `0x82275054`, slot 1 `sub_82F2AB58` =
+`*(resolver+12) + index*8`, an unbounded load), the document is `element + 500`,
+and the element is the 884-byte scene resource built by `sub_82F2C688` (vtable
+`0x82275088`). The table is a runtime vector (`resolver+8` count, `resolver+12`
+entries) appended by `sub_82F2AB20` and filled from the member's own identity
+sub-document pass (`sub_82F288A0`, driven by `sub_82F291D8`) that runs before
+the item deserializer, with entry layout `{u32 hash, u16 length, u16 flags}`.
+
+The index space is authored in the member: item type-`0x14` values reference
+`20..793` densely (row k's four element references are `20+72k..23+72k`), the
+member section at `0xED3D` (declared 1248) is a 50-entry parent table with 212
+child indices (header words `0x30`/`0x34`), its children are exactly the
+untouched range `794..1005`, and header word `0x3C` = 1006 is the total index
+count. Slots `794..865` therefore exist in the authored numbering and their
+entries are created by the loader's identity pass.
+
+One harness correction matters for every future instrumented run: setting
+`PINYON_SHIFT_UI_EXPERIMENT` makes the scene reader hooks add per-delivery host
+work (`PinyonShiftGuestRangeReadable` per delivered byte), which slows the
+title's asynchronous streaming enough that a frame-scheduled START fires before
+the world and its UI are up. An A/B on the same binary confirms it — the
+default-off control renders the menu on the old routes, while `scene_insert`
+renders none. `.local/ui-verify/pause-late2.fh1test` (START at frame 4300,
+pause capture 5200) restores a rendering harness for instrumented runs.
+
+The blocker remains: any added item record still faults the scene build at
+pause-open with a guest access violation, independently of the type-`0x14`
+slots, so a grown identity table could not be validated. UI-14 needs both the
+extended identity sub-document and the cause of that added-record fault.
+
 ### Original game assets
 
 The local `media/UI.zip` contains 694 entries: 230 `.bgf`, 205 `.bsg`, 205
