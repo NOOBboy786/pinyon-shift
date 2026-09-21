@@ -180,20 +180,25 @@ in the supplied audit are a lead, not a current texture budget or hitch cause.
 
 ## PERF-04 — Precise dirty geometry updates
 
+Evaluated and rejected on 2026-09-20. See the
+[PERF-04/PERF-08 results](PERFORMANCE_04_08_RESULTS_2026-09-20.md). Dirty-range
+uploads reduced transferred bytes, but the 2x frame-time cross-check regressed.
+
 Entry points: `GetFh1OwnedGeometry()`, its bounds/snapshot consumers, and
 [shared_memory.cpp](../../thirdparty/shiftglue-sdk/src/graphics/shared_memory.cpp).
 Resident owners currently refresh whole 64 KiB-aligned windows on invalidation.
 
-- [ ] Measure import amplification: imported bytes divided by known modified
+- [x] Measure import amplification: imported bytes divided by known modified
   bytes, plus snapshot copies, upload bytes, and bounds-cache invalidations.
   If only invalidated-page coverage is observable, label it as a proxy for
   changed bytes. Skip added tracking if amplification/copy cost is small.
-- [ ] Add dirty ranges or pages within one stable owner; keep full-window import
+- [x] Prototype dirty ranges within one stable owner; keep full-window import
   as fallback for unknown/GPU write coverage. Coalesce uploads only while
   preserving generation consistency and dirty writes arriving during import.
-- [ ] Invalidate only index bounds that overlap changed bytes. Reduce snapshot
-  extent only if every bounds reader can still obtain the matching GPU generation.
-- [ ] Extend [production cache checks](../../tools/check-fh1-geometry-cache.py)
+- [x] Prototype invalidating only index bounds that overlap changed bytes.
+  Reduce snapshot extent only if every bounds reader can still obtain the
+  matching GPU generation.
+- [x] Exercise [production cache checks](../../tools/check-fh1-geometry-cache.py)
   for concurrent invalidation, overlap, GPU writes, reuse, and in-flight data;
   use [geometry replay checks](../../tools/check-fh1-owned-geometry-replay.py)
   for actual uploaded-byte parity.
@@ -265,21 +270,26 @@ or reuse is too weak to repay validation/cache overhead.
 
 ## PERF-08 — Packed constant-buffer reuse
 
+Evaluated and rejected on 2026-09-20. See the
+[PERF-04/PERF-08 results](PERFORMANCE_04_08_RESULTS_2026-09-20.md). Existing
+packing consumed about 0.11 ms per frame; safe cache identity would cost too
+much relative to that upper bound.
+
 Entry point: `D3D12CommandProcessor::UpdateBindings()` in
 [command_processor.cpp](../../thirdparty/shiftglue-sdk/src/graphics/d3d12/command_processor.cpp).
 Current-binding dirty checks already avoid redundant uploads. A prior float
 upload batching candidate was reverted; it is not the implementation baseline.
 
-- [ ] Measure A → B → A layout recurrence, vectors packed, upload requests, and
+- [x] Measure A → B → A layout recurrence, vectors packed, upload requests, and
   packing CPU time. Establish reuse potential before adding a cache.
-- [ ] Precompute a shader layout's gather plan with contiguous runs if repeated
-  bitmap walks matter; measure this independently from buffer reuse.
-- [ ] Test a small bounded cache keyed by layout and relevant register
-  generations. Include fetch-constant rebasing and resource ownership where
-  applicable; expire upload references with their frame/fence lifetime.
-- [ ] Check relevant versus irrelevant register writes, layout switches,
-  rebasing, rollover, eviction, and in-flight allocation reuse. Compare packed
-  bytes and actual bindings with the existing implementation.
+- [x] Evaluate whether a shader-layout gather plan is warranted. The combined
+  allocation and packing cost is only 0.11 ms/frame, so it was not implemented.
+- [x] Evaluate a bounded cache keyed by layout and relevant register
+  generations. It was rejected before implementation because safe identity and
+  frame/fence lifetime tracking target only the 0.11 ms/frame upper bound.
+- [x] Check the required correctness surface: relevant and irrelevant register
+  writes, layout switches, rebasing, rollover, eviction, and in-flight upload
+  reuse. No candidate advanced to binding-parity testing.
 
 Accept when: demonstrated reuse reduces packing time/upload allocation and
 passes frame/memory gates. Reject if generation tracking costs more than it saves.
