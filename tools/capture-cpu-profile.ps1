@@ -70,19 +70,27 @@ try {
     & wpr @wprArguments
     if ($LASTEXITCODE -ne 0) { throw "WPR failed to start (exit $LASTEXITCODE)" }
     $recording = $true
-    & (Join-Path $PSScriptRoot 'launch-preview.ps1') -Configuration RelWithDebInfo `
-        -StateRoot $StateRoot -RenderTestScript $RenderTestScript `
-        -RenderTestOutput (Join-Path $Output 'render-test') `
-        -RenderTestTimeoutSeconds $TimeoutSeconds -Hidden `
-        -GameArguments @('--pinyon_shift_capture_performance=true', '--perf_log_max_mb=512') `
-        -Json | Set-Content -LiteralPath (Join-Path $Output 'launch.json')
+    $launchArguments = @(
+        '-NoProfile', '-File', (Join-Path $PSScriptRoot 'launch-preview.ps1'),
+        '-Configuration', 'RelWithDebInfo', '-StateRoot', $StateRoot,
+        '-RenderTestScript', $RenderTestScript,
+        '-RenderTestOutput', (Join-Path $Output 'render-test'),
+        '-RenderTestTimeoutSeconds', "$TimeoutSeconds", '-Hidden',
+        '-GameArgumentsJson', '["--pinyon_shift_capture_performance=true","--perf_log_max_mb=512"]',
+        '-Json'
+    )
+    & (Join-Path $PSHOME 'pwsh.exe') @launchArguments |
+        Set-Content -LiteralPath (Join-Path $Output 'launch.json')
     if ($LASTEXITCODE -ne 0) { throw 'Profile route failed' }
     & wpr -stop $etl 'Pinyon Shift CPU hotspot capture'
     if ($LASTEXITCODE -ne 0) { throw "WPR failed to stop (exit $LASTEXITCODE)" }
     $recording = $false
 }
 finally {
-    if ($recording) { & wpr -cancel | Out-Null }
+    if ($recording) {
+        & wpr -stop $etl 'Pinyon Shift partial CPU hotspot capture' | Out-Null
+        if ($LASTEXITCODE -ne 0) { & wpr -cancel | Out-Null }
+    }
 }
 
 $perfCapture = Get-ChildItem -LiteralPath (Join-Path $StateRoot 'logs') -Filter '*.perf.csv' -File |
