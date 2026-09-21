@@ -2,10 +2,9 @@
 
 Use Windows Performance Recorder (WPR) sampling and context-switch data to
 find the CPU work and waits that consume each source frame. The existing
-critical-path events are also emitted through the `PinyonShift-CriticalPath`
-TraceLogging provider, so a sampled trace can be correlated with title,
-submission, completion, vblank, and presentation events without enabling the
-large diagnostic log.
+source-frame boundary is also emitted through the
+`PinyonShift-CriticalPath` TraceLogging provider, so sampled CPU and wait data
+can be assigned to title frames without enabling the large diagnostic log.
 
 ## Capture the moving Recaro route
 
@@ -44,8 +43,8 @@ Open `pinyon-shift.etl` in WPA and add these tables:
 2. **CPU Usage (Precise)**, grouped by process, thread, wait reason, and stack.
    Use this view for scheduler delay and blocked time.
 3. **Generic Events**, restricted to provider
-   `PinyonShift-CriticalPath` and event `CriticalPath`. The `Event`,
-   `SourceFrame`, and three value fields carry the existing correlation data.
+   `PinyonShift-CriticalPath` and event `SourceFrame`. The `SourceFrame` field
+   is the frame boundary used to correlate the two CPU tables.
 
 Verify that title, `rexruntimerd`, and `rexgpu-fh1rd` stacks show function
 names. An address-only stack is a failed symbol check and must not be used to
