@@ -132,13 +132,18 @@ that merely raises hit rate while increasing memory pressure or tail latency.
 
 ## PERF-02 — Complete native depth/render-target ownership
 
+The post-PERF-09 scaled retry was evaluated and rejected; see the
+[PERF-02/PERF-05 investigation](PERFORMANCE_02_05_RESULTS_2026-09-21.md). The
+existing 1x chain remains retained, while further scaled work requires a changed
+design rather than another run of the same ownership path.
+
 Entry points: SDK D3D12 render-target preparation/transfers and
 [render_target_cache.cpp](../../thirdparty/shiftglue-sdk/src/graphics/d3d12/render_target_cache.cpp).
 Start from the [owned-depth contract](OWNED_DEPTH_CHAIN_CONTRACT.md) and
 [A6 retention evidence](A6_OWNED_DEPTH_RETENTION.md). Native 1x clears already
 exist; scaled ownership previously failed frame-tail retention.
 
-- [ ] Select one costly depth/shadow lifetime from PERF-00. Document initial
+- [x] Select one costly depth/shadow lifetime from PERF-00. Document initial
   contents, partial clears, depth/stencil writes, every reader, alias, and reuse
   boundary, including any required compatibility bridge.
 - [ ] Keep its native target authoritative across that entire interval and
@@ -209,11 +214,14 @@ Existing containment/recycling experiments are not prerequisites to enable.
 
 ## PERF-05 — Native reflection cubes through their consumers
 
+The producer/consumer inventory and measured import volume are recorded in the
+[PERF-02/PERF-05 investigation](PERFORMANCE_02_05_RESULTS_2026-09-21.md).
+
 Entry points: SDK D3D12 reflection face targets, texture import, mip publication,
 and later sampling. Reuse the [mipmap contract](REFLECTION_MIPMAP_REPLACEMENT.md).
 The current replacement has no persistent native cube mirror.
 
-- [ ] Inventory all cube producers/consumers, six-face update order, mip history,
+- [x] Inventory all cube producers/consumers, six-face update order, mip history,
   invalidation, aliases, format/scale requirements, and compatibility readers.
 - [ ] Carry one authoritative native resource from face rendering through mip
   generation to sampling; bridge only for a proven compatibility consumer.
