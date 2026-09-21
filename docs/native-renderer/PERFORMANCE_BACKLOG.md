@@ -247,19 +247,26 @@ kernel is outside this task unless a fresh profile identifies it as material.
 
 ## PERF-06 — Reflection-mip producer and decoder bypass
 
+Investigated and rejected on 2026-09-21. The only verified boundary is after
+list emission, and the remaining replay preserves clear, ownership, register
+and cache side effects for a measured 0.090 ms per cube. See the
+[PERF-06/PERF-07 result](PERFORMANCE_06_07_RESULTS_2026-09-21.md).
+
 Entry points: title cached-list generation/submission and SDK command dispatch;
 the [existing mip replacement](REFLECTION_MIPMAP_REPLACEMENT.md) still processes
 six guest lists and 2,352 packets per cube.
 
-- [ ] Locate the earliest verified boundary where the complete admitted mip
-  operation is known; time its producer and decode work separately.
-- [ ] Enumerate state restoration, events/queries, scratch clears, ownership
+- [x] Locate the earliest verified boundary where the complete admitted mip
+  operation is known. It is downstream of title generation, so the probe split
+  validation, native recording and replay and records producer time as unavailable.
+- [x] Enumerate state restoration, events/queries, scratch clears, ownership
   transfers, dirty tracking, and ordering that must survive a bypass.
-- [ ] Submit a compact native operation at that boundary, preserving every
-  observable side effect and falling back for unsupported or changed input.
-- [ ] Extend [mip contract checks](../../tools/check-fh1-mip-contract.cpp) for
-  relocation, mutation, inherited state, and side-effect equivalence. Verify
-  producer/decoder counters actually disappear, not just draw counters.
+- [x] Evaluate a compact native operation at that boundary. It was rejected:
+  dropping replay also drops required clears, ownership transfers and command
+  state, while a second executor would duplicate the signed packet sequence.
+- [x] Reuse [mip contract checks](../../tools/check-fh1-mip-contract.cpp) for
+  relocation, mutation and inherited state. No behavior candidate advanced to
+  side-effect equivalence testing; the probe measured every remaining bucket.
 
 Accept when: targeted generation/decoding and CPU time decline with correct
 state and frame results. The historical residual six-list CPU cost was about
@@ -267,19 +274,25 @@ state and frame results. The historical residual six-list CPU cost was about
 
 ## PERF-07 — Prepared static command streams
 
+Investigated and rejected on 2026-09-21 with PERF-06. The reflection lists are
+the strongest recurring candidate, but safe identity repeats their measured
+snapshot/hash cost and their stateful packet replay cannot be cached away. See
+the [combined result](PERFORMANCE_06_07_RESULTS_2026-09-21.md).
+
 Entry points: SDK command processing plus the title boundaries recorded in
 [renderer research](RESEARCH.md). Previously observed eligible draws did not
 form useful consecutive batches; blanket instancing is not this task.
 
-- [ ] Select one demonstrably immutable recurring stream and measure decode /
+- [x] Select one demonstrably immutable recurring stream and measure decode /
   preparation cost, recurrence, and its dynamic inputs.
-- [ ] Define identity using command generation, inherited state, resource
+- [x] Define identity using command generation, inherited state, resource
   generations, and dynamic patches; address alone is insufficient.
-- [ ] Cache its prepared template, or submit directly from a verified title
-  boundary if simpler. Preserve draw order and existing visibility/LOD decisions.
-- [ ] Check mutation, relocation, inherited-state changes, invalidation,
-  resource destruction, queries, and fallback. Bound entries and cache memory.
-  PERF-06's side-effect audit may be reused, but its implementation is optional.
+- [x] Evaluate a prepared template. It was rejected because validating current
+  relocated allocations and external payloads repeats the 0.047 ms/cube work
+  it could save; the only verified boundary is already downstream of emission.
+- [x] Check mutation, relocation, inherited-state changes, invalidation,
+  queries and fallback through the existing mip contract. No cache was created,
+  so resource-destruction, entry-bound and cache-memory risks were avoided.
 
 Accept when: interpreted packets and preparation CPU fall with identical order
 and visible output, even if draw count stays constant. Defer if stream identity
