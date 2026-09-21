@@ -36,6 +36,18 @@ struct ClearProducerSample {
 thread_local std::vector<ClearProducerSample> clear_producers;
 std::atomic<uint64_t> clear_producer_records{0};
 
+struct TitleEmitterSample {
+  uint64_t frame;
+  ClearClock::time_point begin;
+};
+thread_local std::vector<TitleEmitterSample> title_emitters;
+thread_local uint64_t title_emitter_frame = 0;
+thread_local uint64_t title_emitter_calls = 0;
+thread_local uint64_t title_emitter_time_ns = 0;
+thread_local uint64_t title_packet_count = 0;
+thread_local int64_t title_first_packet_ns = 0;
+thread_local int64_t title_last_packet_ns = 0;
+
 bool ClearProducerTraceEnabled() {
   static const bool enabled = REXCVAR_GET(pinyon_shift_fh1_clear_producer_trace);
   return enabled;
@@ -80,7 +92,59 @@ void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
 
 // FH1's sole VdSwap call is the source-frame boundary used by the real-frame
 // presentation and performance gates. It intentionally changes no guest state.
-void PinyonShiftObserveGraphicsFrame() { PROFILE_SOURCE_FRAME(); }
+void PinyonShiftObserveGraphicsFrame() {
+  if (rex::perf::CriticalPathTraceEnabled() &&
+      (title_emitter_calls || title_packet_count)) {
+    rex::perf::TraceCriticalPath("title_emitter", int64_t(title_emitter_frame),
+                                 int64_t(title_emitter_time_ns),
+                                 int64_t(title_emitter_calls));
+    rex::perf::TraceCriticalPath("pm4_publish", int64_t(title_emitter_frame),
+                                 int64_t(title_packet_count), title_first_packet_ns,
+                                 title_last_packet_ns);
+  }
+  PROFILE_SOURCE_FRAME();
+  title_emitter_frame = uint64_t(rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount));
+  title_emitter_calls = title_emitter_time_ns = title_packet_count = 0;
+  title_first_packet_ns = title_last_packet_ns = 0;
+  rex::perf::TraceCriticalPath("source_frame", int64_t(title_emitter_frame));
+}
+
+void PinyonShiftObserveTitleDrawEmitterBegin() {
+  if (rex::perf::CriticalPathTraceEnabled()) {
+    title_emitters.push_back({uint64_t(rex::perf::GetTotalCounter(
+                                  rex::perf::CounterId::kSourceFrameCount)),
+                              ClearClock::now()});
+  }
+}
+
+void PinyonShiftObserveTitleDrawEmitterEnd() {
+  if (!rex::perf::CriticalPathTraceEnabled() || title_emitters.empty()) {
+    return;
+  }
+  const auto sample = title_emitters.back();
+  title_emitters.pop_back();
+  title_emitter_frame = sample.frame;
+  ++title_emitter_calls;
+  title_emitter_time_ns += uint64_t(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(ClearClock::now() -
+                                                           sample.begin)
+          .count());
+}
+
+void PinyonShiftObserveTitleDrawPacketPublish() {
+  if (!rex::perf::CriticalPathTraceEnabled()) {
+    return;
+  }
+  const int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             ClearClock::now().time_since_epoch())
+                             .count();
+  if (!title_packet_count) {
+    title_first_packet_ns = now_ns;
+  }
+  title_last_packet_ns = now_ns;
+  ++title_packet_count;
+}
 
 // Read-only hooks at the checked producer entry/common epilogue. Logging is
 // outside the measured interval. Nested calls are explicit because their

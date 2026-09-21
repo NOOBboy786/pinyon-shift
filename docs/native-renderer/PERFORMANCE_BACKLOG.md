@@ -1,8 +1,8 @@
 # Performance optimization backlog
 
-Status: executed and closed on 2026-09-21 for the recorded hardware, AppData
-state and bounded routes. Retained changes, rejected candidates and explicit
-dependencies are linked from each task; broader B/C migration remains open.
+Status: PERF-00 through PERF-15 were executed or dispositioned on 2026-09-21
+for the recorded hardware, AppData state and bounded routes. PERF-14 was
+retained; PERF-12 was rejected; PERF-13 and PERF-15 remain evidence-gated.
 
 Source: the user-supplied ten-optimization audit of `dev` at
 `8049daa12d3dd1eb1e9e71fe96366c47b8007fbb`, reconciled with local source at
@@ -41,6 +41,11 @@ the first implementation batch; P2 is selected using the resulting profile.
 | PERF-08 | P1 | Reuse packed constant buffers | Medium / SDK bindings | PERF-00 + recurring-layout evidence | Preparation |
 | PERF-09 | P1 investigate | Reduce critical-path submission gaps and waits | Medium / SDK submission + runtime | PERF-00 correlated timeline | Preserve AUD-01 |
 | PERF-10 | P2 | Keep a post-processing/output subchain native | Large / SDK output + render targets | PERF-00 + selected subchain contract | B1 |
+| PERF-11 | Done | Correlate the post-retention source-frame critical path | Medium / title hooks + SDK diagnostics | PERF-09 result | Shared qualification |
+| PERF-12 | Rejected | Replace one hot title draw emitter with byte-equivalent native code | Medium / title hooks | Gate failed | B3 |
+| PERF-13 | Deferred | Record prepared commands directly to D3D12 | Medium / SDK D3D12 | Symbolized CPU samples unavailable | Preparation |
+| PERF-14 | Retained | Deliver guest vblank from deadlines instead of polling | Small–medium / SDK timing | Gates passed | Preserve timing |
+| PERF-15 | Deferred | Replace hot VMX byte shifts with register-only lowering | Small / SDK recompiler | Symbolized CPU samples unavailable | Recompiler |
 
 First batch: finish PERF-00, then evaluate PERF-01, PERF-04, and PERF-08 as
 separate changes. Collect the PERF-09 timeline during this batch; change
@@ -386,6 +391,42 @@ currently installs a render-test observer, not a production scene renderer.
 Accept when: copies/conversions and whole-chain cost fall without frame/history
 errors or visual regressions. The rejected scaled-accumulator presentation
 experiment is not an accepted starting implementation.
+
+## PERF-11–15 — CPU critical-path follow-up
+
+Closed for the available evidence. The PERF-09 trace separated source-frame
+time from GPU execution: the Recaro moving-race control recorded a 67.557 ms
+median source frame and a
+16.406 ms mean GPU timestamp span. Those statistics are not directly
+subtractable, but they make another unmeasured GPU micro-optimization a poor
+default. See the [Pro follow-up plan](PERFORMANCE_PRO_PLAN_2026-09-21.md) and
+the [PERF-11–15 results](PERFORMANCE_11_15_RESULTS_2026-09-21.md).
+
+- [x] Add an opt-in, source-frame-correlated event trace for the indexed title
+  emitter, PM4 publication, deferred command tape, submission/fence completion,
+  guest-vblank deadline/dispatch, and presentation.
+- [x] Add a deterministic analyzer that reports frame intervals, emitter cost,
+  tape replay upper bounds, submission/completion timing, and vblank lateness.
+- [x] Capture the existing open-world and Recaro routes with
+  `perf_critical_path_trace=true`; keep normal timing comparisons trace-free.
+- [x] PERF-12 gate failed: the admitted indexed emitter consumed at most
+  0.056 ms median, below `max(2 ms, 8% of target frame time)`.
+- [x] PERF-13 remains deferred: CPU sampling must attribute at least
+  `max(1 ms, 3% of target frame time)` to avoidable tape serialization/dispatch,
+  excluding required D3D12 calls.
+- [x] PERF-14 gate passed: at least 1 ms of avoidable critical-path lateness or
+  late vblank delivery in at least 1% of target frames.
+- [x] PERF-15 remains deferred: optimized assembly retains inefficient VMX shift
+  machinery and samples must attribute at least `max(1 ms, 5% of target frame
+  time)` to it.
+- [x] Implement only candidates that pass their entry gate. Retain a substantial
+  title replacement only at at least 5% median improvement, a tail-specific
+  change at at least 10% p95, and a smaller SDK change at at least 2% median.
+  Preserve the existing +3% median/p95 and +5% p99 regression ceilings.
+
+The trace is diagnostic and default-off. It cannot qualify PERF-13 or PERF-15
+without optimized-build CPU sampling: deferred replay includes required driver
+calls, and source-level `memcpy` does not prove emitted stack traffic.
 
 ## Shared completion and evidence requirements
 

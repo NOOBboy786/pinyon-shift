@@ -17,6 +17,21 @@ longjmp_address = 0x82A81950
 address = 0x829EFEB8
 name = "PinyonShiftObserveGraphicsFrame"
 
+# PERF-11 read-only critical-path probes around the indexed title draw emitter
+# and its exact PM4 header publication. All return immediately unless the SDK
+# perf_critical_path_trace flag is enabled.
+[[midasm_hook]]
+address = 0x8240F4D8
+name = "PinyonShiftObserveTitleDrawEmitterBegin"
+
+[[midasm_hook]]
+address = 0x82410328
+name = "PinyonShiftObserveTitleDrawPacketPublish"
+
+[[midasm_hook]]
+address = 0x82410620
+name = "PinyonShiftObserveTitleDrawEmitterEnd"
+
 # Observe the native UI4 scene-registry construction after the title's
 # constructor returns. This is default-off and records registers only.
 [[midasm_hook]]
