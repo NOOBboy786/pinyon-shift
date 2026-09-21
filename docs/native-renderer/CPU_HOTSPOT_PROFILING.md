@@ -12,15 +12,19 @@ Install Windows Performance Analyzer from the Windows Performance Toolkit,
 then run an elevated PowerShell from the repository root:
 
 ```powershell
-.\tools\capture-cpu-profile.ps1
+.\tools\capture-cpu-profile.ps1 `
+  -RenderTestScript config/render-tests/fh1-race-sustained.fh1test
 ```
+
+For the opt-in INFO-flush experiment, repeat with `-SkipBuild -BatchInfoFlush`
+and a fresh `-Output` directory. The manifest records the chosen variant.
 
 The script verifies the AppData save, rejects an already-running game, builds
 `RelWithDebInfo`, checks the title, generated guest facades, and ShiftGlue
 binaries against their PDBs, records a focused kernel
 profile (sampled CPU, context switches, ready threads, processes, and image
 loads) plus the project TraceLogging provider, runs
-`config/render-tests/fh1-race.fh1test`, and saves the ETL, symbols, frame CSV,
+the selected render-test route, and saves the ETL, symbols, frame CSV,
 and capture manifest below `.local/cpu-profile`.
 The command fails and marks the manifest invalid if WPR reports any dropped
 events; do not analyze that ETL.
@@ -48,8 +52,11 @@ Open `pinyon-shift.etl` in WPA and add these tables:
    Use this view to distinguish blocked time from scheduler delay. The CSV
    exporter below includes blocked intervals only.
 3. **Generic Events**, restricted to provider
-   `PinyonShift-CriticalPath` and event `SourceFrame`. The `SourceFrame` field
-   is the frame boundary used to correlate the two CPU tables.
+   `PinyonShift-CriticalPath`. `SourceFrame` identifies title frame boundaries;
+   `CriticalPath` gives the consumed-swap ordinal, other existing phase
+   boundaries, and render-test input ticks on the same ETW clock. Producer and
+   consumed swap IDs pair in order; the latest-frame snapshot on asynchronous
+   submission or present is not proof that it consumed that frame.
 
 Verify that title, generated guest facades, `rexruntimerd`, and `rexgpu-fh1rd`
 stacks show function names where those modules have samples. An address-only
@@ -62,14 +69,16 @@ dotnet run --project tools/profile-etl-export -- `
   .local/cpu-profile/<capture-directory>
 ```
 
-This writes `markers.csv`, `samples.csv`, and `waits.csv` beside the ETL and
+This writes `markers.csv`, `critical-path.csv`, `samples.csv`, and `waits.csv`
+beside the ETL and
 fails if the capture lost events or more than 1% of game CPU samples lack
 stacks. The same CSV contract can also be produced from WPA:
 
 ```text
-markers.csv: timestamp_ms,source_frame
-samples.csv: timestamp_ms,cpu_ms,module,function
-waits.csv:   timestamp_ms,wait_ms,wait_reason
+markers.csv: timestamp_ms,source_frame,thread_id
+critical-path.csv: timestamp_ms,event,source_frame,thread_id,value0,value1,value2
+samples.csv: timestamp_ms,cpu_ms,module,function,thread_id,project_caller,ip,rva,stack
+waits.csv:   timestamp_ms,wait_ms,wait_reason,thread_id
 ```
 
 Then run:
@@ -81,8 +90,13 @@ python tools/summarize-cpu-hotspots.py markers.csv samples.csv `
 ```
 
 Choose a contiguous range from `markers.csv`; the frame numbers above reproduce
-the 2026-09-21 example, which has only 31 frames after the `race-moving`
-capture. Extend the route before measuring sustained moving-race performance.
+the 2026-09-21 **pre-driving** sample. Script ticks and SourceFrame IDs have
+different clocks. Use `render_test_input` rows in `critical-path.csv` to find
+the actual throttle interval in a new capture.
+Use `tools/summarize-drive-window.py` with the same run's performance CSV and
+diagnostic JSONL to measure consumed swaps between the `race-moving` and
+`race-sustained` captures. This reports both wall and title simulation time,
+plus vehicle displacement, so A/B runs with different scenes can be rejected.
 The script assigns every sample and wait to the latest preceding source-frame
 marker and writes both JSON and Markdown, ranked by total sampled CPU or wait
 time. The JSON includes individual frame CPU and wait totals. Both metrics add
