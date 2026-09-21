@@ -116,3 +116,10 @@ session `20260904T061601Z-p48584` translated the complete 9,600 vertex and
 12,098 pixel asset set with zero failures and no input pack or `.xsh` storage.
 The remaining finite seed consists only of runtime-generated/system programs
 not present in retail `.fxobj` assets.
+
+For an installation with a legacy `4D5309C9.xsh` and D3D12 `.xpso` cache,
+automatic preparation also seeds those cache files into its isolated producer
+state. This covers shader programs encountered by that installation, including
+the saved Recaro Rush race, without copying its save or requiring runtime
+translation. The cache hashes are part of the preparation key. A clean
+installation still uses the retail-disc corpus and finite title seed.

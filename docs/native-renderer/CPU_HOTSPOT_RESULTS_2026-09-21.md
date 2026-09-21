@@ -143,8 +143,36 @@ generated title thread also used 25.856 s of sampled CPU, with hot symbols
 `sub_829F04A8` and `sub_823E91F0`; their call stacks overlap and neither
 has yet been shown to be on the frame-critical path.
 
-The next rendering task is to cover the save-backed sustained scene in the
-offline vertex shader catalog, then repeat this capture and compare draw
-success, ERROR volume, and frame timings. Do not hide the ERROR reports as a
-performance fix. The [capture procedure](CPU_HOTSPOT_PROFILING.md) describes
-the repeatable WPR command.
+## Shader-catalog repair and saved-race replay
+
+The installed cache's `4D5309C9.xsh` and legacy PSO file contain shaders
+encountered in the saved race that the clean-state offline producer missed.
+Preparation now copies those two **cache files only** into its isolated
+producer state and includes their hashes in the preparation key. It does not
+copy or alter the save. The resulting catalog grew from 12,507 to 12,590
+analyzed shaders and covered all 37 distinct missing vertex hashes retained
+in the rolling logs. Four more exact specializations observed on the first
+replay were added to the producer; the final pack contains 24,763 variants.
+
+The final `fh1-race-sustained.fh1test` replay exited normally with seven
+captures and no catalog misses, shader-pack misses, or failed GPU draws.
+The only ERROR in its session's runtime log was an unrelated `ResolvePath`
+device lookup. The moving window had 1,577 consumed swaps over 30.015 s,
+30.017 s of title simulation, and 378.7 m of vehicle travel. Its frame-time
+median was 18.825 ms and p95 was 27.479 ms.
+
+The earlier no-WPR, INFO-batching-off run with nearly identical starting
+position (-1743.6 m versus -1743.5 m) measured 33.991 ms median and
+58.210 ms p95. This matched-scene comparison is 44.6% lower at the median
+and 52.8% lower at p95. An intermediate replay starting near -1799 m also
+measured 16.635 ms median and 24.550 ms p95, versus 24.619 and 52.950 ms
+for the earlier no-WPR run starting near -1798 m; that intermediate pack
+still missed four specializations. These are observed end-to-end changes,
+not a CPU attribution: no post-fix WPR trace was collected because this
+session lacked elevation. Repeat the [capture procedure](CPU_HOTSPOT_PROFILING.md)
+from elevated PowerShell to measure the new thread-level hotspots.
+
+An installation without a prior legacy shader cache cannot gain these
+save-specific shaders from this seeding path. The retail-disc corpus remains
+the clean-install baseline; any newly encountered missing hash still needs a
+separate producer source or specialization.
