@@ -5,6 +5,7 @@ param(
     [string]$GameRoot,
     [string]$RuntimeConfig,
     [string]$BuildDirectory,
+    [string]$SeedShaderCacheRoot,
     [switch]$Hidden,
     [switch]$AllowPipelineDiscovery,
     [ValidateRange(1, 3)] [int]$Scale = 1,
@@ -55,6 +56,13 @@ $launch = @{
 }
 Write-PinyonEvent shaders 20 'Producing shaders and collecting startup pipelines.' -JsonEvents:$JsonEvents
 $producerState = Join-Path $work 'producer-state'
+if ($SeedShaderCacheRoot) {
+    $seedDirectory = Join-Path $producerState 'cache/shaders/shareable'
+    [void][IO.Directory]::CreateDirectory($seedDirectory)
+    foreach ($name in @('4D5309C9.xsh', '4D5309C9.rtv.d3d12.xpso')) {
+        Copy-Item -LiteralPath (Join-Path $SeedShaderCacheRoot $name) -Destination $seedDirectory
+    }
+}
 if ($RuntimeConfig -and (Test-Path -LiteralPath $RuntimeConfig)) {
     foreach ($phase in @('producer-state', 'strict-state')) {
         $configDirectory = Join-Path $work "$phase/config"

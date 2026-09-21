@@ -24,6 +24,7 @@ class ShaderPreparationTests(unittest.TestCase):
                 "tools/extract-fh1-shader-corpus.py", "tools/build-fh1-gpu-prewarm.py",
                 "tools/fh1_archive_extract.cpp",
                 "tools/native-shader-pack.py",
+                "thirdparty/shiftglue-sdk/src/graphics/d3d12/pipeline_cache.cpp",
             ):
                 target = root / path
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +32,7 @@ class ShaderPreparationTests(unittest.TestCase):
             for name in ("prepare-fh1-shaders.ps1", "release-common.ps1"):
                 shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
             (root / "tools/produce-fh1-artifacts.ps1").write_text(r'''
-param($WorkRoot, $RenderTestScript, $GameRoot, $BuildDirectory, $RuntimeConfig, $Scale, [switch]$Hidden, [switch]$JsonEvents, [switch]$IncludeOpeningMovies, [switch]$AllowPipelineDiscovery)
+param($WorkRoot, $RenderTestScript, $GameRoot, $BuildDirectory, $RuntimeConfig, $Scale, $SeedShaderCacheRoot, [switch]$Hidden, [switch]$JsonEvents, [switch]$IncludeOpeningMovies, [switch]$AllowPipelineDiscovery)
 $root = Split-Path $PSScriptRoot -Parent
 Add-Content (Join-Path $root 'calls.txt') $Scale
 $work = Join-Path $root $WorkRoot
@@ -101,6 +102,16 @@ function Get-Process { return $null }
             active.write_text(json.dumps(receipt))
             run()
             self.assertEqual(calls(), ["1", "1", "1", "2"])
+            legacy = state / "cache/shaders/shareable"
+            legacy.mkdir(parents=True, exist_ok=True)
+            (legacy / "4D5309C9.xsh").write_bytes(b"shader")
+            (legacy / "4D5309C9.rtv.d3d12.xpso").write_bytes(b"pipeline")
+            run()
+            run()
+            self.assertEqual(calls(), ["1", "1", "1", "2", "2"])
+            (legacy / "4D5309C9.xsh").write_bytes(b"more shaders")
+            run()
+            self.assertEqual(calls(), ["1", "1", "1", "2", "2", "2"])
 
 
 if __name__ == "__main__":

@@ -82,10 +82,21 @@ try {
         'tools/prepare-fh1-shaders.ps1', 'tools/produce-fh1-artifacts.ps1',
         'tools/extract-fh1-shader-corpus.py', 'tools/fh1_archive_extract.cpp',
         'tools/build-fh1-gpu-prewarm.py',
-        'tools/native-shader-pack.py'
+        'tools/native-shader-pack.py',
+        'thirdparty/shiftglue-sdk/src/graphics/d3d12/pipeline_cache.cpp'
     )) { $inputs.files[$relative] = (Get-FileHash -LiteralPath (Join-Path $root $relative)).Hash }
     foreach ($binary in @('pinyon_shift.exe', 'rexgpu-fh1.dll', 'rexruntime.dll')) {
         $inputs.files[$binary] = (Get-FileHash -LiteralPath (Join-Path $BuildDirectory $binary)).Hash
+    }
+    $legacyShaderCache = Join-Path $cache 'shaders/shareable'
+    $legacyFiles = @('4D5309C9.xsh', '4D5309C9.rtv.d3d12.xpso')
+    $seedLegacyCache = @($legacyFiles | Where-Object {
+        Test-Path -LiteralPath (Join-Path $legacyShaderCache $_) -PathType Leaf
+    }).Count -eq $legacyFiles.Count
+    if ($seedLegacyCache) {
+        foreach ($name in $legacyFiles) {
+            $inputs.files["legacy/$name"] = (Get-FileHash -LiteralPath (Join-Path $legacyShaderCache $name)).Hash
+        }
     }
     $sha = [Security.Cryptography.SHA256]::Create()
     try { $key = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(
@@ -111,7 +122,7 @@ try {
         & (Join-Path $PSScriptRoot 'produce-fh1-artifacts.ps1') -WorkRoot $relativeWork `
             -RenderTestScript (Join-Path $root 'config/render-tests/fh1-shader-preparation.fh1test') `
             -GameRoot $GameRoot -BuildDirectory $BuildDirectory -RuntimeConfig $config -Scale $scale -Hidden -IncludeOpeningMovies `
-            -AllowPipelineDiscovery -JsonEvents:$JsonEvents |
+            -AllowPipelineDiscovery -SeedShaderCacheRoot $(if ($seedLegacyCache) { $legacyShaderCache }) -JsonEvents:$JsonEvents |
             ForEach-Object { if ($_ -is [string] -and $_.StartsWith('::pinyon::')) { Write-Output $_ } }
         $report = Read-Receipt (Join-Path $work 'production.json')
         if ($null -eq $report -or $report.result -ne 'shaders-validated') { throw 'Graphics preparation did not finish validation.' }
