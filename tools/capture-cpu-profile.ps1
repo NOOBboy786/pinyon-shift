@@ -61,6 +61,7 @@ $etl = Join-Path $Output 'pinyon-shift.etl'
 $wprProfile = if ($MarkersOnly) { 'PinyonCriticalPath' } else { 'PinyonCpuHotspots' }
 $wprArguments = @('-start', "$profile!$wprProfile.Verbose", '-filemode')
 $recording = $false
+$droppedEvents = 0
 $startedUtc = [DateTime]::UtcNow
 try {
     & wpr @wprArguments
@@ -78,8 +79,12 @@ try {
     & (Join-Path $PSHOME 'pwsh.exe') @launchArguments |
         Set-Content -LiteralPath (Join-Path $Output 'launch.json')
     if ($LASTEXITCODE -ne 0) { throw 'Profile route failed' }
-    & wpr -stop $etl 'Pinyon Shift CPU hotspot capture'
+    $stopOutput = & wpr -stop $etl 'Pinyon Shift CPU hotspot capture' 2>&1 | Out-String
+    $stopOutput | Set-Content -LiteralPath (Join-Path $Output 'wpr-stop.txt')
     if ($LASTEXITCODE -ne 0) { throw "WPR failed to stop (exit $LASTEXITCODE)" }
+    if ($stopOutput -match 'dropped\s+(\d+)\s+events') {
+        $droppedEvents = [int64]$Matches[1]
+    }
     $recording = $false
 }
 finally {
@@ -103,8 +108,14 @@ $manifest = [ordered]@{
     state_root = $StateRoot
     etl = $etl
     symbols = 'symbols.json'
+    dropped_events = $droppedEvents
+    valid = ($droppedEvents -eq 0)
 }
 $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $Output 'capture.json')
+
+if ($droppedEvents -ne 0) {
+    throw "WPR dropped $droppedEvents events; repeat the capture before analysis."
+}
 
 if ($OpenInWpa) {
     $wpa = Get-Command wpa.exe -ErrorAction SilentlyContinue

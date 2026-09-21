@@ -21,6 +21,8 @@ profile (sampled CPU, context switches, ready threads, processes, and image
 loads) plus the project TraceLogging provider, runs
 `config/render-tests/fh1-race.fh1test`, and saves the ETL, symbols, frame CSV,
 and capture manifest below `.local/cpu-profile`.
+The command fails and marks the manifest invalid if WPR reports any dropped
+events; do not analyze that ETL.
 
 The build can be prepared without elevation:
 
