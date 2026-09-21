@@ -16,7 +16,8 @@ then run an elevated PowerShell from the repository root:
 ```
 
 The script verifies the AppData save, rejects an already-running game, builds
-`RelWithDebInfo`, checks each binary against its PDB, records a focused kernel
+`RelWithDebInfo`, checks the title, generated guest facades, and ShiftGlue
+binaries against their PDBs, records a focused kernel
 profile (sampled CPU, context switches, ready threads, processes, and image
 loads) plus the project TraceLogging provider, runs
 `config/render-tests/fh1-race.fh1test`, and saves the ETL, symbols, frame CSV,
@@ -44,16 +45,26 @@ Open `pinyon-shift.etl` in WPA and add these tables:
    stack. Restrict the process to `pinyon_shift.exe` and load symbols from the
    capture's `symbols` directory.
 2. **CPU Usage (Precise)**, grouped by process, thread, wait reason, and stack.
-   Use this view for scheduler delay and blocked time.
+   Use this view to distinguish blocked time from scheduler delay. The CSV
+   exporter below includes blocked intervals only.
 3. **Generic Events**, restricted to provider
    `PinyonShift-CriticalPath` and event `SourceFrame`. The `SourceFrame` field
    is the frame boundary used to correlate the two CPU tables.
 
-Verify that title, `rexruntimerd`, and `rexgpu-fh1rd` stacks show function
-names. An address-only stack is a failed symbol check and must not be used to
-justify an optimization.
+Verify that title, generated guest facades, `rexruntimerd`, and `rexgpu-fh1rd`
+stacks show function names where those modules have samples. An address-only
+stack is a failed symbol check and must not be used to justify an optimization.
 
-For a compact checked-in report, export or normalize the three WPA views to:
+To export the ETL directly with Microsoft's TraceEvent reader:
+
+```powershell
+dotnet run --project tools/profile-etl-export -- `
+  .local/cpu-profile/<capture-directory>
+```
+
+This writes `markers.csv`, `samples.csv`, and `waits.csv` beside the ETL and
+fails if the capture lost events or more than 1% of game CPU samples lack
+stacks. The same CSV contract can also be produced from WPA:
 
 ```text
 markers.csv: timestamp_ms,source_frame
@@ -65,13 +76,18 @@ Then run:
 
 ```powershell
 python tools/summarize-cpu-hotspots.py markers.csv samples.csv `
-  --waits waits.csv --output cpu-hotspots.json
+  --waits waits.csv --start-frame 4200 --end-frame 4590 `
+  --output race-hotspots.json
 ```
 
+Choose a contiguous moving-race range from `markers.csv`; the frame numbers
+above reproduce the 2026-09-21 example, not a fixed range for future captures.
 The script assigns every sample and wait to the latest preceding source-frame
 marker and writes both JSON and Markdown, ranked by total sampled CPU or wait
-time. Keep the ETL beside the report so stacks can be inspected before changing
-code.
+time. The JSON includes individual frame CPU and wait totals. Both metrics add
+time across concurrent game threads; neither is wall-clock frame latency.
+Waits include idle workers. Keep the ETL beside the report so stacks can be
+inspected before changing code. See the [first measured result](CPU_HOTSPOT_RESULTS_2026-09-21.md).
 
 ## Escalate only when the trace calls for it
 

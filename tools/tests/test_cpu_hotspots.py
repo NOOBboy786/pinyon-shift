@@ -17,23 +17,29 @@ class CpuHotspotTests(unittest.TestCase):
             markers = root / "markers.csv"
             samples = root / "samples.csv"
             waits = root / "waits.csv"
-            markers.write_text("timestamp_ms,source_frame\n10,7\n20,8\n", encoding="utf-8")
+            markers.write_text("timestamp_ms,source_frame\n10,7\n20,8\n25,9\n30,10\n", encoding="utf-8")
             samples.write_text(
                 "timestamp_ms,cpu_ms,module,function\n9,1,old,before\n11,1.5,title,guest\n21,2,gpu,submit\n",
                 encoding="utf-8",
             )
             waits.write_text(
-                "timestamp_ms,wait_ms,wait_reason\n12,3,Event\n22,1,Fence\n",
+                "timestamp_ms,wait_ms,wait_reason\n18,4,Event\n22,1,Fence\n",
                 encoding="utf-8",
             )
 
             report = MODULE.summarize(markers, samples, waits)
 
-            self.assertEqual(report["source_frames"], 2)
+            self.assertEqual(report["source_frames"], 3)
             self.assertEqual(report["unmatched_rows"]["samples"], 1)
-            self.assertEqual(report["per_frame_ms"]["cpu_median"], 1.75)
-            self.assertEqual(report["top_functions"][0], {"name": "submit", "ms": 2.0})
-            self.assertEqual(report["top_wait_reasons"][0], {"name": "Event", "ms": 3.0})
+            self.assertEqual(report["per_frame_ms"]["cpu_median"], 1.5)
+            self.assertEqual(report["top_functions"][0], {"name": "gpu!submit", "ms": 2.0})
+            self.assertEqual(report["top_wait_reasons"][0], {"name": "Event", "ms": 4.0})
+            self.assertEqual(report["per_frame_ms"]["wait_median"], 2.0)
+            self.assertEqual(report["frames"], [
+                {"source_frame": 7, "cpu_ms": 1.5, "wait_ms": 2.0},
+                {"source_frame": 8, "cpu_ms": 2.0, "wait_ms": 3.0},
+                {"source_frame": 9, "cpu_ms": 0.0, "wait_ms": 0.0},
+            ])
 
 
 if __name__ == "__main__":

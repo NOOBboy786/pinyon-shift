@@ -16,6 +16,8 @@ $pdbutil = Join-Path $llvmBin 'llvm-pdbutil.exe'
 $build = (Resolve-Path -LiteralPath $BuildDirectory).Path
 $modules = @(
     @{ binary = 'pinyon_shift.exe'; pdb = 'pinyon_shift.pdb' },
+    @{ binary = 'pinyon_shift_SpeechFacade_default.dll'; pdb = 'pinyon_shift_SpeechFacade_default.pdb' },
+    @{ binary = 'pinyon_shift_XMediaFacade_default.dll'; pdb = 'pinyon_shift_XMediaFacade_default.pdb' },
     @{ binary = 'rexruntimerd.dll'; pdb = 'rexglue-artifacts/rexruntimerd.pdb' },
     @{ binary = 'rexgpu-fh1rd.dll'; pdb = 'rexglue-artifacts/rexgpu-fh1rd.pdb' }
 )
