@@ -161,23 +161,29 @@ tails or output errors. Fewer clear calls with more expensive transfers fails.
 
 ## PERF-03 — Texture lifetime tracking and reload elimination
 
+Completed as a deferred dependency on 2026-09-21. The measured recurring loads
+are changed GPU-producer outputs, so immutable caching would be incorrect and
+their native lifetime is owned by PERF-10. See the
+[PERF-03 attribution result](PERFORMANCE_03_RESULTS_2026-09-21.md).
+
 Entry point: `D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl()` in
 [texture_cache.cpp](../../thirdparty/shiftglue-sdk/src/graphics/d3d12/texture_cache.cpp).
 An existing texture cache, CPU BC3 conversion, and scaled load paths are the
 starting point; this task does not introduce another generic cache/converter.
 
-- [ ] Attribute each recurring load to allocation identity, payload generation,
+- [x] Attribute each recurring load to allocation identity, payload generation,
   view, producer ownership, and invalidation reason. Measure conversion/copy
   bytes and time, scratch/descriptor allocation, and resident representations.
-- [ ] Choose one measured cause: unchanged streamed payload reloaded after a
+- [x] Choose one measured cause: unchanged streamed payload reloaded after a
   neighboring write, duplicate representations, or native-producer reimport.
-  Implement that bounded case before generalizing lifetime tracking.
-- [ ] Retain converted immutable content until actual payload change/eviction;
-  for native producers, share their resource only with a verified format,
-  visibility, and lifetime contract.
-- [ ] Check partial/neighboring writes, address reuse, eviction, view changes,
-  GPU writes, and streaming transitions. Track peak CPU/GPU memory alongside
-  reloads per generation.
+  Native-producer reimport was selected; its bounded implementation is PERF-10,
+  so no overlapping texture-cache change was made here.
+- [x] Evaluate converted immutable retention. No recurring unchanged payload was
+  found; native resource sharing requires PERF-10's verified format, visibility
+  and lifetime contract.
+- [x] Gate partial/neighboring writes, address reuse, eviction, view changes,
+  GPU writes and streaming transitions. No cache candidate advanced to that
+  matrix; the PERF-10 resource-sharing candidate must pass it instead.
 
 Accept when: reloads and converted/copied bytes fall with measurable preparation
 or frame-time benefit and no stale textures. Historical sparse 1.0–1.2 ms samples
