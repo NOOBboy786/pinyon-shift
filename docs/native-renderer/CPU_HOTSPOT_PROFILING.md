@@ -16,9 +16,6 @@ then run an elevated PowerShell from the repository root:
   -RenderTestScript config/render-tests/fh1-race-sustained.fh1test
 ```
 
-For the opt-in INFO-flush experiment, repeat with `-SkipBuild -BatchInfoFlush`
-and a fresh `-Output` directory. The manifest records the chosen variant.
-
 The script verifies the AppData save, rejects an already-running game, builds
 `RelWithDebInfo`, checks the title, generated guest facades, and ShiftGlue
 binaries against their PDBs, records a focused kernel

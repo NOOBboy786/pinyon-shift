@@ -41,7 +41,7 @@ on the actual frame-critical thread.
 |---|---:|---:|---|
 | Generated title `sub_829F04A8` | 3,076 ms | 7.87 ms | Inspect its guest loop, callers, and role on the hot title thread. |
 | Generated title `sub_823E91F0` | 2,123 ms | 5.43 ms | Identify the guest operation and whether its work is frame-critical. |
-| Runtime `spdlog::details::file_helper::flush` stack | 1,576 ms inclusive | 4.03 ms | A/B INFO batching; ERROR flushes remain immediate. |
+| Runtime `spdlog::details::file_helper::flush` stack | 1,576 ms inclusive | 4.03 ms | Identify the log level and failing draw path. |
 | Runtime `spin_wait_strategy::wait_until_published` | 553 ms | 1.41 ms | Correlate the spin with frame-boundary timing and producer progress. |
 | GPU module `rexgpu-fh1rd` (all leaves) | 3,006 ms | 7.69 ms | Inspect packet/binding stacks only after the larger title and logging costs. |
 
@@ -53,9 +53,9 @@ For the logging row, 1,073 of its 1,576 samples have kernel leaves, so an
 ordinary leaf-function ranking hides much of that cost. The per-frame module
 totals are title 37.26 ms, Windows kernel 8.91 ms, GPU module 7.69 ms, and
 runtime module 3.84 ms. Full stacks attribute 808 flush samples to pipeline
-configuration INFO logging and 768 to failed-draw ERROR logging. INFO batching
-can only affect the first part. Kernel samples outside those stacks need public
-Microsoft symbols before assigning them to a specific subsystem.
+configuration and 768 to failed draws. Both paths emit ERROR, so INFO batching
+cannot address them. Kernel samples outside those stacks need public Microsoft
+symbols before assigning them to a specific subsystem.
 
 The local `race-hotspots.md` in that capture directory contains the function,
 module, thread, and wait rankings; its JSON companion
@@ -88,11 +88,10 @@ simulation in that interval.
 | 4 | on | -1799.2 | 1203 | 22.970 ms | 52.523 ms |
 
 The matched pairs show 11.5% and 6.7% lower median with batching, but the
-starting scene shifted materially between pairs and the source of the gain is
-not established. The second pair gained only 0.8% at p95. The switch remains
-**off by default**. It only changes the flush threshold to WARN and adds a
-one-second periodic flush; messages, levels, and sinks are unchanged, and
-`--log_batch_info_flush=false` is the rollback setting.
+starting scene shifted materially between pairs. The second pair gained only
+0.8% at p95. The symbolized moving trace below shows that the hot flushes
+are ERROR, not INFO, so these A/B differences do not establish a benefit from
+INFO batching. The experimental switch was removed.
 
 The moving route also exposes a larger problem. The last 31 s of the fourth
 run alone generated about 735,560 ERROR records, including 367,780 failed
@@ -104,8 +103,48 @@ needs coverage for the save-backed sustained route before treating its frame
 times as a representative rendering benchmark. Do not suppress these errors
 to manufacture a speedup.
 
-The [capture procedure](CPU_HOTSPOT_PROFILING.md) has the ready-to-run elevated
-WPR command for the sustained route and the optional batching variant. A new
-sampled ETL is needed to verify moving-race flush stacks and correlate them
-with producer, consumed-swap, submission, and present events. WPR denied the
-non-elevated session, so this trace remains uncollected.
+## Symbolized moving-race trace
+
+An elevated run of the sustained route produced a valid ETL at
+`.local/cpu-profile/20260921-165652/`: 384,724 CPU samples, 1,051,998 waits,
+and zero lost events. The `race-moving` to `race-sustained` captures bracket
+source frames 4,930–6,136, 29.88 s and about 313.5 m of vehicle travel.
+There were 1,210 consumed swaps in 30.05 s, with a 24.870 ms median and
+45.778 ms p95 wall interval. Source-frame intervals had a 24.193 ms median
+and 45.639 ms p95. These are the same moving phase, not a stationary menu.
+
+The captured `consumed_swap` IDs were one ahead of the corresponding
+`SourceFrame` IDs. Subtracting one for this ETL yields 1,207 ordered pairs
+with no negative producer-to-consumer latencies. The source code now emits
+the source ordinal directly. For 1,206 fully paired frames (4,930–6,135),
+the median source-to-submission-begin latency is 25.133 ms (p95 39.323 ms),
+submission takes 2.097 ms (p95 2.869 ms), and source-to-present is 27.781 ms
+(p95 42.499 ms). Submission-end to consumed swap is 0.038 ms median, and
+consumed swap to present is 0.446 ms median. Most measured latency precedes
+submission; these spans are elapsed time, not proof that a particular task
+blocks the frame.
+
+In that 29.99 s window the GPU command thread used 26.175 s of sampled CPU.
+Its logging stacks account for 5.404 s in `file_helper::flush` and 2.296 s
+in `fwrite_bytes`, with no sample overlap. The 5.404 s of flush samples divide
+between `PipelineCache::ConfigurePipeline` (2.739 s) and failed draws in
+`CommandProcessor::ExecutePacketType3Draw` (2.665 s). Both are ERROR paths.
+The rolling log's last 22 s alone contain 364,437 missing-vertex-shader
+ERRORs and the same number of paired failed-draw ERRORs; only 53 INFO lines
+remain. These errors involve 17 distinct vertex shader hashes. The most
+frequent, `B8489164D5A86043`, appears 122,596 times. The 500 MB rolling log
+was already overwritten by this volume, so its counts understate the run.
+
+Across consumed-swap intervals, sampled logging CPU totals 7.681 s and
+correlates with interval duration (Pearson r = 0.784). This is a strong
+triage signal, not a predicted frame-time gain: making the missing shaders
+available will also cause the currently rejected draws to execute. The
+generated title thread also used 25.856 s of sampled CPU, with hot symbols
+`sub_829F04A8` and `sub_823E91F0`; their call stacks overlap and neither
+has yet been shown to be on the frame-critical path.
+
+The next rendering task is to cover the save-backed sustained scene in the
+offline vertex shader catalog, then repeat this capture and compare draw
+success, ERROR volume, and frame timings. Do not hide the ERROR reports as a
+performance fix. The [capture procedure](CPU_HOTSPOT_PROFILING.md) describes
+the repeatable WPR command.
