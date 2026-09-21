@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Release')]
+    [ValidateSet('Release', 'RelWithDebInfo')]
     [string]$Configuration = 'Release',
     [string]$GameRoot,
     [string]$StateRoot,
@@ -30,7 +30,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $resolvedBuildDirectory = if ($BuildDirectory) {
     (Resolve-Path -LiteralPath $BuildDirectory).Path
 } else {
-    Join-Path $repoRoot 'out/build/win-amd64-release'
+    Join-Path $repoRoot ('out/build/win-amd64-' + $Configuration.ToLowerInvariant())
 }
 $executable = Join-Path $resolvedBuildDirectory 'pinyon_shift.exe'
 $resolvedGameRoot = if ($GameRoot) {

@@ -1,5 +1,7 @@
 [CmdletBinding()]
 param(
+    [ValidateSet('Release', 'RelWithDebInfo')]
+    [string]$Configuration = 'Release',
     [ValidateRange(1, 32)] [int]$Parallel = [Math]::Max(2, [Math]::Min(16, [Environment]::ProcessorCount - 1)),
     [switch]$CleanGenerated,
     [switch]$JsonEvents
@@ -22,6 +24,7 @@ $manifest = Join-Path $root 'config/rexglue/pinyon_shift_manifest.toml'
 $logs = Resolve-PinyonLocalPath -RelativePath '.local/logs'
 [void](New-Item -ItemType Directory -Force -Path $logs)
 $env:SOURCE_DATE_EPOCH = '1784764800'
+$previewPreset = 'win-amd64-' + $Configuration.ToLowerInvariant()
 
 $supportedDumps = Get-Content -LiteralPath (Join-Path $root 'config/supported-dumps.json') -Raw |
     ConvertFrom-Json
@@ -107,18 +110,19 @@ if (-not (Test-Path -LiteralPath (Join-Path $generatedRoot 'default/codegen.buil
 Write-PinyonEvent build 82 'Compiling the playable preview. This is the longest step.' -JsonEvents:$JsonEvents
 Push-Location $root
 try {
-    Invoke-PinyonBuildCommand $environment.CMake @('--preset', 'win-amd64-release', "-DREXSDK_DIR=$sdkRoot") `
+    Invoke-PinyonBuildCommand $environment.CMake @('--preset', $previewPreset, "-DREXSDK_DIR=$sdkRoot") `
         (Join-Path $logs 'preview-configure.log') 'Preview configuration failed.'
-    Invoke-PinyonBuildCommand $environment.CMake @('--build', '--preset', 'win-amd64-release', '--parallel', "$Parallel") `
+    Invoke-PinyonBuildCommand $environment.CMake @('--build', '--preset', $previewPreset, '--parallel', "$Parallel") `
         (Join-Path $logs 'preview-build.log') 'Preview compilation failed.'
 }
 finally { Pop-Location }
 
-$executable = Join-Path $root 'out/build/win-amd64-release/pinyon_shift.exe'
+$executable = Join-Path $root "out/build/$previewPreset/pinyon_shift.exe"
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw 'Compilation completed without producing pinyon_shift.exe.'
 }
-$manifestPath = Resolve-PinyonLocalPath -RelativePath '.local/build.json'
+$manifestName = if ($Configuration -eq 'Release') { 'build.json' } else { 'build-profile.json' }
+$manifestPath = Resolve-PinyonLocalPath -RelativePath ".local/$manifestName"
 $git = Get-PinyonGit
 $sourceProvenance = Get-PinyonSourceProvenance -Root $root -Git $git
 $sourceCommit = $sourceProvenance.Commit
@@ -138,8 +142,9 @@ $payloadSha256 = if (Test-Path -LiteralPath $payloadMarkerPath -PathType Leaf) {
 $executableSha256 = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash
 $result = [ordered]@{
     schema_version = 3
+    configuration = $Configuration
     created_utc = [DateTime]::UtcNow.ToString('o')
-    executable = 'out/build/win-amd64-release/pinyon_shift.exe'
+    executable = "out/build/$previewPreset/pinyon_shift.exe"
     executable_sha256 = $executableSha256
     generated_locally = $true
     pinyon_shift_commit = $sourceCommit
