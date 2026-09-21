@@ -30,15 +30,16 @@ class CpuHotspotTests(unittest.TestCase):
             report = MODULE.summarize(markers, samples, waits)
 
             self.assertEqual(report["source_frames"], 3)
+            self.assertEqual(report["per_frame_ms"]["source_median"], 5.0)
             self.assertEqual(report["unmatched_rows"]["samples"], 1)
             self.assertEqual(report["per_frame_ms"]["cpu_median"], 1.5)
             self.assertEqual(report["top_functions"][0], {"name": "gpu!submit", "ms": 2.0})
             self.assertEqual(report["top_wait_reasons"][0], {"name": "Event", "ms": 4.0})
             self.assertEqual(report["per_frame_ms"]["wait_median"], 2.0)
             self.assertEqual(report["frames"], [
-                {"source_frame": 7, "cpu_ms": 1.5, "wait_ms": 2.0},
-                {"source_frame": 8, "cpu_ms": 2.0, "wait_ms": 3.0},
-                {"source_frame": 9, "cpu_ms": 0.0, "wait_ms": 0.0},
+                {"source_frame": 7, "cpu_ms": 1.5, "wait_ms": 2.0, "interval_ms": 10.0},
+                {"source_frame": 8, "cpu_ms": 2.0, "wait_ms": 3.0, "interval_ms": 5.0},
+                {"source_frame": 9, "cpu_ms": 0.0, "wait_ms": 0.0, "interval_ms": 5.0},
             ])
 
 

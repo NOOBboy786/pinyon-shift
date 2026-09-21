@@ -9,6 +9,7 @@ param(
     [int]$Parallel = [Math]::Max(2, [Math]::Min(16, [Environment]::ProcessorCount - 1)),
     [switch]$SkipBuild,
     [switch]$MarkersOnly,
+    [switch]$BatchInfoFlush,
     [switch]$OpenInWpa
 )
 
@@ -73,7 +74,10 @@ try {
         '-RenderTestScript', $RenderTestScript,
         '-RenderTestOutput', (Join-Path $Output 'render-test'),
         '-RenderTestTimeoutSeconds', "$TimeoutSeconds", '-Hidden',
-        '-GameArgumentsJson', '["--pinyon_shift_capture_performance=true","--perf_log_max_mb=512"]',
+        '-GameArgumentsJson', (ConvertTo-Json -InputObject @(
+            '--pinyon_shift_capture_performance=true', '--perf_log_max_mb=512',
+            ('--log_batch_info_flush=' + $BatchInfoFlush.IsPresent.ToString().ToLowerInvariant())
+        ) -Compress),
         '-Json'
     )
     & (Join-Path $PSHOME 'pwsh.exe') @launchArguments |
@@ -104,6 +108,7 @@ $manifest = [ordered]@{
     schema = 'pinyon-shift.cpu-profile-capture.v1'
     created_utc = [DateTime]::UtcNow.ToString('o')
     markers_only = $MarkersOnly.IsPresent
+    batch_info_flush = $BatchInfoFlush.IsPresent
     route = (Resolve-Path -LiteralPath $RenderTestScript).Path
     state_root = $StateRoot
     etl = $etl

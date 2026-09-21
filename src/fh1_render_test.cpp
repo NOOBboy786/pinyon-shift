@@ -20,6 +20,7 @@
 #include <rex/input/input.h>
 #include <rex/input/input_driver.h>
 #include <rex/input/input_system.h>
+#include <rex/perf/counter.h>
 #include <rex/runtime.h>
 #include <rex/system/interfaces/graphics.h>
 #include <rex/ui/presenter.h>
@@ -248,6 +249,10 @@ class ScriptedInputDriver final : public rex::input::InputDriver {
       while (previous == SIZE_MAX || index > previous) {
         if (last_input_step_.compare_exchange_weak(previous, index,
                                                    std::memory_order_relaxed)) {
+          rex::perf::TraceCriticalPath(
+              "render_test_input",
+              rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+              int64_t(g_test.inputs[index].frame), int64_t(frame));
           // Records delivery to the input API, not acceptance by a menu.
           diagnostics::RecordEvent(
               "fh1.render_test.input_step",
@@ -491,6 +496,10 @@ bool ObserveOutput(
                  g_test.captures[g_test.next_capture].frame + 1)) {
     auto& capture = g_test.captures[g_test.next_capture];
     capture.trigger_output_frame = context.frame_sequence;
+    rex::perf::TraceCriticalPath(
+        "render_test_capture",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        int64_t(capture.frame), int64_t(context.frame_sequence));
     capture.trigger_elapsed_us = uint64_t(
         std::chrono::duration_cast<std::chrono::microseconds>(
             now - g_test.clock_origin).count());

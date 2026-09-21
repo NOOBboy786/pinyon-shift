@@ -31,10 +31,12 @@ foreach (var module in log.ModuleFiles) {
 }
 
 using var markers = new StreamWriter(Path.Combine(directory, "markers.csv"));
+using var criticalPath = new StreamWriter(Path.Combine(directory, "critical-path.csv"));
 using var samples = new StreamWriter(Path.Combine(directory, "samples.csv"));
 using var waits = new StreamWriter(Path.Combine(directory, "waits.csv"));
-markers.WriteLine("timestamp_ms,source_frame");
-samples.WriteLine("timestamp_ms,cpu_ms,module,function,thread_id,project_caller");
+markers.WriteLine("timestamp_ms,source_frame,thread_id");
+criticalPath.WriteLine("timestamp_ms,event,source_frame,thread_id,value0,value1,value2");
+samples.WriteLine("timestamp_ms,cpu_ms,module,function,thread_id,project_caller,ip,rva,stack");
 waits.WriteLine("timestamp_ms,wait_ms,wait_reason,thread_id");
 var waiting = new Dictionary<int, (double start, string reason)>();
 var markerCount = 0;
@@ -44,10 +46,17 @@ var missingStacks = 0;
 var source = log.Events.GetSource();
 var providerGuid = Guid.Parse("f36ab1a6-80bb-4482-b1b9-92a6ec870258");
 source.Dynamic.All += data => {
-    if (data.ProviderGuid != providerGuid ||
-        data.EventName != "SourceFrame" || data.ProcessID != processId) return;
-    markers.WriteLine($"{Number(data.TimeStampRelativeMSec)},{data.PayloadByName("SourceFrame")}");
-    markerCount++;
+    if (data.ProviderGuid != providerGuid || data.ProcessID != processId) return;
+    if (data.EventName == "SourceFrame") {
+        markers.WriteLine($"{Number(data.TimeStampRelativeMSec)},{data.PayloadByName("SourceFrame")},{data.ThreadID}");
+        markerCount++;
+    } else if (data.EventName == "CriticalPath") {
+        Csv(criticalPath, Number(data.TimeStampRelativeMSec),
+            data.PayloadByName("Event")?.ToString() ?? "",
+            data.PayloadByName("SourceFrame")?.ToString() ?? "", data.ThreadID.ToString(CultureInfo.InvariantCulture),
+            data.PayloadByName("Value0")?.ToString() ?? "", data.PayloadByName("Value1")?.ToString() ?? "",
+            data.PayloadByName("Value2")?.ToString() ?? "");
+    }
 };
 source.Kernel.PerfInfoSample += data => {
     if (data.ProcessID != processId) return;
@@ -58,13 +67,19 @@ source.Kernel.PerfInfoSample += data => {
     var function = leaf?.FullMethodName;
     if (string.IsNullOrEmpty(function)) function = "<unknown>";
     var projectCaller = "";
+    var stackNames = new List<string>();
     for (var frame = stack; frame != null; frame = frame.Caller) {
+        stackNames.Add($"{frame.CodeAddress.ModuleName}!{frame.CodeAddress.FullMethodName}");
         if (!projectModules.Contains(frame.CodeAddress.ModuleName)) continue;
-        projectCaller = $"{frame.CodeAddress.ModuleName}!{frame.CodeAddress.FullMethodName}";
-        break;
+        if (projectCaller == "")
+            projectCaller = stackNames[^1];
     }
+    var imageBase = leaf?.ModuleFile?.ImageBase ?? 0;
+    var rva = leaf != null && imageBase != 0 && leaf.Address >= imageBase
+        ? $"0x{leaf.Address - imageBase:X}" : "";
     Csv(samples, Number(data.TimeStampRelativeMSec), Number(log.SampleProfileInterval.TotalMilliseconds),
-        module, function, data.ThreadID.ToString(CultureInfo.InvariantCulture), projectCaller);
+        module, function, data.ThreadID.ToString(CultureInfo.InvariantCulture), projectCaller,
+        leaf == null ? "" : $"0x{leaf.Address:X}", rva, string.Join(" <- ", stackNames));
     sampleCount++;
 };
 source.Kernel.ThreadCSwitch += data => {

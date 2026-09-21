@@ -32,6 +32,9 @@ def summarize(markers_path, samples_path, waits_path=None, start_frame=None, end
     if start_frame is not None and end_frame is not None and start_frame > end_frame:
         raise ValueError("start frame is after end frame")
     times = [item[0] for item in markers]
+    ids = [item[1] for item in markers]
+    if any(next_id != frame + 1 for frame, next_id in zip(ids, ids[1:])):
+        raise ValueError("source-frame markers contain a duplicate or gap")
 
     def frame_at(timestamp):
         index = bisect.bisect_right(times, timestamp) - 1
@@ -45,9 +48,9 @@ def summarize(markers_path, samples_path, waits_path=None, start_frame=None, end
         return frame
 
     frames = defaultdict(lambda: {"cpu_ms": 0.0, "wait_ms": 0.0})
-    for _, frame in markers[:-1]:
+    for index, (_, frame) in enumerate(markers[:-1]):
         if (start_frame is None or frame >= start_frame) and (end_frame is None or frame <= end_frame):
-            frames[frame]
+            frames[frame]["interval_ms"] = times[index + 1] - times[index]
     functions = defaultdict(float)
     modules = defaultdict(float)
     project_callers = defaultdict(float)
@@ -100,9 +103,11 @@ def summarize(markers_path, samples_path, waits_path=None, start_frame=None, end
 
     cpu = [value["cpu_ms"] for value in frames.values()]
     wait = [value["wait_ms"] for value in frames.values()]
+    intervals = [value["interval_ms"] for value in frames.values()]
     per_frame = [
         {"source_frame": frame, "cpu_ms": round(value["cpu_ms"], 3),
-         "wait_ms": round(value["wait_ms"], 3)}
+         "wait_ms": round(value["wait_ms"], 3),
+         "interval_ms": round(value["interval_ms"], 3)}
         for frame, value in sorted(frames.items())
     ]
     return {
@@ -110,6 +115,8 @@ def summarize(markers_path, samples_path, waits_path=None, start_frame=None, end
         "source_frames": len(frames),
         "unmatched_rows": unmatched,
         "per_frame_ms": {
+            "source_median": round(statistics.median(intervals), 3) if intervals else 0.0,
+            "source_p95": round(percentile(intervals, 0.95), 3),
             "cpu_median": round(statistics.median(cpu), 3) if cpu else 0.0,
             "cpu_p95": round(percentile(cpu, 0.95), 3),
             "wait_median": round(statistics.median(wait), 3) if wait else 0.0,
@@ -131,6 +138,7 @@ def markdown(report, limit=20):
         "# CPU hotspot report",
         "",
         f"Frames: {report['source_frames']}",
+        f"Source-frame interval: median {timing['source_median']:.3f} ms, p95 {timing['source_p95']:.3f} ms",
         f"CPU/frame: median {timing['cpu_median']:.3f} ms, p95 {timing['cpu_p95']:.3f} ms",
         f"Wait/frame: median {timing['wait_median']:.3f} ms, p95 {timing['wait_p95']:.3f} ms",
         "Wait totals sum blocked time across all game threads; they are not frame latency.",

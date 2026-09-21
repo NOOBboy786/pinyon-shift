@@ -43,7 +43,7 @@ $results = foreach ($module in $modules) {
     }
     if ($summary -notmatch '(?s)Age: (\d+).*?GUID: (\{[^}]+\})' -or
         $Matches[1] -ne $binaryAge -or $Matches[2] -ne $binaryGuid) {
-        throw "PDB identity does not match its binary: $pdb"
+        throw "PDB identity does not match its binary: $pdb (binary $binaryGuid/$binaryAge; PDB $($Matches[2])/$($Matches[1]))"
     }
     [ordered]@{
         binary = [IO.Path]::GetRelativePath($root, $binary).Replace('\', '/')
