@@ -58,12 +58,8 @@ foreach ($module in $symbols.modules) {
 $symbols | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $Output 'symbols.json')
 
 $etl = Join-Path $Output 'pinyon-shift.etl'
-$wprProfile = "$profile!PinyonCriticalPath.Verbose"
-$wprArguments = if ($MarkersOnly) {
-    @('-start', $wprProfile, '-filemode')
-} else {
-    @('-start', 'CPU.Verbose', '-start', $wprProfile, '-filemode')
-}
+$wprProfile = if ($MarkersOnly) { 'PinyonCriticalPath' } else { 'PinyonCpuHotspots' }
+$wprArguments = @('-start', "$profile!$wprProfile.Verbose", '-filemode')
 $recording = $false
 $startedUtc = [DateTime]::UtcNow
 try {

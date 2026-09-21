@@ -16,8 +16,9 @@ then run an elevated PowerShell from the repository root:
 ```
 
 The script verifies the AppData save, rejects an already-running game, builds
-`RelWithDebInfo`, checks each binary against its PDB, records `CPU.Verbose` and
-the project TraceLogging provider, runs
+`RelWithDebInfo`, checks each binary against its PDB, records a focused kernel
+profile (sampled CPU, context switches, ready threads, processes, and image
+loads) plus the project TraceLogging provider, runs
 `config/render-tests/fh1-race.fh1test`, and saves the ETL, symbols, frame CSV,
 and capture manifest below `.local/cpu-profile`.
 
