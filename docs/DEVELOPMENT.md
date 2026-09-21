@@ -2,7 +2,8 @@
 
 Consolidated from the development records at `53f9bf9` (2026-09-10).
 This is the current starting point for development, not a release announcement.
-The source pins ShiftGlue `7349a0951ebf2bb55720f8bf2e855bb1677ec990`;
+At main checkpoint `2fa804c`, the source pins ShiftGlue
+`a6905c39aed6353916903ada3e0c840bbc39caa2`;
 older binary hashes in individual experiment reports describe those experiments.
 
 ## Documentation map
@@ -12,6 +13,7 @@ older binary hashes in individual experiment reports describe those experiments.
 | Build or recover an installation | [Building](BUILDING.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Configure experimental graphics | [Graphics recovery/settings](TROUBLESHOOTING.md) |
 | Current findings and remaining work | This document and the [resource migration checklist](native-renderer/NATIVE_RESOURCE_MIGRATION_CHECKLIST.md) |
+| Prioritized performance experiments | [Performance backlog](native-renderer/PERFORMANCE_BACKLOG.md): current baselines, ten candidates, dependencies, and acceptance gates |
 | Extend the original game UI | [UI API research and implementation tasks](UI_API_PLAN.md) |
 | Reproduce retained renderer changes | [Owned depth](native-renderer/A6_OWNED_DEPTH_RETENTION.md), [reflection mips](native-renderer/REFLECTION_MIPMAP_REPLACEMENT.md), [Carson cache fix](native-renderer/CARSON_GEOMETRY_CACHE_FIX.md) |
 | Produce and validate artifacts | [Artifact production](native-renderer/P1_ARTIFACT_PRODUCTION.md), [shader pack contract](native-renderer/SHADER_PACK_FORMAT.md), [render tests](native-renderer/FH1_RENDER_TEST_AUTOMATION.md) |
@@ -152,7 +154,11 @@ is justified by these experiments.
    those vendors. Follow the [P1 gates](native-renderer/P1_ARTIFACT_PRODUCTION.md).
 4. **Renderer migration:** broader B1–B4 and C work is deferred, not complete.
    The [single migration checklist](native-renderer/NATIVE_RESOURCE_MIGRATION_CHECKLIST.md)
-   retains its scope and acceptance gates. The focused mipmap/cache fixes do
+   retains its scope and acceptance gates. The new
+   [performance backlog](native-renderer/PERFORMANCE_BACKLOG.md) breaks the supplied
+   research into gated experiments, starting with a current baseline, geometry
+   admission, dirty uploads, and constant-buffer reuse. Planning does not resume
+   deferred implementations. The focused mipmap/cache fixes do
    not reopen the stopped HUD/recycling comparisons automatically.
 
 ## Validation and evidence

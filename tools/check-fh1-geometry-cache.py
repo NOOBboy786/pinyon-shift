@@ -41,7 +41,7 @@ def main():
     assert source.index('D3D12_GPU_VIRTUAL_ADDRESS geometry_address = 0;') < skip_start
     assert source.rfind('switch (vfetch_constant.type)', 0, skip_start) > source.index('  // Ensure vertex buffers are resident.')
     header = (root / 'include/rex/graphics/d3d12/command_processor.h').read_text()
-    members = header[header.index('  struct Fh1Geometry {'):header.index('  uint64_t fh1_geometry_hits_ = 0;') + len('  uint64_t fh1_geometry_hits_ = 0;')]
+    members = header[header.index('  struct Fh1Geometry {'):header.index('  D3D12_GPU_VIRTUAL_ADDRESS current_fh1_geometry_address_ = 0;')]
     harness = r"""
 #include <algorithm>
 #include <rex/graphics/d3d12/fh1_geometry.h>
@@ -66,6 +66,8 @@ constexpr int D3D12_RESOURCE_FLAG_NONE=0;
 #define REXGPU_INFO(...) ((void)0)
 inline bool fh1_recycle_geometry_buffers=false;
 inline bool fh1_contain_geometry_windows=false;
+inline bool fh1_cache_geometry_rejections=true;
+inline int32_t fh1_geometry_cache_mb=32;
 #define REXCVAR_GET(name) name
 struct ID3D12Resource { std::vector<uint8_t> bytes; explicit ID3D12Resource(size_t size):bytes(size){} void SetName(const wchar_t*){} uint64_t GetGPUVirtualAddress(){return reinterpret_cast<uint64_t>(bytes.data());} };
 namespace Microsoft::WRL {
@@ -580,6 +582,12 @@ int main(int argc,char**){
   for(uint32_t i=0;i<512;i++)assert(c.GetFh1OwnedGeometry(i*65536,64));
   assert(c.fh1_geometry_bytes_==32*1024*1024);
   assert(!c.GetFh1OwnedGeometry(512*65536,64)); // every entry is still in flight
+  const auto allocation_queries=c.fh1_geometry_allocation_info_calls_;
+  const auto eviction_scans=c.fh1_geometry_eviction_scans_;
+  assert(!c.GetFh1OwnedGeometry(512*65536,64));
+  assert(c.fh1_geometry_rejection_hits_==1);
+  assert(c.fh1_geometry_allocation_info_calls_==allocation_queries);
+  assert(c.fh1_geometry_eviction_scans_==eviction_scans);
   c.submission_completed_=1;c.submission_current_=2;
   const auto creations=c.provider.device.creations;
   assert(!c.GetFh1OwnedGeometry(512*65536,64));

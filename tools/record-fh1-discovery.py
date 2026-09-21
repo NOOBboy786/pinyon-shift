@@ -277,8 +277,8 @@ def record(args):
                     break
                 try:
                     lines = tail.read(path, limit=8 * 1024 * 1024, identity=identity)
-                except FileNotFoundError:
-                    continue  # Normal log rotation.
+                except (FileNotFoundError, PermissionError):
+                    continue  # Normal log rotation or a transient Windows sharing lock.
                 for line in lines:
                     if 'logging.ready' in line:
                         active_log_session = f'"pid":"{args.pid}"' in line

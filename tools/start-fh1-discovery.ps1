@@ -34,13 +34,40 @@ if ($LASTEXITCODE -ne 0) { throw 'Recorder preparation failed' }
 $exeRoot = if ($BuildDirectory) {
     (Resolve-Path -LiteralPath $BuildDirectory).Path
 } else { Join-Path $repo 'out/build/win-amd64-release' }
-$manifest = [ordered]@{ started_utc=[DateTime]::UtcNow.ToString('o'); state_root=$StateRoot; files=@{} }
+$manifest = [ordered]@{
+    started_utc = [DateTime]::UtcNow.ToString('o')
+    state_root = $StateRoot
+    render_test = if ($RenderTestScript) { (Resolve-Path -LiteralPath $RenderTestScript).Path } else { $null }
+    game_arguments = if ($GameArgumentsJson) { @(ConvertFrom-Json $GameArgumentsJson) } else { @() }
+    os = [Environment]::OSVersion.VersionString
+    gpus = @(Get-CimInstance Win32_VideoController | ForEach-Object {
+        [ordered]@{ name=$_.Name; driver_version=$_.DriverVersion; adapter_ram=$_.AdapterRAM }
+    })
+    files = @{}
+    state_artifacts = @{}
+}
 foreach ($name in @('pinyon_shift.exe','rexgpu-fh1.dll','rexruntime.dll',
                     'pinyon_shift_SpeechFacade_default.dll','pinyon_shift_XMediaFacade_default.dll')) {
     $manifest.files[$name] = (Get-FileHash -LiteralPath (Join-Path $exeRoot $name)).Hash
 }
+$runtimeManifest = Join-Path $exeRoot 'pinyon_shift_build.json'
+if (Test-Path -LiteralPath $runtimeManifest) {
+    $manifest.source = Get-Content -LiteralPath $runtimeManifest -Raw | ConvertFrom-Json
+}
+if ($RenderTestScript) {
+    $manifest.files['render_test'] = (Get-FileHash -LiteralPath $RenderTestScript).Hash
+}
+$cache = Join-Path $StateRoot 'cache'
+if (Test-Path -LiteralPath $cache) {
+    Get-ChildItem -LiteralPath $cache -File | Where-Object {
+        $_.Name -like 'fh1-native-*' -or $_.Name -like 'fh1-gpu-prewarm-*' -or $_.Extension -eq '.pnsp'
+    } | ForEach-Object { $manifest.state_artifacts[$_.Name] = (Get-FileHash -LiteralPath $_.FullName).Hash }
+}
 $config = Join-Path $StateRoot 'config/pinyon_shift.toml'
-if (Test-Path -LiteralPath $config) { Copy-Item -LiteralPath $config -Destination (Join-Path $Output 'settings.toml') }
+if (Test-Path -LiteralPath $config) {
+    Copy-Item -LiteralPath $config -Destination (Join-Path $Output 'settings.toml')
+    $manifest.files['settings.toml'] = (Get-FileHash -LiteralPath $config).Hash
+}
 $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $Output 'build.json')
 $job = Start-Job -ArgumentList $repo,$StateRoot,$Output,$RenderTestScript,$CheckpointSeconds,$exeRoot,$PerformanceOnly.IsPresent,$GameArgumentsJson -ScriptBlock {
     param($repo,$stateRoot,$output,$renderTest,$checkpoint,$buildDirectory,$performanceOnly,$extraArgumentsJson)
