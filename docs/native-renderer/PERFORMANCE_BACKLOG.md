@@ -341,22 +341,29 @@ record that result and defer policy changes; never bypass fences or fake results
 
 ## PERF-10 — Native post-processing/output subchain
 
+Investigated on 2026-09-21. The measured 1280×720 candidate requires previous
+contents, ordered partial updates, padded rows, format aliases and alternating
+history. A direct native handoff was rejected before implementation because it
+would change those semantics. See the
+[PERF-10 results](PERFORMANCE_10_RESULTS_2026-09-21.md).
+
 Entry points: SDK D3D12 full-screen replacements, render targets, resolves,
 texture consumption, and output publication. The title's
 [guest_output_renderer.cpp](../../src/native_renderer/guest_output_renderer.cpp)
 currently installs a render-test observer, not a production scene renderer.
 
-- [ ] Select one costly color/post-processing subchain. Enumerate intermediates,
+- [x] Select one costly color/post-processing subchain. Enumerate intermediates,
   later readers, temporal history, aliases, and guest-visible consumers before
   treating any target as final output.
-- [ ] Keep intermediate textures native through consumption; remove only proven
-  unnecessary resolve/reimport cycles. Evaluate fusion separately where
-  dependencies and precision allow it.
-- [ ] Verify crop versus padded backing dimensions, gamma/color space,
-  temporal effects, partial writes, and correct source-frame publication.
-- [ ] Count full-screen copies, conversions, bytes, transitions, and end-to-end
-  cost. Review moving gameplay, map, pause, photo, video/transitions, and each
-  admitted scale. Preserve compatibility fallback outside the chosen contract.
+- [x] Evaluate keeping intermediates native through consumption. No resolve or
+  reimport was proven unnecessary: the target is read before and after partial
+  publication and through multiple guest formats, so the shortcut was rejected.
+- [x] Verify crop versus padded backing dimensions, temporal effects, partial
+  writes, and correct source-frame publication. The candidate did not advance
+  to gamma parity because its partial/history contract already failed.
+- [x] Count full-screen copies, conversions, bytes, transitions, and end-to-end
+  cost. The candidate failed during moving gameplay before a mode/scale matrix;
+  the unchanged compatibility path remains authoritative everywhere.
 
 Accept when: copies/conversions and whole-chain cost fall without frame/history
 errors or visual regressions. The rejected scaled-accumulator presentation

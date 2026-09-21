@@ -11,6 +11,8 @@ MARKERS = {
     "attempts": "FH1 texture reload attempt ",
     "invalidations": "FH1 texture invalidated ",
     "ranges": "FH1 texture invalidation range ",
+    "publications": "FH1 resolve publication ",
+    "consumers": "FH1 texture reload consumer ",
 }
 
 
@@ -47,6 +49,15 @@ def summarize(events):
     invalidations = collections.Counter(
         (event["gpu"], event["part"]) for event in events["invalidations"]
     )
+    publications = collections.Counter(
+        (event["address"], event["length"], event["dest_info"], event["dest_pitch"])
+        for event in events["publications"]
+    )
+    consumers = collections.Counter(
+        (event["base"], event["width"], event["height"], event["format"],
+         event["vs"], event["ps"])
+        for event in events["consumers"]
+    )
     return {
         "reload_attempts": len(events["attempts"]),
         "requested_bytes": sum(item["bytes"] for item in ranked.values()),
@@ -58,6 +69,16 @@ def summarize(events):
             "gpu": sum(event["gpu"] for event in events["ranges"]),
             "cpu": sum(not event["gpu"] for event in events["ranges"]),
         },
+        "resolve_publications": [
+            {"address": key[0], "length": key[1], "dest_info": key[2],
+             "dest_pitch": key[3], "count": count}
+            for key, count in publications.most_common()
+        ],
+        "reload_consumers": [
+            {"base": key[0], "width": key[1], "height": key[2],
+             "format": key[3], "vs": key[4], "ps": key[5], "count": count}
+            for key, count in consumers.most_common()
+        ],
         "textures": top,
     }
 
@@ -74,11 +95,17 @@ def self_test():
         ],
         "invalidations": [{"gpu": True, "part": "base"}],
         "ranges": [{"gpu": False}, {"gpu": True}],
+        "publications": [{"address": "1000", "length": 64,
+                          "dest_info": 7, "dest_pitch": 4}],
+        "consumers": [{"base": "1000", "width": 4, "height": 4,
+                       "format": 7, "vs": "A", "ps": "B"}],
     })
     assert result["reload_attempts"] == 2
     assert result["requested_bytes"] == 128
     assert result["textures"][0]["loads"] == 2
     assert result["invalidations"] == {"gpu_base": 1}
+    assert result["resolve_publications"][0]["count"] == 1
+    assert result["reload_consumers"][0]["ps"] == "B"
     print("PASS")
 
 
