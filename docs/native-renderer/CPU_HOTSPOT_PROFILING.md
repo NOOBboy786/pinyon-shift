@@ -80,8 +80,9 @@ python tools/summarize-cpu-hotspots.py markers.csv samples.csv `
   --output race-hotspots.json
 ```
 
-Choose a contiguous moving-race range from `markers.csv`; the frame numbers
-above reproduce the 2026-09-21 example, not a fixed range for future captures.
+Choose a contiguous range from `markers.csv`; the frame numbers above reproduce
+the 2026-09-21 example, which has only 31 frames after the `race-moving`
+capture. Extend the route before measuring sustained moving-race performance.
 The script assigns every sample and wait to the latest preceding source-frame
 marker and writes both JSON and Markdown, ranked by total sampled CPU or wait
 time. The JSON includes individual frame CPU and wait totals. Both metrics add

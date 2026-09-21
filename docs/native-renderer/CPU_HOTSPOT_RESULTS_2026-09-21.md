@@ -1,10 +1,10 @@
 # First symbolized CPU hotspot capture — 2026-09-21
 
-The moving Recaro race now has a valid sampled CPU and context-switch trace.
-The first optimization investigation should focus on two generated title
-regions and runtime file logging, rather than another speculative graphics
-change. This is a ranking of CPU execution, not proof that each item delays
-presentation; confirm the relevant thread and stack in the ETL before editing.
+The Recaro route now has a valid sampled CPU and context-switch trace. Two
+generated title regions and runtime file logging dominate this selected CPU
+window, but it is mostly **before** sustained race movement. This is a ranking
+of CPU execution, not proof that each item delays presentation; confirm the
+relevant thread and stack in the ETL before editing.
 
 ## Capture quality and scope
 
@@ -18,7 +18,9 @@ presentation; confirm the relevant thread and stack in the ETL before editing.
   `rexruntimerd`, and `rexgpu-fh1rd`. Windows kernel and display-driver frames
   are not fully symbolized by the bundled project symbols.
 - The ranked window is source frames 4,200–4,590: 391 frames across 8.408 s.
-  Rows outside that deliberately selected window are excluded, not lost.
+  The route takes its `race-moving` capture at frame 4,560 and stops at 4,590,
+  leaving only 31 moving frames (about 0.67 s). This window must not be used
+  as a sustained moving-race benchmark. Rows outside it are excluded, not lost.
 
 Across these frames, sampled CPU time summed over all game threads has a
 65 ms/frame median and 80 ms/frame p95. These are **not** frame wall times:
@@ -43,7 +45,9 @@ For the logging row, 1,073 of its 1,576 samples have kernel leaves, so an
 ordinary leaf-function ranking hides much of that cost. The per-frame module
 totals are title 37.26 ms, Windows kernel 8.91 ms, GPU module 7.69 ms, and
 runtime module 3.84 ms. Kernel samples need public Microsoft symbols or stack
-inspection before assigning them to a specific subsystem.
+inspection before assigning them to a specific subsystem. The 31-frame moving
+slice also ranks the two title regions highest among named leaves, but is too
+short to establish a stable race-specific cost or a whole-frame improvement.
 
 The local `race-hotspots.md` in that capture directory contains the function,
 module, thread, and wait rankings; its JSON companion
@@ -60,6 +64,7 @@ python tools/summarize-cpu-hotspots.py `
 ```
 
 The [capture procedure](CPU_HOTSPOT_PROFILING.md) covers repeat runs and when
-to use PIX for CPU/GPU overlap. The next performance change should carry a
-before/after trace on the same moving window, plus the existing visual and
-gameplay checks.
+to use PIX for CPU/GPU overlap. Before a race-specific optimization, extend
+the route past frame 4,590 and repeat this capture over a sustained moving
+segment. Any change then needs a before/after trace on that same segment, plus
+the existing visual and gameplay checks.
