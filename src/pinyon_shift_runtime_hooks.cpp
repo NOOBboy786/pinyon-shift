@@ -50,6 +50,21 @@ std::atomic<uint32_t> g_ui_menu_field_trace_count{};
 std::atomic<uint32_t> g_ui_menu_dispatch_trace_count{};
 std::atomic<uint32_t> g_ui_text_value_trace_count{};
 std::atomic<uint32_t> g_ui_pause_button_text_get_trace_count{};
+// UI-14 crash probe counters. The label/text binding path is traced once the
+// insert route reaches pause open, so each counter stays small.
+std::atomic<uint32_t> g_ui_label_apply_trace_count{};
+std::atomic<uint32_t> g_ui_text_bind_trace_count{};
+std::atomic<uint32_t> g_ui_item_factory_trace_count{};
+std::atomic<uint32_t> g_ui_binding_trace_count{};
+std::atomic<uint32_t> g_ui_identity_append_trace_count{};
+std::atomic<uint32_t> g_ui_identity_lookup_trace_count{};
+std::atomic<uint32_t> g_ui_scene_identity_lookup_trace_count{};
+std::atomic<uint32_t> g_ui_scene_identity_delivery_trace_count{};
+std::atomic<uint32_t> g_ui_scene_tree_walk_trace_count{};
+std::atomic<bool> g_ui_scene_tree_walk_trace_enabled{};
+std::atomic<uint32_t> g_ui_scene_insert_first_button{};
+std::atomic<uint32_t> g_ui_list_selection_trace_count{};
+std::atomic<uint32_t> g_ui_scene_cleanup_trace_count{};
 std::atomic<uint32_t> g_ui_insert_entry_trace_count{};
 std::atomic<uint32_t> g_ui_pause_button_count{};
 std::array<uint32_t, 128> g_ui_pause_buttons{};
@@ -956,6 +971,359 @@ void PinyonShiftTraceUiListMethod(PPCRegister& r3, PPCRegister& r4,
 void PinyonShiftTraceUiListMethod2(PPCRegister& r3, PPCRegister& r4,
                                    PPCRegister& r5) {
   TraceUiListMethod("82E77260", r3, r4, r5);
+}
+
+namespace {
+
+std::string UiProbeField(uint32_t address, uint32_t offset) {
+  return PinyonShiftGuestRangeReadable(address + offset, 4u)
+             ? Hex32(LoadGuestU32(address + offset))
+             : std::string("00000000");
+}
+
+}  // namespace
+
+// UI-14 crash probe. `sub_827DD058` is the last function entered before the
+// eighth-row access violation: it hands `object + 164` (the embedded
+// CUI4TextElement) to `sub_82E78820` together with the resolved label string,
+// and the faulting load is `*(element + 8)` inside that callee. Recording the
+// receiver, its three embedded text elements, and the caller separates "the
+// eighth button's text element was never bound" from "a stock row was
+// corrupted by the extra record". Default-off, bounded, read-only.
+void PinyonShiftTraceUiLabelApply(PPCRegister& r3, PPCRegister& r4,
+                                  PPCRegister& r5, uint64_t& lr) {
+  if (!UiTraceEnabled() ||
+      g_ui_label_apply_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          256u) {
+    return;
+  }
+  const uint32_t object = r3.u32;
+  const uint32_t text = object + 164u;
+  if (UiExperimentModeValue() == UiExperimentMode::kSceneInsert &&
+      PinyonShiftGuestRangeReadable(text, 12u) &&
+      LoadGuestU32(text) == 0x82026B38u && LoadGuestU32(text + 8u) == 0u) {
+    const uint32_t source =
+        g_ui_scene_insert_first_button.load(std::memory_order_relaxed);
+    const uint32_t source_text = source + 164u;
+    if (source != 0u && source != object &&
+        PinyonShiftGuestRangeReadable(source_text, 12u) &&
+        LoadGuestU32(source_text) == 0x82026B38u &&
+        LoadGuestU32(source_text + 8u) != 0u) {
+      StoreGuestU32(text + 4u, LoadGuestU32(source_text + 4u));
+      StoreGuestU32(text + 8u, LoadGuestU32(source_text + 8u));
+      pinyon_shift::diagnostics::RecordEvent(
+          "ui.experiment.scene_insert.text_repaired",
+          {{"button", Hex32(object)}, {"source", Hex32(source)}});
+    }
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.label.apply",
+      {{"object", Hex32(object)},
+       {"vtable", UiProbeField(object, 0u)},
+       {"argument_4", Hex32(r4.u32)},
+       {"argument_5", Hex32(r5.u32)},
+       {"return_address", Hex32(static_cast<uint32_t>(lr))},
+       {"owner_84", UiProbeField(object, 84u)},
+       {"owner_160", UiProbeField(object, 160u)},
+       {"owner_200", UiProbeField(object, 200u)},
+       {"owner_232", UiProbeField(object, 232u)},
+       {"owner_234", UiProbeField(object, 234u)},
+       {"owner_248", UiProbeField(object, 248u)},
+       {"owner_252_vtable", UiProbeField(object, 252u)},
+       {"owner_252_8", UiProbeField(object, 260u)},
+       {"owner_264_vtable", UiProbeField(object, 264u)},
+       {"owner_264_8", UiProbeField(object, 272u)},
+       {"text_vtable", UiProbeField(text, 0u)},
+       {"text_4", UiProbeField(text, 4u)},
+       {"text_8", UiProbeField(text, 8u)},
+       {"text_12", UiProbeField(text, 12u)},
+       {"text_16", UiProbeField(text, 16u)}});
+}
+
+// Entry point of the callee that faults. `r3` is the embedded text element and
+// `r4`/`r5` are the label arguments, so the record shows which element lost its
+// resource pointer (element + 8) and which object owns it.
+void PinyonShiftTraceUiTextBind(PPCRegister& r3, PPCRegister& r4,
+                                PPCRegister& r5, uint64_t& lr) {
+  if (!UiTraceEnabled() ||
+      g_ui_text_bind_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          256u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.text.bind",
+      {{"element", Hex32(r3.u32)},
+       {"vtable", UiProbeField(r3.u32, 0u)},
+       {"element_4", UiProbeField(r3.u32, 4u)},
+       {"element_8", UiProbeField(r3.u32, 8u)},
+       {"element_12", UiProbeField(r3.u32, 12u)},
+       {"element_16", UiProbeField(r3.u32, 16u)},
+       {"argument_4", Hex32(r4.u32)},
+       {"argument_5", Hex32(r5.u32)},
+       {"return_address", Hex32(static_cast<uint32_t>(lr))}});
+}
+
+// Item factory of the scene deserializer. `r5` is the record's name hash and
+// `r6` the authored identity index that the type-0x14 properties reference, so
+// the record shows the identity values the duplicated row's records carry.
+void PinyonShiftTraceUiItemFactory(PPCRegister& r3, PPCRegister& r4,
+                                   PPCRegister& r5, PPCRegister& r6,
+                                   PPCRegister& r7, PPCRegister& r8) {
+  if (!UiTraceEnabled() ||
+      g_ui_item_factory_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          2048u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.item.factory",
+      {{"container", Hex32(r3.u32)},
+       {"parent", Hex32(r4.u32)},
+       {"name", Hex32(r5.u32)},
+       {"identity", Hex32(r6.u32)},
+       {"kind", Hex32(r7.u32)},
+       {"extra", Hex32(r8.u32)}});
+}
+
+// Property application of the deserializer for one resolved type-0x14 entry.
+void PinyonShiftTraceUiBindingApply(PPCRegister& r3, PPCRegister& r4,
+                                    PPCRegister& r5) {
+  if (!UiTraceEnabled() ||
+      g_ui_binding_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          2048u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.binding.apply",
+      {{"container", Hex32(r3.u32)},
+       {"property", Hex32(r4.u32)},
+       {"entry", Hex32(r5.u32)},
+       {"entry_hash", UiProbeField(r5.u32, 0u)},
+       {"entry_4", UiProbeField(r5.u32, 4u)},
+       {"entry_8", UiProbeField(r5.u32, 8u)}});
+}
+
+// The identity table's append path records the table's final entry count.
+void PinyonShiftTraceUiIdentityAppend(PPCRegister& r3) {
+  if (!UiTraceEnabled()) {
+    return;
+  }
+  const uint32_t count = g_ui_identity_append_trace_count.fetch_add(
+                             1, std::memory_order_relaxed) +
+                         1u;
+  if (count > 2048u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.identity.append",
+      {{"resolver", Hex32(r3.u32)},
+       {"count", UiProbeField(r3.u32, 8u)},
+       {"entries", UiProbeField(r3.u32, 12u)},
+       {"appends", std::to_string(count)}});
+}
+
+// One identity lookup: `r4` indexes the table and the record exposes the
+// table's bounds, so an out-of-range reference stays visible.
+void PinyonShiftTraceUiIdentityLookup(PPCRegister& r3, PPCRegister& r4) {
+  const bool scene_extension =
+      UiExperimentModeValue() == UiExperimentMode::kSceneInsert &&
+      r4.u32 >= 1006u;
+  if ((!UiTraceEnabled() && !scene_extension) ||
+      (scene_extension
+           ? g_ui_scene_identity_lookup_trace_count.fetch_add(
+                 1, std::memory_order_relaxed) >= 128u
+           : g_ui_identity_lookup_trace_count.fetch_add(
+                 1, std::memory_order_relaxed) >= 4096u)) {
+    return;
+  }
+  const uint32_t count = PinyonShiftGuestRangeReadable(r3.u32 + 8u, 4u)
+                             ? LoadGuestU32(r3.u32 + 8u)
+                             : 0u;
+  if (scene_extension && count == 1099u) {
+    g_ui_scene_tree_walk_trace_enabled.store(true, std::memory_order_relaxed);
+  }
+  const uint32_t entries = PinyonShiftGuestRangeReadable(r3.u32 + 12u, 4u)
+                               ? LoadGuestU32(r3.u32 + 12u)
+                               : 0u;
+  const uint32_t source_index =
+      r4.u32 >= 1078u ? r4.u32 - 247u : r4.u32 - 986u;
+  const uint32_t entry = entries + r4.u32 * 8u;
+  const uint32_t source_entry = entries + source_index * 8u;
+  const bool entries_readable =
+      scene_extension && PinyonShiftGuestRangeReadable(entry, 8u) &&
+      PinyonShiftGuestRangeReadable(source_entry, 8u);
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.identity.lookup",
+      {{"resolver", Hex32(r3.u32)},
+       {"index", Hex32(r4.u32)},
+       {"count", Hex32(count)},
+       {"in_range", count != 0u && r4.u32 < count ? "1" : "0"},
+       {"source_index", scene_extension ? Hex32(source_index) : ""},
+       {"entry_0", entries_readable ? Hex32(LoadGuestU32(entry)) : ""},
+       {"entry_4", entries_readable ? Hex32(LoadGuestU32(entry + 4u)) : ""},
+       {"source_0",
+        entries_readable ? Hex32(LoadGuestU32(source_entry)) : ""},
+       {"source_4",
+        entries_readable ? Hex32(LoadGuestU32(source_entry + 4u)) : ""}});
+}
+
+void PinyonShiftTraceUiSceneTreeWalk(PPCRegister& r3, PPCRegister& r4) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  const bool readable = PinyonShiftGuestRangeReadable(r4.u32, 32u);
+  const bool invalid_kind_five =
+      readable && LoadGuestU8(r4.u32 + 30u) == 5u &&
+      LoadGuestU32(r4.u32 + 4u) == 0u;
+  if (readable && !invalid_kind_five &&
+      g_ui_scene_tree_walk_trace_count.fetch_add(1u,
+                                                  std::memory_order_relaxed) >=
+          256u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      invalid_kind_five ? "ui.scene.tree_invalid" : "ui.scene.tree_walk",
+      {{"owner", Hex32(r3.u32)},
+       {"node", Hex32(r4.u32)},
+       {"readable", readable ? "1" : "0"},
+       {"field_0", readable ? Hex32(LoadGuestU32(r4.u32)) : ""},
+       {"field_4", readable ? Hex32(LoadGuestU32(r4.u32 + 4u)) : ""},
+       {"field_8", readable ? Hex32(LoadGuestU32(r4.u32 + 8u)) : ""},
+       {"field_12", readable ? Hex32(LoadGuestU32(r4.u32 + 12u)) : ""},
+       {"child", readable ? Hex32(LoadGuestU32(r4.u32 + 16u)) : ""},
+       {"sibling", readable ? Hex32(LoadGuestU32(r4.u32 + 20u)) : ""},
+       {"kind", readable ? Hex32(LoadGuestU8(r4.u32 + 30u)) : ""}});
+}
+
+void PinyonShiftTraceUiAnimationAllocate(PPCRegister& r3, PPCRegister& r4,
+                                         PPCRegister& r6, PPCRegister& r7,
+                                         PPCRegister& r8, PPCRegister& r31) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  const uint32_t identity_table =
+      PinyonShiftGuestRangeReadable(r31.u32 + 124u, 4u)
+          ? LoadGuestU32(r31.u32 + 124u)
+          : 0u;
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.scene_insert.animation_allocate",
+      {{"document", Hex32(r3.u32)},
+       {"count", UiProbeField(r3.u32, 12u)},
+       {"storage", UiProbeField(r3.u32, 8u)},
+       {"allocator", UiProbeField(r3.u32, 32u)},
+       {"identity", Hex32(r4.u32)},
+       {"kind", Hex32(r6.u32)},
+       {"field_7", Hex32(r7.u32)},
+       {"field_8", Hex32(r8.u32)},
+       {"parser", Hex32(r31.u32)},
+       {"identity_table", Hex32(identity_table)},
+       {"identity_1033", UiProbeField(identity_table, 1033u * 4u)},
+       {"identity_1035", UiProbeField(identity_table, 1035u * 4u)}});
+}
+
+bool PinyonShiftGuardUiInvalidRttiCast(PPCRegister& r3, PPCRegister& r4,
+                                       PPCRegister& r5, PPCRegister& r6,
+                                       PPCRegister& r7, uint64_t& lr) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert ||
+      r3.u32 == 0u) {
+    return false;
+  }
+  const bool readable = PinyonShiftGuestRangeReadable(r3.u32, 4u);
+  const uint32_t vtable = readable ? LoadGuestU32(r3.u32) : 0u;
+  const uint32_t metadata =
+      vtable >= 4u && PinyonShiftGuestRangeReadable(vtable - 4u, 4u)
+          ? LoadGuestU32(vtable - 4u)
+          : 0u;
+  if (readable && metadata != 0u) {
+    return false;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.invalid_rtti_guarded",
+      {{"caller", Hex32(static_cast<uint32_t>(lr))},
+       {"object", Hex32(r3.u32)},
+       {"readable", readable ? "1" : "0"},
+       {"vtable", Hex32(vtable)},
+       {"target", Hex32(r4.u32)},
+       {"source_type", Hex32(r5.u32)},
+       {"target_type", Hex32(r6.u32)},
+       {"flags", Hex32(r7.u32)}});
+  return false;
+}
+
+void PinyonShiftTraceUiInvalidRttiCast(PPCRegister& r3, PPCRegister& r4,
+                                       PPCRegister& r5, PPCRegister& r6,
+                                       PPCRegister& r7, uint64_t& lr) {
+  (void)PinyonShiftGuardUiInvalidRttiCast(r3, r4, r5, r6, r7, lr);
+}
+
+void PinyonShiftTraceUiPauseButtonArrayLookup(PPCRegister& r3,
+                                               PPCRegister& r28,
+                                               PPCRegister& r29,
+                                               PPCRegister& r30,
+                                               uint64_t& lr) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  // The cloned row has no authored navigation-layout objects. The stock
+  // helper returns unresolved node hashes in that case; represent the absent
+  // optional interface as null so the caller takes its existing skip path.
+  const uint32_t candidate_vtable =
+      PinyonShiftGuestRangeReadable(r3.u32, 4u) ? LoadGuestU32(r3.u32) : 0u;
+  if (static_cast<uint32_t>(lr) == 0x8281BF4Cu && r3.u32 != 0u &&
+      candidate_vtable != 0x8224B790u) {
+    pinyon_shift::diagnostics::RecordEvent(
+        "ui.experiment.scene_insert.optional_navigation_absent", {});
+    r3.u64 = 0u;
+  }
+  uint32_t tracked_index = UINT32_MAX;
+  for (uint32_t index = 0; index < kUiExperimentTextTargets; ++index) {
+    if (g_ui_experiment_buttons[index] == r30.u32) {
+      tracked_index = index;
+      break;
+    }
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.scene.insert_button_lookup",
+      {{"caller", Hex32(static_cast<uint32_t>(lr))},
+       {"button", Hex32(r30.u32)},
+       {"result", Hex32(r3.u32)},
+       {"outer_index", Hex32(r28.u32)},
+       {"inner_index", Hex32(r29.u32)},
+       {"tracked_index", Hex32(tracked_index)},
+       {"readable", PinyonShiftGuestRangeReadable(r3.u32, 4u) ? "1" : "0"},
+       {"head", PinyonShiftGuestRangeReadable(r3.u32, 4u)
+                    ? Hex32(LoadGuestU32(r3.u32))
+                    : ""}});
+}
+
+void PinyonShiftTraceUiListSelectionSet(PPCRegister& r3, PPCRegister& r4) {
+  if (!UiTraceEnabled() ||
+      g_ui_list_selection_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          512u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.list.selection_set",
+      {{"list", Hex32(r3.u32)},
+       {"value", Hex32(r4.u32)},
+       {"current", UiProbeField(r3.u32, 340u)},
+       {"pending", UiProbeField(r3.u32, 344u)},
+       {"begin", UiProbeField(r3.u32, 348u)},
+       {"end", UiProbeField(r3.u32, 352u)}});
+}
+
+void PinyonShiftTraceUiListSelectionGet(PPCRegister& r3) {
+  if (!UiTraceEnabled() ||
+      g_ui_list_selection_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          512u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.list.selection_get",
+      {{"list", Hex32(r3.u32)},
+       {"current", UiProbeField(r3.u32, 340u)},
+       {"pending", UiProbeField(r3.u32, 344u)},
+       {"begin", UiProbeField(r3.u32, 348u)},
+       {"end", UiProbeField(r3.u32, 352u)}});
 }
 
 void PinyonShiftTraceUiTextValue(PPCRegister& r3, PPCRegister& r4,
@@ -2237,7 +2605,7 @@ const UiInsertIdentity& UiInsertIdentityValue() {
 
 // Bit mask over the replay's individual steps, so a run can bisect which step
 // makes the title's later passes fail without a rebuild. Unset or zero runs
-// every step:
+// the eight construction steps; counter rollback remains diagnostic-only:
 //   1 create the wrapper record        2 append the wrapper's properties
 //   4 create the element record        8 append the element's properties
 //  16 push both records to the pool   32 run the component builder
@@ -2250,7 +2618,7 @@ uint32_t UiInsertSteps() {
     char* raw = nullptr;
     size_t raw_size = 0;
     if (_dupenv_s(&raw, &raw_size, "PINYON_SHIFT_UI_INSERT_STEPS") != 0) {
-      return 0xFFFFFFFFu;
+      return 0xFFu;
     }
     const std::string owned = raw ? std::string(raw) : std::string();
     std::free(raw);
@@ -2260,7 +2628,7 @@ uint32_t UiInsertSteps() {
     text = raw ? std::string_view(raw) : std::string_view();
 #endif
     if (text.empty()) {
-      return 0xFFFFFFFFu;
+      return 0xFFu;
     }
     if (text.size() > 2u && text[0] == '0' &&
         (text[1] == 'x' || text[1] == 'X')) {
@@ -2280,7 +2648,7 @@ uint32_t UiInsertSteps() {
       }
       value = value * 16u + digit;
     }
-    return value == 0u ? 0xFFFFFFFFu : value;
+    return value == 0u ? 0xFFu : value;
   }();
   return steps;
 }
@@ -3034,6 +3402,97 @@ void PinyonShiftUiPauseItemInsert(PPCContext& context, uint8_t* base,
        {"sibling_count", Hex32(UiCountRecordSiblings(tree_parent))},
        {"inserted_in_chain",
         Hex32(UiFindRecordInChain(tree_parent, record_target))}});
+}
+
+void PinyonShiftValidateUiSceneVectorEntry(PPCRegister& r1, PPCRegister& r3,
+                                           PPCRegister& r27, PPCRegister& r30,
+                                           PPCRegister& r31) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert ||
+      (r3.u32 & 0xFFu) == 0u) {
+    return;
+  }
+  const uint32_t object =
+      PinyonShiftGuestRangeReadable(r1.u32 + 88u, 4u)
+          ? LoadGuestU32(r1.u32 + 88u)
+          : 0u;
+  const uint32_t vtable =
+      PinyonShiftGuestRangeReadable(object, 4u) ? LoadGuestU32(object) : 0u;
+  const uint32_t method =
+      PinyonShiftGuestRangeReadable(vtable + 12u, 4u)
+          ? LoadGuestU32(vtable + 12u)
+          : 0u;
+  if (object != 0u && vtable != 0u &&
+      method >= 0x82000000u && method < 0x84000000u) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.scene_insert.invalid_vector_entry",
+      {{"index", Hex32(r31.u32)},
+       {"count", Hex32(r27.u32)},
+       {"collection", Hex32(r30.u32)},
+       {"object", Hex32(object)},
+       {"vtable", Hex32(vtable)},
+       {"method", Hex32(method)}});
+  r3.u64 = 0u;
+}
+
+void PinyonShiftTraceUiSceneVectorCleanup(PPCRegister& r1, PPCRegister& r3,
+                                          PPCRegister& r27, PPCRegister& r30,
+                                          PPCRegister& r31) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert ||
+      g_ui_scene_cleanup_trace_count.fetch_add(1, std::memory_order_relaxed) >=
+          128u) {
+    return;
+  }
+  const uint32_t object =
+      PinyonShiftGuestRangeReadable(r1.u32 + 92u, 4u)
+          ? LoadGuestU32(r1.u32 + 92u)
+          : 0u;
+  const uint32_t vtable =
+      PinyonShiftGuestRangeReadable(object, 4u) ? LoadGuestU32(object) : 0u;
+  const uint32_t method =
+      PinyonShiftGuestRangeReadable(vtable + 4u, 4u)
+          ? LoadGuestU32(vtable + 4u)
+          : 0u;
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.scene_insert.vector_cleanup",
+      {{"index", Hex32(r31.u32)},
+       {"count", Hex32(r27.u32)},
+       {"collection", Hex32(r30.u32)},
+       {"stack", Hex32(r1.u32)},
+       {"lookup_result", Hex32(r3.u32)},
+       {"object", Hex32(object)},
+       {"vtable", Hex32(vtable)},
+       {"method", Hex32(method)}});
+}
+
+void PinyonShiftTraceUiPauseOwnerInit(PPCRegister& r1, PPCRegister& r3,
+                                      uint64_t& lr) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.scene_insert.pause_owner_init",
+      {{"stack", Hex32(r1.u32)},
+       {"object", Hex32(r3.u32)},
+       {"vtable", UiProbeField(r3.u32, 0u)},
+       {"caller", Hex32(static_cast<uint32_t>(lr))}});
+}
+
+void PinyonShiftTraceUiPauseOwnerBinding(PPCRegister& r1, PPCRegister& r3,
+                                         PPCRegister& r28, PPCRegister& r29,
+                                         PPCRegister& r30) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
+    return;
+  }
+  pinyon_shift::diagnostics::RecordEvent(
+      "ui.experiment.scene_insert.pause_owner_binding",
+      {{"owner", Hex32(r30.u32)},
+       {"index", Hex32(r28.u32)},
+       {"name", PinyonShiftReadGuestAscii(r1.u32 + 80u, 64u)},
+       {"binding", Hex32(r29.u32)},
+       {"value", Hex32(r3.u32)},
+       {"binding_4", UiProbeField(r29.u32, 4u)}});
 }
 
 
@@ -3856,6 +4315,8 @@ constexpr uint32_t kUiSceneProbeMaximumWordHits = 8u;
 std::atomic<uint32_t> g_ui_scene_entry_count{};
 std::atomic<uint32_t> g_ui_scene_length_count{};
 std::atomic<uint32_t> g_ui_scene_item_count{};
+std::atomic<uint32_t> g_ui_scene_insert_item_count{};
+std::atomic<uint32_t> g_ui_scene_insert_capture_remaining{};
 std::atomic<uint32_t> g_ui_scene_read_count{};
 std::atomic<uint32_t> g_ui_scene_read_result_count{};
 std::atomic<bool> g_ui_scene_payload_scanned{};
@@ -4100,8 +4561,15 @@ struct UiSceneInsertStreamState {
   uint32_t substituted = 0;
   uint32_t maximum_position = 0;
 };
+struct UiSceneInsertReadRequest {
+  uint32_t stream = 0;
+  uint32_t destination = 0;
+  uint32_t position = 0;
+  uint32_t count = 0;
+};
 std::mutex g_ui_scene_insert_mutex;
 std::map<uint32_t, UiSceneInsertStreamState> g_ui_scene_insert_streams;
+std::map<uint32_t, UiSceneInsertReadRequest> g_ui_scene_insert_requests;
 
 std::string UiSceneInsertEnvironment(const char* name) {
 #if defined(_WIN32)
@@ -4253,6 +4721,21 @@ bool UiSceneInsertStreamIsOurs(uint32_t stream) {
          found->second.ours;
 }
 
+void UiSceneInsertCaptureRead(uint32_t reader, uint32_t destination,
+                              uint32_t count) {
+  if (reader == 0u || count == 0u || count > 0x10000u ||
+      !PinyonShiftGuestRangeReadable(reader + 4u, 4u)) {
+    return;
+  }
+  const uint32_t stream = LoadGuestU32(reader + 4u);
+  if (stream == 0u || !PinyonShiftGuestRangeReadable(stream + 4u, 4u)) {
+    return;
+  }
+  std::lock_guard lock(g_ui_scene_insert_mutex);
+  g_ui_scene_insert_requests[reader] = {
+      stream, destination, LoadGuestU32(stream + 4u), count};
+}
+
 // One reader delivery: `delivered` bytes were just written to `destination`
 // for the member offset `position`. Recognition happens on the first 0x24
 // delivered bytes; afterwards the bytes are replaced by the re-encoded member's
@@ -4360,22 +4843,45 @@ void UiSceneInsertDeliver(uint32_t stream, uint32_t destination,
 // Bulk path of the reader slot-1 method: r28 is the destination buffer and r3
 // the byte count the copy returned; r30 is the reader object.
 void PinyonShiftUiSceneInsertReadResult(PPCRegister& r3, PPCRegister& r28,
-                                        PPCRegister& r30) {
+                                        PPCRegister& r29, PPCRegister& r30) {
   if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
     return;
   }
-  if (r3.u32 == 0u || !PinyonShiftGuestRangeReadable(r30.u32 + 4u, 4u)) {
+  if (!PinyonShiftGuestRangeReadable(r30.u32 + 4u, 4u)) {
     return;
   }
   const uint32_t stream = LoadGuestU32(r30.u32 + 4u);
   if (stream == 0u || !PinyonShiftGuestRangeReadable(stream, 8u)) {
     return;
   }
-  const uint32_t position_after = LoadGuestU32(stream + 4u);
-  if (position_after < r3.u32) {
+  UiSceneInsertReadRequest request;
+  {
+    std::lock_guard lock(g_ui_scene_insert_mutex);
+    const auto found = g_ui_scene_insert_requests.find(r30.u32);
+    if (found != g_ui_scene_insert_requests.end()) {
+      request = found->second;
+    }
+  }
+  if (request.stream == stream && request.destination == r28.u32 &&
+      UiSceneInsertStreamIsOurs(stream)) {
+    const uint32_t size =
+        g_ui_scene_insert_size.load(std::memory_order_acquire);
+    const uint32_t delivered =
+        request.position < size
+            ? std::min(request.count, size - request.position)
+            : 0u;
+    if (delivered != 0u) {
+      UiSceneInsertDeliver(stream, r28.u32, delivered, request.position);
+    }
+    StoreGuestU32(stream + 4u, request.position + delivered);
+    r3.u64 = delivered;
+    r29.u64 = delivered;
     return;
   }
-  UiSceneInsertDeliver(stream, r28.u32, r3.u32, position_after - r3.u32);
+  const uint32_t position_after = LoadGuestU32(stream + 4u);
+  if (r3.u32 != 0u && position_after >= r3.u32) {
+    UiSceneInsertDeliver(stream, r28.u32, r3.u32, position_after - r3.u32);
+  }
 }
 
 // Byte-at-a-time path of the reader slot-1 method: one byte was just copied to
@@ -4385,7 +4891,7 @@ void PinyonShiftUiSceneInsertReadStep(PPCRegister& r3, PPCRegister& r28,
   if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert) {
     return;
   }
-  if (r3.u32 == 0u || !PinyonShiftGuestRangeReadable(r30.u32 + 4u, 4u)) {
+  if (!PinyonShiftGuestRangeReadable(r30.u32 + 4u, 4u)) {
     return;
   }
   const uint32_t stream = LoadGuestU32(r30.u32 + 4u);
@@ -4393,7 +4899,62 @@ void PinyonShiftUiSceneInsertReadStep(PPCRegister& r3, PPCRegister& r28,
     return;
   }
   const uint32_t position_after = LoadGuestU32(stream + 4u);
-  UiSceneInsertDeliver(stream, r28.u32 + r31.u32, 1u, position_after - 1u);
+  if (UiSceneInsertStreamIsOurs(stream)) {
+    const uint32_t position =
+        r3.u32 != 0u && position_after > 0u ? position_after - 1u
+                                           : position_after;
+    const uint32_t size =
+        g_ui_scene_insert_size.load(std::memory_order_acquire);
+    const uint32_t delivered = position < size ? 1u : 0u;
+    if (delivered != 0u) {
+      UiSceneInsertDeliver(stream, r28.u32 + r31.u32, 1u, position);
+    }
+    StoreGuestU32(stream + 4u, position + delivered);
+    r3.u64 = delivered;
+    return;
+  }
+  if (r3.u32 != 0u && position_after > 0u) {
+    UiSceneInsertDeliver(stream, r28.u32 + r31.u32, 1u,
+                         position_after - 1u);
+  }
+}
+
+// The identity-table loader reads each string body through its stream's direct
+// bulk helper rather than the virtual reader path above. Intercept that return
+// as well so inserted bytes and their four-byte lengths come from one payload.
+void UiSceneInsertDirectReadResult(PPCRegister& r3, uint32_t owner,
+                                   uint32_t destination,
+                                   uint32_t requested) {
+  if (UiExperimentModeValue() != UiExperimentMode::kSceneInsert ||
+      !PinyonShiftGuestRangeReadable(owner + 12u, 4u)) {
+    return;
+  }
+  const uint32_t reader = LoadGuestU32(owner + 12u);
+  if (reader == 0u || !PinyonShiftGuestRangeReadable(reader + 4u, 4u)) {
+    return;
+  }
+  const uint32_t stream = LoadGuestU32(reader + 4u);
+  if (stream == 0u || !PinyonShiftGuestRangeReadable(stream + 4u, 4u)) {
+    return;
+  }
+  const uint32_t position_after = LoadGuestU32(stream + 4u);
+  if (position_after < r3.u32) {
+    return;
+  }
+  const uint32_t position = position_after - r3.u32;
+  if (UiSceneInsertStreamIsOurs(stream) && requested != 0u) {
+    const uint32_t size =
+        g_ui_scene_insert_size.load(std::memory_order_acquire);
+    const uint32_t delivered =
+        position < size ? std::min(requested, size - position) : 0u;
+    if (delivered != 0u) {
+      UiSceneInsertDeliver(stream, destination, delivered, position);
+    }
+    StoreGuestU32(stream + 4u, position + delivered);
+    r3.u64 = delivered;
+  } else if (r3.u32 != 0u) {
+    UiSceneInsertDeliver(stream, destination, r3.u32, position);
+  }
 }
 
 // Runs at the entry of the item deserializer sub_82F26560 with r3 = section:
@@ -4420,6 +4981,7 @@ void PinyonShiftUiSceneInsertCount(PPCRegister& r3) {
   if (!UiSceneInsertStreamIsOurs(stream)) {
     return;
   }
+  g_ui_scene_insert_item_count.store(0u, std::memory_order_relaxed);
   const uint32_t expected =
       g_ui_scene_insert_expected_items.load(std::memory_order_relaxed);
   const uint32_t elements = LoadGuestU32(r3.u32 + 16u);
@@ -4454,6 +5016,19 @@ void PinyonShiftUiSceneInsertCount(PPCRegister& r3) {
 }
 
 }  // namespace
+
+void PinyonShiftUiSceneInsertIdentityReadResult(PPCRegister& r1,
+                                                PPCRegister& r3,
+                                                PPCRegister& r30,
+                                                PPCRegister& r31) {
+  UiSceneInsertDirectReadResult(r3, r30.u32, r31.u32,
+                                UiSceneWordOrZero(r1.u32 + 80u));
+}
+
+void PinyonShiftUiSceneInsertItemReadResult(PPCRegister& r1, PPCRegister& r3,
+                                            PPCRegister& r31) {
+  UiSceneInsertDirectReadResult(r3, r31.u32, r1.u32 + 128u, 16u);
+}
 
 // Entry of the scene item deserializer sub_82F26560 (0x82F26560): r3 is the
 // section context, r4 the element the document belongs to and lr the caller.
@@ -4565,6 +5140,34 @@ void PinyonShiftTraceUiSceneItemLength(PPCRegister& r1, PPCRegister& r3,
 // wrapper's extra word at r1+112. r3 is the allocated record.
 void PinyonShiftTraceUiSceneItemFields(PPCRegister& r1, PPCRegister& r3,
                                        PPCRegister& r31) {
+  if (UiExperimentModeValue() == UiExperimentMode::kSceneInsert) {
+    const uint32_t index =
+        g_ui_scene_insert_item_count.fetch_add(1u, std::memory_order_relaxed);
+    const uint32_t name = UiSceneWordOrZero(r1.u32 + 96u);
+    if (name == 0x223C2AFBu) {
+      g_ui_scene_insert_capture_remaining.store(39u, std::memory_order_relaxed);
+      g_ui_scene_tree_walk_trace_count.store(0u, std::memory_order_relaxed);
+    }
+    uint32_t remaining =
+        g_ui_scene_insert_capture_remaining.load(std::memory_order_relaxed);
+    if (remaining != 0u) {
+      g_ui_scene_insert_capture_remaining.store(remaining - 1u,
+                                                std::memory_order_relaxed);
+      UiSceneInsertRecord(
+          "ui.experiment.scene_insert.item",
+          {{"index", Hex32(index)},
+           {"name", Hex32(name)},
+           {"parent", Hex32(UiSceneWordOrZero(r1.u32 + 88u))},
+           {"value", Hex32(UiSceneWordOrZero(r1.u32 + 92u))},
+           {"kind", Hex32(PinyonShiftGuestRangeReadable(r1.u32 + 81u, 1u)
+                              ? LoadGuestU8(r1.u32 + 81u)
+                              : 0u)},
+           {"flags", Hex32(PinyonShiftGuestRangeReadable(r1.u32 + 80u, 1u)
+                               ? LoadGuestU8(r1.u32 + 80u)
+                               : 0u)},
+           {"record", Hex32(r3.u32)}});
+    }
+  }
   if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
     return;
   }
@@ -4616,6 +5219,9 @@ void PinyonShiftTraceUiSceneReadStep(PPCRegister& r3, PPCRegister& r28,
 // to the copy helper, so this records where each item byte comes from.
 void PinyonShiftTraceUiSceneStreamRead(PPCRegister& r3, PPCRegister& r4,
                                        PPCRegister& r5) {
+  if (UiExperimentModeValue() == UiExperimentMode::kSceneInsert) {
+    UiSceneInsertCaptureRead(r3.u32, r4.u32, r5.u32);
+  }
   if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
     return;
   }
@@ -4647,8 +5253,8 @@ void PinyonShiftTraceUiSceneStreamRead(PPCRegister& r3, PPCRegister& r4,
 // delivered bytes next to the source cursor and its remaining count is what
 // shows whether the stream is a plain memory copy or a decoding stream.
 void PinyonShiftTraceUiSceneReadResult(PPCRegister& r3, PPCRegister& r28,
-                                       PPCRegister& r30) {
-  PinyonShiftUiSceneInsertReadResult(r3, r28, r30);
+                                       PPCRegister& r29, PPCRegister& r30) {
+  PinyonShiftUiSceneInsertReadResult(r3, r28, r29, r30);
   if (UiExperimentModeValue() != UiExperimentMode::kSceneProbe) {
     return;
   }

@@ -132,7 +132,6 @@ address = 0x828116C8
 name = "PinyonShiftTraceUiListConstructed"
 registers = ["r3", "r4", "r31"]
 
-[[midasm_hook]]
 # Observe the PAUSE_MENU_BUTTON factory entry before it allocates. The contract
 # argument and the return address name the contract-table caller that drives
 # pause-menu item construction. Read-only and default-off.
@@ -204,7 +203,7 @@ registers = ["r3", "r4", "r5"]
 [[midasm_hook]]
 address = 0x82F255EC
 name = "PinyonShiftTraceUiSceneReadResult"
-registers = ["r3", "r28", "r30"]
+registers = ["r3", "r28", "r29", "r30"]
 after_instruction = true
 
 # Byte-at-a-time continuation of the same reader method (0x82F255C0): the call
@@ -282,12 +281,56 @@ after_instruction = true
 context = true
 
 # Observe embedded CUI4TextElement state after CPauseMenuButton construction.
-# This is read-only and capped; it is the first route-specific label lead.
 [[midasm_hook]]
 address = 0x8264FC08
 name = "PinyonShiftTraceUiPauseButtonConstructed"
 registers = ["r3", "r31"]
 after_instruction = true
+
+# sub_82F288A0 reads identity string bodies through a direct stream helper,
+# bypassing the virtual reader hooks used for their four-byte lengths.
+[[midasm_hook]]
+address = 0x82F28994
+name = "PinyonShiftUiSceneInsertIdentityReadResult"
+registers = ["r1", "r3", "r30", "r31"]
+
+[[midasm_hook]]
+address = 0x82F28544
+name = "PinyonShiftUiSceneInsertItemReadResult"
+registers = ["r1", "r3", "r31"]
+
+# The second pass of sub_82E7A430 resolves each scene-owned component before
+# invoking vtable slot 1. These probes isolate the eighth component's owner and
+# guest stack without changing either object.
+[[midasm_hook]]
+address = 0x823E4818
+name = "PinyonShiftTraceUiInvalidRttiCast"
+registers = ["r3", "r4", "r5", "r6", "r7", "lr"]
+
+[[midasm_hook]]
+address = 0x82E62A10
+name = "PinyonShiftTraceUiSceneTreeWalk"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
+address = 0x82F2B230
+name = "PinyonShiftTraceUiAnimationAllocate"
+registers = ["r3", "r4", "r6", "r7", "r8", "r31"]
+
+[[midasm_hook]]
+address = 0x82E7A4E0
+name = "PinyonShiftTraceUiSceneVectorCleanup"
+registers = ["r1", "r3", "r27", "r30", "r31"]
+
+[[midasm_hook]]
+address = 0x8281BBA8
+name = "PinyonShiftTraceUiPauseOwnerInit"
+registers = ["r1", "r3", "lr"]
+
+[[midasm_hook]]
+address = 0x8281BF4C
+name = "PinyonShiftTraceUiPauseOwnerBinding"
+registers = ["r1", "r3", "r28", "r29", "r30"]
 
 # LSB2 string-table interception (UI-04 label half). sub_82CAFF28 builds
 # `game:\media\StringTables\<table><language>.str` and hands it to the LSB2

@@ -22,8 +22,8 @@ Two record counts besides the item count are read out of the same header: the
 total property-entry count at ``0x2C`` (mirrored at ``0x78``) sizes the document
 arena as ``(elements * 4 + properties) * 8 + wrappers * 68``, so an insert that
 does not raise it writes past the arena.  ``--clone subtree`` (the default)
-carries the row's whole contiguous record subtree and rebases its type-0x14
-object-slot references onto the free block after the section's authored slots;
+carries the row's whole contiguous record subtree, its owned identities, and
+its companion records;
 ``--clone pair`` copies only the wrapper and element records and is kept as the
 diagnostic comparison that shares the source row's objects.
 """
@@ -59,6 +59,22 @@ PROPERTY_COUNT_OFFSET = 0x2C
 ELEMENT_COUNT_REPEAT_OFFSET = 0x70
 WRAPPER_COUNT_REPEAT_OFFSET = 0x74
 PROPERTY_COUNT_REPEAT_OFFSET = 0x78
+RELATION_COUNT_OFFSET = 0x30
+RELATION_CHILD_COUNT_OFFSET = 0x34
+IDENTITY_COUNT_OFFSET = 0x3C
+RELATION_COUNT_REPEAT_OFFSET = 0x7C
+RELATION_CHILD_COUNT_REPEAT_OFFSET = 0x80
+IDENTITY_SECTION_OFFSET = 0x88
+STYLE_COUNT_OFFSET = 0x44
+STYLE_CHILD_COUNT_OFFSET = 0x48
+TRACK_COUNT_OFFSET = 0x4C
+TRACK_CHILD_COUNT_OFFSET = 0x50
+TRACK_KEY_COUNT_OFFSET = 0x54
+ANIMATION_COUNT_OFFSET = 0x5C
+ANIMATION_TRACK_COUNT_OFFSET = 0x60
+ANIMATION_KEY_COUNT_OFFSET = 0x64
+ANIMATION_EVENT_COUNT_OFFSET = 0x68
+ANIMATION_AUX_COUNT_OFFSET = 0x6C
 # Contract hash of the seven pause rows' element records (PAUSE_MENU_BUTTON).
 PAUSE_ROW_CONTRACT = 0xBDF05338
 # Wrapper name hashes of the seven authored pause rows.
@@ -71,6 +87,7 @@ PAUSE_ROW_NAMES = (
     0x223A2A7D,
     0x223B2ABC,
 )
+INSERTED_ROW_NAME = 0x223C2AFB
 
 
 class SceneInsertError(ValueError):
@@ -132,6 +149,209 @@ class Section:
     @property
     def properties(self) -> int:
         return sum(len(item.properties) for item in self.items)
+
+
+@dataclasses.dataclass(frozen=True)
+class Relation:
+    parent: int
+    children: tuple[int, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class IdentitySection:
+    declared: int
+    records: tuple[tuple[int, int], ...]
+
+    @property
+    def end(self) -> int:
+        return IDENTITY_SECTION_OFFSET + 4 + self.declared
+
+
+def parse_identity_section(data: bytes) -> IdentitySection:
+    """Parse the length-prefixed identity strings before the item section."""
+    declared = u32be(data, IDENTITY_SECTION_OFFSET)
+    end = IDENTITY_SECTION_OFFSET + 4 + declared
+    if end > len(data):
+        raise SceneInsertError("identity section extends past the member")
+    cursor = IDENTITY_SECTION_OFFSET + 4
+    records = []
+    for _ in range(u32be(data, IDENTITY_COUNT_OFFSET)):
+        size = u32be(data, cursor)
+        record_end = cursor + 4 + size
+        if record_end > end:
+            raise SceneInsertError("identity string extends past its section")
+        records.append((cursor, record_end))
+        cursor = record_end
+    if cursor != end:
+        raise SceneInsertError("identity strings do not consume their declaration")
+    return IdentitySection(declared, tuple(records))
+
+
+def parse_relations(data: bytes, start: int) -> tuple[int, tuple[Relation, ...], int]:
+    """Parse the item-parent table that immediately follows the item section."""
+    declared = u32be(data, start)
+    end = start + 4 + declared
+    if end > len(data):
+        raise SceneInsertError("relationship section extends past the member")
+    cursor = start + 4
+    relations = []
+    for _ in range(u32be(data, RELATION_COUNT_OFFSET)):
+        parent = u32be(data, cursor)
+        count = u32be(data, cursor + 4)
+        cursor += 8
+        children = tuple(u32be(data, cursor + index * 4) for index in range(count))
+        cursor += count * 4
+        if cursor > end:
+            raise SceneInsertError("relationship record extends past its section")
+        relations.append(Relation(parent, children))
+    if cursor != end:
+        raise SceneInsertError("relationship records do not consume their declaration")
+    return declared, tuple(relations), end
+
+
+def encode_relations(relations: Iterable[Relation]) -> bytes:
+    body = bytearray()
+    for relation in relations:
+        body += struct.pack(">II", relation.parent, len(relation.children))
+        for child in relation.children:
+            body += struct.pack(">I", child)
+    return struct.pack(">I", len(body)) + body
+
+
+def clone_companion_sections(data: bytes, start: int,
+                             item_map: dict[int, int]) -> tuple[bytes, dict]:
+    """Clone the three typed-object tables owned by the copied identities."""
+    cursor = start
+
+    style_start = cursor
+    style_declared = u32be(data, cursor)
+    cursor += 4
+    styles: list[bytes] = []
+    cloned_styles: list[bytes] = []
+    style_children = 0
+    for _ in range(u32be(data, STYLE_COUNT_OFFSET)):
+        record_start = cursor
+        child_count = struct.unpack_from(">H", data, cursor + 10)[0]
+        cursor += 12 + child_count * 24
+        record = data[record_start:cursor]
+        styles.append(record)
+        owner = u32be(record, 0)
+        if owner in item_map:
+            copy = bytearray(record)
+            put_u32be(copy, 0, item_map[owner])
+            cloned_styles.append(bytes(copy))
+            style_children += child_count
+    if cursor != style_start + 4 + style_declared:
+        raise SceneInsertError("style records do not consume their declaration")
+
+    track_start = cursor
+    track_declared = u32be(data, cursor)
+    cursor += 4
+    tracks: list[bytes] = []
+    cloned_tracks: list[bytes] = []
+    track_children = track_keys = 0
+    for _ in range(u32be(data, TRACK_COUNT_OFFSET)):
+        record_start = cursor
+        owner, child_count = struct.unpack_from(">II", data, cursor)
+        cursor += 8
+        reference_offsets = []
+        keys = 0
+        for _ in range(child_count):
+            key_count = u32be(data, cursor + 4)
+            cursor += 8
+            keys += key_count
+            for _ in range(key_count):
+                reference_offsets.extend((cursor - record_start,
+                                          cursor - record_start + 4))
+                cursor += 20
+        record = data[record_start:cursor]
+        tracks.append(record)
+        if owner in item_map:
+            copy = bytearray(record)
+            put_u32be(copy, 0, item_map[owner])
+            for offset in reference_offsets:
+                value = u32be(copy, offset)
+                if value in item_map:
+                    put_u32be(copy, offset, item_map[value])
+            cloned_tracks.append(bytes(copy))
+            track_children += child_count
+            track_keys += keys
+    if cursor != track_start + 4 + track_declared:
+        raise SceneInsertError("track records do not consume their declaration")
+
+    empty_declared = u32be(data, cursor)
+    empty_section = data[cursor:cursor + 4 + empty_declared]
+    cursor += len(empty_section)
+    if empty_declared:
+        raise SceneInsertError("unsupported non-empty companion table")
+
+    animation_start = cursor
+    animation_declared = u32be(data, cursor)
+    cursor += 4
+    animations: list[bytes] = []
+    cloned_animations: list[bytes] = []
+    animation_tracks = animation_keys = animation_events = animation_aux = 0
+    for _ in range(u32be(data, ANIMATION_COUNT_OFFSET)):
+        record_start = cursor
+        cursor += 16
+        owner = u32be(data, cursor)
+        owner_offset = cursor - record_start
+        cursor += 13
+        track_count = u32be(data, cursor)
+        cursor += 4
+        keys = events = aux = 0
+        track_owner_offsets = []
+        for _ in range(track_count):
+            track_owner_offsets.append(cursor - record_start)
+            cursor += 5
+            key_count = u32be(data, cursor)
+            cursor += 4
+            keys += key_count
+            cursor += key_count * 8
+            event_count = u32be(data, cursor)
+            cursor += 4
+            events += event_count
+            aux += event_count & 1
+            cursor += event_count * 4
+        record = data[record_start:cursor]
+        animations.append(record)
+        if owner in item_map:
+            copy = bytearray(record)
+            put_u32be(copy, owner_offset, item_map[owner])
+            for offset in track_owner_offsets:
+                value = u32be(copy, offset)
+                if value in item_map:
+                    put_u32be(copy, offset, item_map[value])
+            cloned_animations.append(bytes(copy))
+            animation_tracks += track_count
+            animation_keys += keys
+            animation_events += events
+            animation_aux += aux
+    if cursor != animation_start + 4 + animation_declared or cursor != len(data):
+        raise SceneInsertError("animation records do not consume the member")
+
+    def section(records: list[bytes]) -> bytes:
+        body = b"".join(records)
+        return struct.pack(">I", len(body)) + body
+
+    tail = (
+        section(styles + cloned_styles)
+        + section(tracks + cloned_tracks)
+        + empty_section
+        + section(animations + cloned_animations)
+    )
+    return tail, {
+        "styles": len(cloned_styles),
+        "style_children": style_children,
+        "tracks": len(cloned_tracks),
+        "track_children": track_children,
+        "track_keys": track_keys,
+        "animations": len(cloned_animations),
+        "animation_tracks": animation_tracks,
+        "animation_keys": animation_keys,
+        "animation_events": animation_events,
+        "animation_aux": animation_aux,
+    }
 
 
 def parse_item(data: bytes, start: int) -> Item:
@@ -255,43 +475,11 @@ def pause_row_pairs(section: Section) -> list[tuple[int, Item, Item]]:
     return pairs
 
 
-# Each pause row authors 72 consecutive object slots.  The seven stock rows tile
-# the reference space from slot 20 (the slots before them belong to the scene's
-# earlier records), and the rest of the section's records continue from slot 524
-# to the end of the authored object numbering.  The per-row slots are referenced
-# by type-0x14 properties, whose value is the slot index: the deserializer
-# resolves that value through the owner's object table, so two rows that carry
-# the same slot indices share the same live objects.  A duplicated row therefore
-# has to own a fresh, unused block of slots at the end of the numbering.
+# Each pause row owns 72 consecutive property identity indexes. The copied row
+# also needs fresh item-value identities; reusing either set leaves scaler
+# bindings pointed at the source row or at raw identity values.
 ROW_OBJECT_STRIDE = 72
 ROW_OBJECT_BASE = 20
-
-
-def object_slot_count(section: Section) -> int:
-    """Return the next free authored object slot for the section.
-
-    The authored slot indices are dense: every slot from the row base to the last
-    one is referenced by exactly one type-0x14 property.  Walking that run gives
-    the first index the duplicated row may claim.
-    """
-    referenced = {
-        value
-        for item in section.items
-        for _, value in item.properties
-        if 0 <= value < 0x10000
-    }
-    if ROW_OBJECT_BASE not in referenced:
-        raise SceneInsertError("the row object slot base is not referenced")
-    next_slot = ROW_OBJECT_BASE
-    while next_slot in referenced:
-        next_slot += 1
-    span = next_slot - ROW_OBJECT_BASE
-    if span < ROW_OBJECT_STRIDE * len(PAUSE_ROW_NAMES):
-        raise SceneInsertError(
-            f"the authored object slots cover {span} entries, less than the "
-            f"{ROW_OBJECT_STRIDE} slots per pause row"
-        )
-    return next_slot
 
 
 def row_subtree(section: Section, wrapper: Item) -> tuple[int, int]:
@@ -316,36 +504,22 @@ def row_subtree(section: Section, wrapper: Item) -> tuple[int, int]:
     return first, last
 
 
-def patch_object_references(record: bytearray, item: Item, low: int, high: int,
-                            delta: int) -> int:
-    """Shift every type-0x14 object-slot value in a copied record."""
-    cursor = (
-        ITEM_HEADER_BYTES
-        + (WRAPPER_EXTRA_BYTES if item.flags & 0x04 else 0)
-        + 4
-    )
-    patched = 0
-    for index, (_, value) in enumerate(item.properties):
-        if low <= value <= high:
-            put_u32be(record, cursor + index * PROPERTY_STRIDE + 4, value + delta)
-            patched += 1
-    return patched
-
-
 def encode_subtree(data: bytes, row_index: int) -> tuple[bytes, dict]:
-    """Clone one authored row, subtree and object slots, at the section end.
+    """Clone one authored row with its relationship records.
 
-    Duplicating only the row's wrapper and element record leaves its four
-    type-0x14 slot references pointing at the source row's objects, so the two
-    rows share one identity set.  The copy therefore carries the row's whole
-    contiguous record subtree and every slot value is rebased onto the free
-    block that follows the section's authored object numbering.
+    The row-owned graph receives fresh item and property identities. Action
+    identities stay shared while animation records receive remapped item owners.
     """
     section = find_pause_section(data)
     pairs = pause_row_pairs(section)
     if not 0 <= row_index < len(pairs):
         raise SceneInsertError(
             f"row index {row_index} is outside the seven authored rows"
+        )
+    if row_index != len(pairs) - 1:
+        raise SceneInsertError(
+            "subtree cloning requires the final authored row so its style, "
+            "track, and animation records can be appended"
         )
     if section.declared != sum(item.size for item in section.items):
         raise SceneInsertError("section length is not the sum of its items")
@@ -369,38 +543,120 @@ def encode_subtree(data: bytes, row_index: int) -> tuple[bytes, dict]:
     low, high = min(block_objects), max(block_objects)
     if len(block_objects) != len(set(block_objects)):
         raise SceneInsertError("row object-slot references are not unique")
-    if high - low + 1 > ROW_OBJECT_STRIDE:
-        raise SceneInsertError(
-            f"row references {high - low + 1} slots, beyond a row block"
-        )
-    next_slot = object_slot_count(section)
-    # The copy's slots start at the free block; its own references move by the
-    # same delta, so the two rows never resolve to the same object.
-    new_low = next_slot
-    delta = new_low - low
-
-    base = len(section.items)
+    if high - low + 1 != ROW_OBJECT_STRIDE:
+        raise SceneInsertError("row does not cover one complete object block")
+    identities = parse_identity_section(data)
+    if identities.end != section.start:
+        raise SceneInsertError("identity section is not adjacent to the items")
+    relation_declared, relations, relation_end = parse_relations(data, section.end)
+    relation_children = sum(len(relation.children) for relation in relations)
+    source_relations = [
+        relation for relation in relations if first <= relation.parent <= last
+    ]
+    if not source_relations:
+        raise SceneInsertError("row subtree carries no relationship records")
+    source_relation_children = tuple(
+        child for relation in source_relations for child in relation.children
+    )
+    if any(child >= len(identities.records) for child in source_relation_children):
+        raise SceneInsertError("row relationship references an absent identity")
+    action_identities = tuple(dict.fromkeys(source_relation_children))
+    if action_identities and action_identities != tuple(
+        range(action_identities[0], action_identities[-1] + 1)
+    ):
+        raise SceneInsertError("row relationship identities are not contiguous")
+    owned_identity_set = (
+        {item.value for item in block if item.value != 0}
+        | set(block_objects)
+    )
+    owned_identities = tuple(sorted(owned_identity_set))
+    if any(index >= len(identities.records) for index in owned_identities):
+        raise SceneInsertError("row references an absent identity")
+    new_low = len(identities.records)
+    identity_map = {
+        source: new_low + offset
+        for offset, source in enumerate(owned_identities)
+    }
+    identity_records = []
+    for index in owned_identities:
+        start, end = identities.records[index]
+        identity_records.append(data[start:end])
+    identity_copy = b"".join(identity_records)
+    insertion_index = max(
+        row_subtree(section, row_wrapper)[1]
+        for _, row_wrapper, _ in pairs
+    ) + 1
+    block_length = len(block)
     copied = bytearray()
     for item in block:
         record = bytearray(data[item.start:item.end])
+        if item is block[0]:
+            put_u32be(record, 0, INSERTED_ROW_NAME)
         parent = item.parent
         if first <= parent <= last:
-            put_u32be(record, 4, parent - first + base)
-        patch_object_references(record, item, low, high, delta)
+            put_u32be(record, 4, parent - first + insertion_index)
+        if item.value in identity_map:
+            put_u32be(record, 8, identity_map[item.value])
+        property_cursor = (
+            ITEM_HEADER_BYTES
+            + (WRAPPER_EXTRA_BYTES if item.flags & 0x04 else 0)
+            + 4
+        )
+        for index, (_, value) in enumerate(item.properties):
+            if value in identity_map:
+                put_u32be(
+                    record,
+                    property_cursor + index * PROPERTY_STRIDE + 4,
+                    identity_map[value],
+                )
         copied += record
 
     declared = section.declared + len(copied)
-    body = (
-        b"".join(data[item.start:item.end] for item in section.items)
-        + bytes(copied)
+    existing = []
+    for item in section.items:
+        record = bytearray(data[item.start:item.end])
+        if insertion_index <= item.parent < len(section.items):
+            put_u32be(record, 4, item.parent + block_length)
+        existing.append(bytes(record))
+    body = b"".join(existing[:insertion_index]) + bytes(copied) + b"".join(
+        existing[insertion_index:]
     )
     if len(body) != declared:
         raise SceneInsertError("patched item body does not match its declaration")
+    shifted_relations = tuple(
+        Relation(
+            relation.parent + block_length
+            if relation.parent >= insertion_index
+            else relation.parent,
+            relation.children,
+        )
+        for relation in relations
+    )
+    cloned_relations = []
+    for relation in source_relations:
+        cloned_relations.append(
+            Relation(
+                relation.parent - first + insertion_index,
+                relation.children,
+            )
+        )
+    relation_bytes = encode_relations((*shifted_relations, *cloned_relations))
+    relation_child_delta = sum(len(relation.children) for relation in cloned_relations)
+    companion_bytes, companion = clone_companion_sections(
+        data,
+        relation_end,
+        {
+            source: source - first + insertion_index
+            for source in range(first, last + 1)
+        },
+    )
     patched = bytearray(
-        data[:section.start]
+        data[:identities.end]
+        + identity_copy
         + struct.pack(">I", declared)
         + body
-        + data[section.end:]
+        + relation_bytes
+        + companion_bytes
     )
     bump_section_counts(
         patched,
@@ -409,13 +665,42 @@ def encode_subtree(data: bytes, row_index: int) -> tuple[bytes, dict]:
         sum(1 for item in block if item.wrapper),
         sum(len(item.properties) for item in block),
     )
-
+    for offset in (RELATION_COUNT_OFFSET, RELATION_COUNT_REPEAT_OFFSET):
+        put_u32be(patched, offset, len(relations) + len(cloned_relations))
+    for offset in (
+        RELATION_CHILD_COUNT_OFFSET,
+        RELATION_CHILD_COUNT_REPEAT_OFFSET,
+    ):
+        put_u32be(patched, offset, relation_children + relation_child_delta)
+    put_u32be(
+        patched,
+        IDENTITY_SECTION_OFFSET,
+        identities.declared + len(identity_copy),
+    )
+    put_u32be(
+        patched,
+        IDENTITY_COUNT_OFFSET,
+        len(identities.records) + len(owned_identities),
+    )
+    for offset, key in (
+        (STYLE_COUNT_OFFSET, "styles"),
+        (STYLE_CHILD_COUNT_OFFSET, "style_children"),
+        (TRACK_COUNT_OFFSET, "tracks"),
+        (TRACK_CHILD_COUNT_OFFSET, "track_children"),
+        (TRACK_KEY_COUNT_OFFSET, "track_keys"),
+        (ANIMATION_COUNT_OFFSET, "animations"),
+        (ANIMATION_TRACK_COUNT_OFFSET, "animation_tracks"),
+        (ANIMATION_KEY_COUNT_OFFSET, "animation_keys"),
+        (ANIMATION_EVENT_COUNT_OFFSET, "animation_events"),
+        (ANIMATION_AUX_COUNT_OFFSET, "animation_aux"),
+    ):
+        put_u32be(patched, offset, u32be(data, offset) + companion[key])
     summary = {
         "input_bytes": len(data),
         "output_bytes": len(patched),
         "input_sha256": sha256(data),
         "output_sha256": sha256(bytes(patched)),
-        "section_offset": section.start,
+        "section_offset": section.start + len(identity_copy),
         "section_declared_before": section.declared,
         "section_declared_after": declared,
         "items_before": len(section.items),
@@ -424,16 +709,27 @@ def encode_subtree(data: bytes, row_index: int) -> tuple[bytes, dict]:
         "wrappers_before": counts[1],
         "elements_after": counts[0] + sum(1 for item in block if not item.wrapper),
         "wrappers_after": counts[1] + sum(1 for item in block if item.wrapper),
-        "insert_offset": section.end,
-        "insert_bytes": len(copied),
+        "insert_offset": section.items[insertion_index].start + len(identity_copy),
+        "insert_bytes": len(identity_copy) + len(copied) + len(relation_bytes) - 4 - relation_declared,
+        "identity_insert_bytes": len(identity_copy),
+        "identities_before": len(identities.records),
+        "identities_after": len(identities.records) + len(owned_identities),
+        "item_insert_bytes": len(copied),
+        "relation_insert_bytes": len(relation_bytes) - 4 - relation_declared,
+        "relations_before": len(relations),
+        "relations_after": len(relations) + len(cloned_relations),
+        "relation_children_before": relation_children,
+        "relation_children_after": relation_children + relation_child_delta,
         "row_index": row_index,
         "row_name": f"{wrapper.name:#010x}",
+        "inserted_row_name": f"{INSERTED_ROW_NAME:#010x}",
         "source_wrapper_index": first,
-        "new_wrapper_index": base,
+        "new_wrapper_index": insertion_index,
         "subtree_items": len(block),
-        "object_slots_before": [low, high],
-        "object_slots_after": [new_low, high + delta],
-        "object_slot_delta": delta,
+        "owned_identities_copied": len(owned_identities),
+        "relationship_action_identities": len(action_identities),
+        "item_value_tokens_shared": False,
+        "companion_records_copied": companion,
     }
     return bytes(patched), summary
 
@@ -511,6 +807,7 @@ def encode(data: bytes, row_index: int) -> tuple[bytes, dict]:
     position = section.items.index(wrapper)
     new_wrapper_index = len(section.items)
     inserted = bytearray(data[wrapper.start:element.end])
+    put_u32be(inserted, 0, INSERTED_ROW_NAME)
     element_offset = element.start - wrapper.start
     # The element's parent index is the created-record index of the wrapper that
     # owns it; the copy belongs to the appended wrapper, not the source row.
@@ -564,6 +861,7 @@ def encode(data: bytes, row_index: int) -> tuple[bytes, dict]:
         "insert_bytes": len(inserted),
         "row_index": row_index,
         "row_name": f"{wrapper.name:#010x}",
+        "inserted_row_name": f"{INSERTED_ROW_NAME:#010x}",
         "source_wrapper_index": position,
         "new_wrapper_index": new_wrapper_index,
     }
@@ -574,13 +872,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--row-index", type=int, default=0)
+    parser.add_argument("--row-index", type=int, default=6)
     parser.add_argument(
         "--clone",
         choices=("subtree", "pair"),
         default="subtree",
-        help="subtree clones the whole row (own object slots); pair copies only "
-             "the wrapper and element records and shares the source row's slots",
+        help="subtree clones the whole row and owned identities; pair copies "
+             "only the wrapper and element records",
     )
     parser.add_argument(
         "--check-roundtrip",
