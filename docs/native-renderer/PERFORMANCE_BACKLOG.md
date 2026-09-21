@@ -297,19 +297,24 @@ Whole-register hashing per draw and handwritten SIMD are not the starting point.
 
 ## PERF-09 — Submission boundaries and dependency waits
 
+Completed on 2026-09-20. See the
+[PERF-09 results](PERFORMANCE_09_RESULTS_2026-09-20.md). The measured cause was
+avoidable queue gaps and full barriers at primary-buffer submission boundaries;
+frame-end coalescing is now the default D3D12 policy.
+
 Entry points: `d3d12_submit_on_primary_buffer_end`, submission/query paths, and
 the existing [startup/fence correctness contract](../DEVELOPMENT.md#startup-correctness-aud-01-and-aud-02).
 This is an investigation until a correlated trace establishes causality.
 
-- [ ] Correlate submission size, CPU recording, GPU start/end, fence waits,
+- [x] Correlate submission size, CPU recording, GPU start/end, fence waits,
   residency, and OS scheduling for repeatable spikes and normal frames.
-- [ ] Choose the observed cause: combine tiny submissions for CPU overhead,
+- [x] Choose the observed cause: combine tiny submissions for CPU overhead,
   submit earlier for GPU starvation, or retire query results asynchronously
   where the title permits it. Test one policy change at a time.
-- [ ] Preserve queries, memory exports, ordering, cancellation, device failure,
+- [x] Preserve queries, memory exports, ordering, cancellation, device failure,
   and shutdown draining. Extend [startup checks](../../tools/check-fh1-startup.py)
   where fence behavior changes and test the affected query path.
-- [ ] Verify smaller critical-path gaps in a diagnostic trace, then repeat clean
+- [x] Verify smaller critical-path gaps in a diagnostic trace, then repeat clean
   route timings. Do not add overlapping wait/CPU/GPU buckets or explain a single
   long GPU span solely by the shader inside it.
 
