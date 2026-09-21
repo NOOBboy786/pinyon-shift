@@ -116,3 +116,31 @@ compatibility-memory read; that larger ownership change is not claimed here.
   the 1x A/B/B/A block and separate 1x/2x/3x smoke routes.
 - Local run evidence is under `.local/native-renderer/perf-02-05/` and is not
   committed because it contains game-derived data and machine-specific captures.
+
+## Final backlog disposition — 2026-09-21
+
+PERF-02 is complete for its retained scope. The 1x owner is authoritative for
+the full audited lifetime and eliminates the selected intermediate transfers.
+The post-PERF-09 2x retry reduced measured GPU time but failed the predeclared
+p95/p99 gates, so the compatibility path remains authoritative at scaled
+resolutions. Clear coalescing was not implemented: the admitted draw contains
+at most two exact rectangles, and the retained 1x clear already costs only
+0.004352 ms GPU and 0.006975 ms preparation per sampled frame. Expanding those
+rectangles would risk untouched depth/stencil for less than that upper bound.
+The production lifetime and mapping checks were rerun and pass.
+
+PERF-05 is complete for the accepted consumer-ownership boundary. Carrying the
+same resource backward through face rendering was rejected because the producer
+still relies on EDRAM ownership, per-face resolves, compatibility clears and
+guest-visible publication. Removing that bridge requires a separate face-render
+target contract and cannot be inferred from a complete-cube import. The current
+fixed 1x route reconfirmed 6,378 native faces with no mip fallback and 1,057
+direct persistent-cube imports with zero subresource copies or scratch-upload
+bytes. It exited normally. Incomplete base/mip loads, changed contracts and
+unsupported scales retain the generic path.
+
+The accepted importer has changing-content, full 54-subresource, stable-address
+reuse, 1x/2x motion and 1x/2x/3x fallback coverage recorded above. A reported
+green rear-glass flash remains unreproduced and therefore cannot be attributed
+to this path. That external report is a limitation of broader release coverage,
+not evidence that a producer-side ownership candidate is safe to enable.

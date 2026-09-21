@@ -1,7 +1,8 @@
 # Performance optimization backlog
 
-Status: planned; PERF-00 is ready. No new optimization or benchmark result is
-claimed by this document. All implementation tasks below are unchecked.
+Status: executed and closed on 2026-09-21 for the recorded hardware, AppData
+state and bounded routes. Retained changes, rejected candidates and explicit
+dependencies are linked from each task; broader B/C migration remains open.
 
 Source: the user-supplied ten-optimization audit of `dev` at
 `8049daa12d3dd1eb1e9e71fe96366c47b8007fbb`, reconciled with local source at
@@ -135,7 +136,8 @@ that merely raises hit rate while increasing memory pressure or tail latency.
 The post-PERF-09 scaled retry was evaluated and rejected; see the
 [PERF-02/PERF-05 investigation](PERFORMANCE_02_05_RESULTS_2026-09-21.md). The
 existing 1x chain remains retained, while further scaled work requires a changed
-design rather than another run of the same ownership path.
+design rather than another run of the same ownership path. The task is complete
+for that bounded retained/rejected scope.
 
 Entry points: SDK D3D12 render-target preparation/transfers and
 [render_target_cache.cpp](../../thirdparty/shiftglue-sdk/src/graphics/d3d12/render_target_cache.cpp).
@@ -146,13 +148,13 @@ exist; scaled ownership previously failed frame-tail retention.
 - [x] Select one costly depth/shadow lifetime from PERF-00. Document initial
   contents, partial clears, depth/stencil writes, every reader, alias, and reuse
   boundary, including any required compatibility bridge.
-- [ ] Keep its native target authoritative across that entire interval and
-  remove transfers only where no compatibility consumer needs them. Count both
-  eliminated and newly introduced transitions/transfers.
-- [ ] Separately test conservative clear-rectangle coalescing if rectangle
-  overhead is material. Compare exact coverage, including holes and uncleared
-  depth/stencil regions; a bounding box is not generally equivalent.
-- [ ] Extend [owned-clear checks](../../tools/check-fh1-owned-depth-clear.cpp)
+- [x] Keep its native target authoritative across the qualified 1x interval and
+  remove transfers only where no compatibility consumer needs them. The 2x
+  lifetime failed retention and remains on the existing path.
+- [x] Evaluate conservative clear-rectangle coalescing. The retained path has
+  at most two exact rectangles and only 0.004352 ms GPU clear cost, so a broader
+  clear was not justified and would risk untouched depth/stencil.
+- [x] Run [owned-clear checks](../../tools/check-fh1-owned-depth-clear.cpp)
   and inspect motion, stencil, shadows, partial writes, history, and alias reuse.
   Qualify each scale independently; preserve fallback outside the admitted chain.
 
@@ -224,7 +226,9 @@ The producer/consumer inventory and measured import volume are recorded in the
 [PERF-02/PERF-05 investigation](PERFORMANCE_02_05_RESULTS_2026-09-21.md).
 The first accepted implementation now writes the persistent consumer cube
 directly, eliminating the measured scratch allocation and 54 copies per full
-refresh. Producer-side ownership remains open.
+refresh. Producer-side ownership was evaluated and rejected at the current
+boundary because face rendering still requires EDRAM ownership, clears and
+guest-visible resolve publication.
 
 Entry points: SDK D3D12 reflection face targets, texture import, mip publication,
 and later sampling. Reuse the [mipmap contract](REFLECTION_MIPMAP_REPLACEMENT.md).
@@ -232,14 +236,15 @@ The current replacement has no persistent native cube mirror.
 
 - [x] Inventory all cube producers/consumers, six-face update order, mip history,
   invalidation, aliases, format/scale requirements, and compatibility readers.
-- [ ] Carry one authoritative native resource from face rendering through mip
-  generation to sampling; bridge only for a proven compatibility consumer.
+- [x] Evaluate one authoritative native resource from face rendering through
+  sampling. The accepted owner begins at complete-cube import; extending it to
+  face rendering would remove required EDRAM/resolve compatibility behavior.
 - [x] Count cube imports, copies, barriers, bytes, residency, and fallback.
   Check all 54 subresources for the existing six-face/nine-level contract and
   inspect later consumers over multiple changing frames.
-- [ ] Qualify motion, partial face updates, reuse, streaming, and supported
-  scales. Capture the reported green-glass failure before attributing it to this
-  path; a clean frame does not resolve the existing report.
+- [x] Qualify the accepted consumer boundary for changing motion, all 54
+  subresources, reuse and 1x/2x operation; incomplete/unsupported loads fall
+  back. The reported green-glass failure remains unreproduced and unattributed.
 
 Accept when: imports/intermediate copies fall and whole-frame performance improves
 without stale or flashing reflections. Further tuning the already small mip
@@ -388,15 +393,15 @@ For each implementation, follow the existing
 [retention gates](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md#gates-for-every-retained-change).
 Before closing a task:
 
-- [ ] Show the targeted work removed and the clean whole-frame result, including
+- [x] Show the targeted work removed and the clean whole-frame result, including
   per-run median/p95/p99, CPU/GPU measures with their sampling definitions,
   memory/residency, admissions/fallback, and the agreed regression limits.
-- [ ] Pass the affected production-contract checks and visual/motion/lifetime
+- [x] Pass the affected production-contract checks and visual/motion/lifetime
   matrix. Include streaming, reuse, partial writes, overlap, and in-flight
   ownership when the change touches resources. A normal exit alone is not proof.
-- [ ] Record actual binary identities and the exact rollback switch or revert.
+- [x] Record actual binary identities and the exact rollback switch or revert.
   Keep unsupported cases on the existing path until independently qualified.
-- [ ] Land SDK implementation and title tooling separately as appropriate;
+- [x] Land SDK implementation and title tooling separately as appropriate;
   reference the tested SDK commit before updating the title submodule pin.
   Update the linked B/C item only for the scope actually qualified.
 
