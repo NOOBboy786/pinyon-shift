@@ -1,6 +1,6 @@
 # PERF-02 / PERF-05 investigation — 2026-09-21
 
-Status: **PERF-02 scaled retry rejected; PERF-05 inventory complete and implementation open.**
+Status: **PERF-02 scaled retry rejected; PERF-05 direct consumer import accepted.**
 
 ## PERF-02: owned depth at 2x after PERF-09
 
@@ -64,6 +64,47 @@ proves the next implementation target: write the persistent consumer cube
 directly and retire the scratch conversion/copy path, while preserving the
 compatibility bridge until face rendering itself can publish to that resource.
 
+## PERF-05: direct persistent-cube import
+
+The accepted implementation adds one contract-specific compute importer for
+the measured cube. It writes all six faces of each mip directly from shared or
+scaled resolve memory into the existing persistent `Texture2DArray` resource.
+The resource receives UAV capability only for the exact 256×256, six-face,
+nine-level, tiled R10G10B10A2 contract. Other textures and incomplete base/mip
+loads continue through the generic importer. A default-on runtime switch,
+`fh1_direct_reflection_cube_import`, preserves an immediate fallback and made
+the comparison use identical binaries.
+
+Each complete refresh now issues nine compute dispatches and one tracked
+destination transition instead of allocating about 2.16 MiB of scratch space
+and issuing 54 `CopyTextureRegion` calls. The later transition to the ordinary
+UNORM SRV makes the UAV writes visible to the existing consumers. On the 1x
+smoke route, the final sample recorded 1,067 direct imports, zero subresource
+copies and zero scratch-upload bytes. The captured frame was coherent. A 2x
+run recorded 1,663 direct imports and also eliminated every copy and scratch
+byte; its black-world capture matches the pre-existing 2x route output rather
+than establishing a new visual regression. The 3x route exited normally but
+did not request a matching consumer cube, so it did not exercise this path.
+
+The fixed 1x open-world window was seconds 20–46.7. All four A/B/B/A runs used
+the same staged Release build; A disabled the new runtime switch and B enabled
+it.
+
+| Mode / run | Median ms | p95 ms | p99 ms | Mean measured GPU ms |
+| --- | ---: | ---: | ---: | ---: |
+| Control A1 | 15.520 | 19.540 | 25.631 | 6.537 |
+| Candidate B1 | 14.957 | 18.664 | 23.994 | 6.227 |
+| Candidate B2 | 14.982 | 20.027 | 24.092 | 6.651 |
+| Control A2 | 15.555 | 19.709 | 25.658 | 6.597 |
+| Control mean | 15.538 | 19.625 | 25.645 | 6.567 |
+| Candidate mean | 14.970 | 19.346 | 24.043 | 6.439 |
+
+The candidate improved median/p95/p99 by 3.66%/1.42%/6.25% and measured GPU
+time by 1.95%. It therefore remains enabled by default. This completes the
+measured consumer-side copy retirement. A future producer-side phase may bind
+face rendering and mip generation to the same texture and remove the remaining
+compatibility-memory read; that larger ownership change is not claimed here.
+
 ## Validation and evidence
 
 - Release `rexgpu-fh1` and staged preview builds pass.
@@ -71,7 +112,7 @@ compatibility bridge until face rendering itself can publish to that resource.
   atomic full-tile row admission.
 - `tools/check-fh1-owned-depth-clear.cpp` passes 7,204,228 sample mappings,
   partial-region guards and wrap rejection.
-- All five automated inventory/comparison runs exited normally.
+- All seven new direct-import smoke/comparison runs exited normally, including
+  the 1x A/B/B/A block and separate 1x/2x/3x smoke routes.
 - Local run evidence is under `.local/native-renderer/perf-02-05/` and is not
   committed because it contains game-derived data and machine-specific captures.
-

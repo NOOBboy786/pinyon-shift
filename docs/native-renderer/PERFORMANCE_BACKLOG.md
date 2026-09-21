@@ -216,6 +216,9 @@ Existing containment/recycling experiments are not prerequisites to enable.
 
 The producer/consumer inventory and measured import volume are recorded in the
 [PERF-02/PERF-05 investigation](PERFORMANCE_02_05_RESULTS_2026-09-21.md).
+The first accepted implementation now writes the persistent consumer cube
+directly, eliminating the measured scratch allocation and 54 copies per full
+refresh. Producer-side ownership remains open.
 
 Entry points: SDK D3D12 reflection face targets, texture import, mip publication,
 and later sampling. Reuse the [mipmap contract](REFLECTION_MIPMAP_REPLACEMENT.md).
@@ -225,7 +228,7 @@ The current replacement has no persistent native cube mirror.
   invalidation, aliases, format/scale requirements, and compatibility readers.
 - [ ] Carry one authoritative native resource from face rendering through mip
   generation to sampling; bridge only for a proven compatibility consumer.
-- [ ] Count cube imports, copies, barriers, bytes, residency, and fallback.
+- [x] Count cube imports, copies, barriers, bytes, residency, and fallback.
   Check all 54 subresources for the existing six-face/nine-level contract and
   inspect later consumers over multiple changing frames.
 - [ ] Qualify motion, partial face updates, reuse, streaming, and supported
