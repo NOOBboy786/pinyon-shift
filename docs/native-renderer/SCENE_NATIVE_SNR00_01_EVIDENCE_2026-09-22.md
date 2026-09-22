@@ -1428,7 +1428,50 @@ All three writes occurred with presentation-view pointer `0x423CFA30`
 active in call 8 and were read by the deferred worker in source frame 6001.
 The track-bucket verifier independently passed for source frame 6000 and
 backend frame 6001: 459 visible-list entries yielded 328 packet headers,
-with zero unmatched submitted items inside a view. The exact command join
-establishes this cube consumer path's generation inside call 8; it does not
-yet identify the camera or prove that every other deferred command belongs
-to that view. SNR-01 and Gate A remain open.
+with zero unmatched submitted items inside a view. This capture's exact
+command join places its three cube command writes inside call 8. The next
+replay shows that this is not a universal scope boundary for all cube
+commands. SNR-01 and Gate A remain open.
+
+### Presentation-camera RTTI and the post-view command boundary
+
+Read-only hooks after the title loads `view+400` and the selected context's
+vtable identify the objects used in each source-frame-6000 presentation call.
+The eight `view+400` objects all have vtable `0x82002F64`. The base image
+`.local/ui-verify/default-image.bin` has SHA-256
+`6014727FA7B0B79727FD5F32A2E2377533DC8E29679E8D2462BD764D331FA305`. Its
+RTTI locator at `0x8235FEDC` names this type
+`TRefCountedObjectThreadSafe<CPresentationCamera>`. Calls 1 and 8 use the
+same camera object `0x2E493200`; calls 2–7 use another,
+`0x2E0B0E00`. The six middle calls use the observed face argument sequence
+`0, 4, 2, 1, 3, 5`, making their camera a reflection-view candidate, not a
+proved semantic label. The selected-context vtable `0x8200306C` resolves
+through locator `0x82351880` to
+`TRefCountedObjectThreadSafe<CD3D9GraphicsDevice>`, so that pointer is the
+graphics device rather than a camera.
+
+The same sustained replay exited normally with seven captures. Executable
+SHA-256:
+`023ABF6CC94939163456131B7F60B87FCAB7655215FEAD0962AD84921F5FAC6E`.
+`.local/native-renderer/snr01/view-object-vtable-runtime.log` SHA-256:
+`1D7619A6AAB9FF8268A4F1A6AABB33EB2C7F5C7A9FCC1D59498CA75A58F05360`.
+The exact-command verifier passed for all 728 cube-sampling draws from five
+primary roots. This run's two cube command words show the scope boundary:
+
+| Physical command | Cube draws | Writer location | Camera join |
+| --- | ---: | --- | --- |
+| `0x13087484` | 538 | frame 6000, inline path 1, inside view call 8 | `0x2E493200` via view `0x41849E30` |
+| `0x130874A4` | 190 | frame 6000, inline path 1, after view call 8 returned | none inside a view scope |
+
+Both writes were on the presentation thread in one sequential inline stream.
+The second was logged ten lines after call 8's end, following three other
+inline writes inside that call. The verifier still matches its exact address,
+opcode and payload to the worker read in source frame 6001, but **does not
+assign it to camera `0x2E493200`**. The track-bucket verifier also passed
+for source frame 6000/backend frame 6001 with 461 visible-list entries,
+324 packet headers and no unmatched submitted items inside a view.
+
+The camera pointer join establishes two distinct camera objects and the
+view-8 camera for in-scope command writes. The title's post-view publication
+step and camera state/transform semantics remain to be traced before the
+entire deferred cube path can be assigned to a view or the main camera.

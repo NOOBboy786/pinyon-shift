@@ -47,6 +47,16 @@ name = "PinyonShiftObservePresentationViewSelected"
 registers = ["r31", "r25"]
 
 [[midasm_hook]]
+address = 0x82444ED0
+name = "PinyonShiftObservePresentationViewObject400"
+registers = ["r31", "r3", "r11"]
+
+[[midasm_hook]]
+address = 0x82445040
+name = "PinyonShiftObservePresentationSelectedContextVtable"
+registers = ["r31", "r25", "r11"]
+
+[[midasm_hook]]
 address = 0x824461CC
 name = "PinyonShiftObservePresentationViewEnd"
 

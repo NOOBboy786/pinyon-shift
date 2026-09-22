@@ -24,7 +24,8 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             row = json.loads(match[3])
             if row["frame"] in (source_frame, backend_frame) or (
                 require_command_writers and
-                match[2] in ("linked indirect write", "inline indirect write") and
+                match[2] in ("linked indirect write", "inline indirect write",
+                             "view object400") and
                 source_frame - 12 <= row["frame"] <= source_frame
             ):
                 events[match[2]].append((line_number, int(match[1]), row))
@@ -88,6 +89,9 @@ def verify(path: Path, source_frame: int, backend_frame: int,
 
     commands = events["deferred indirect command"]
     writers = events["linked indirect write"] + events["inline indirect write"]
+    cameras = {(row["frame"], thread, row["call"]): row
+               for _, thread, row in events["view object400"]}
+    assert len(cameras) == len(events["view object400"])
     command_writers = {}
 
     def writer_for(packet_position, source):
@@ -97,20 +101,26 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                  row["command_physical"] == address]
         assert reads, f"no deferred command read for {address:#x}"
         read_position, read = max(reads, key=lambda item: item[0])
-        candidates = [(position, row) for position, _, row in writers
+        candidates = [(position, thread, row) for position, thread, row in writers
                       if position < read_position and
                       (row.get("command_physical",
                                row.get("opcode_address", 0) & 0x1FFFFFFF) == address)]
         assert candidates, f"no prior command writer for {address:#x}"
-        _, writer = max(candidates, key=lambda item: item[0])
+        _, writer_thread, writer = max(candidates, key=lambda item: item[0])
         assert (read["opcode"], read["payload"]) == (
             writer["opcode"], writer["payload"]), (
                 f"command {address:#x} changed between write and read")
         assert read["worker_stream"] == source["worker_stream"]
+        camera = cameras.get((writer["frame"], writer_thread,
+                              writer["view_call"])) if writer["view_call"] else None
+        if camera:
+            assert camera["view"] == writer["view"]
         return {"address": hex(address), "writer_frame": writer["frame"],
                 "writer_path": writer.get("path", "linked"),
                 "writer_view_call": writer["view_call"],
                 "writer_view": hex(writer["view"]),
+                "writer_camera": hex(camera["object"]) if camera else None,
+                "writer_camera_vtable": hex(camera["vtable"]) if camera else None,
                 "opcode": hex(read["opcode"]),
                 "payload": hex(read["payload"])}
 

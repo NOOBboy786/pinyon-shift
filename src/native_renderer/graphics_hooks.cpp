@@ -741,6 +741,30 @@ void PinyonShiftObservePresentationViewSelected(PPCRegister& r31,
   }
 }
 
+void PinyonShiftObservePresentationViewObject400(
+    PPCRegister& r31, PPCRegister& r3, PPCRegister& r11) {
+  if (!Snr01TraceCurrentFrame() || snr01_view_scopes.empty()) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 view object400 {{\"frame\":{},\"call\":{},"
+      "\"view\":{},\"object\":{},\"vtable\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      snr01_view_scopes.back().ordinal, r31.u32, r3.u32, r11.u32);
+}
+
+void PinyonShiftObservePresentationSelectedContextVtable(
+    PPCRegister& r31, PPCRegister& r25, PPCRegister& r11) {
+  if (!Snr01TraceCurrentFrame() || snr01_view_scopes.empty()) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 selected context vtable {{\"frame\":{},\"call\":{},"
+      "\"view\":{},\"context\":{},\"vtable\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      snr01_view_scopes.back().ordinal, r31.u32, r25.u32, r11.u32);
+}
+
 void PinyonShiftObservePresentationTrackLink(PPCRegister& r31,
                                              PPCRegister& r11,
                                              PPCRegister& r10) {
