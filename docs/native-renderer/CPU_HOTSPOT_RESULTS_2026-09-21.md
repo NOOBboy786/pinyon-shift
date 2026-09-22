@@ -401,3 +401,38 @@ multi-material color workload and title-side render preparation remain the
 substantial candidates. A race-frame render-target/consumer capture is needed
 to classify which color draws are genuinely visible, reflected, shadowed, or
 otherwise consumed before changing title culling or native batching.
+
+## RenderDoc race-frame producer and consumer join — 2026-09-22
+
+A signed, portable RenderDoc 1.46 capture triggered just after `race-ready`
+produced `.local/cpu-profile/traffic-attribution/race-start-capture_frame4709.rdc`
+(SHA-256 `2cccd83b0adebb6e9e96cd0c846986fb6036d415340b93267260f4ca92f59cb7`).
+The frame has 5,439 draw actions. The repository's payload-free pass exporter
+and resource-usage exporter recorded these ordered producer phases:
+
+| Event range | Draws | Output | Relevant observation |
+|---|---:|---|---|
+| 214–7,110 | 1,079 | D24S8 depth target `ResourceId::8655` | 448 draws use `5A28C7FAFD86F112` |
+| 7,201–13,418 | 1,094 | D32S8 depth target `ResourceId::6980` | 262 draws use the same shader |
+| 14,106–15,442 | 197 | Separate 2× MSAA color/depth targets | Material ownership unclassified |
+| 15,880–32,745 | 2,579 | 4× MSAA color `ResourceId::2487` and depth `2488` | Main multi-material scene phase |
+
+RenderDoc reports the first depth target as a compute input at events 3,060,
+4,474, 6,830, 7,119 and a pixel input in 12 later draws. The second depth
+target is a compute input at event 13,380 and a pixel input in 32 draws.
+These resource reads prove both depth outputs have downstream consumers; a shader-only skip
+cannot establish that the removed geometry is invisible to those consumers.
+The main color target is read by 10 later pixel draws after its producer phase.
+This is direct evidence that the large traffic color phase feeds later scene
+work, rather than a disposable diagnostic pass. Resource usage is a dependency
+join, not proof that every individual producer draw changes final pixels.
+
+The capture does not yet identify traffic object ownership, material roles,
+blend/order constraints, or the minimum draw set that preserves the final
+image. RenderDoc listed `EventGPUDuration`, but returned no per-action results
+for this capture, so the in-game pass timestamps remain the GPU timing source.
+The next experiment needs a bounded title owner → prepared draw → RenderDoc
+event join for the same stationary frames, followed by a paired run of a
+semantically safe draw or binding optimization. The depth-skip probe is not
+such a candidate. The temporary capture trigger and launcher wrapper were
+removed; the normal RelWithDebInfo preview rebuilt.
