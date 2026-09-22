@@ -276,3 +276,60 @@ Attribute the extra draws by pass and vehicle/shadow
 ownership, then test a targeted change against this fixture and its images.
 GPU time increases by about 3 ms, so a GPU pass capture is useful after the
 draw owners are identified. Clean-install shader coverage remains separate.
+
+## Stationary traffic pass attribution — 2026-09-22
+
+The unmodified RelWithDebInfo preview replayed the same stationary script with
+the existing critical-path trace and GPU corpus/timestamp diagnostics. These
+diagnostic runs are for attribution; the uninstrumented medians above remain
+the performance baseline. The scene and player pose stay fixed, but crowd,
+effects, lighting, and opponent state continue to change.
+
+Between `race-ready` and `race-08`, the traced source-frame interval had a
+21.52 ms median, versus 14.24 ms between `race-13` and `race-18`. Command-tape
+replay medians were 2.56/1.94 ms, and closing submission recording medians
+were 2.70/2.07 ms. The title emitter took only 0.13/0.07 ms. The observed
+submit-to-completion interval includes queueing and polling; it is not pure
+GPU execution time. Trace logging changes absolute frame time.
+
+Subtracting successive corpus checkpoints over 189 early and 210 clear source
+frames yielded about 5,015 versus 3,423 prepared draws per frame. About 560
+early draws per frame use depth-only vertex shader `5A28C7FAFD86F112` and
+disappear entirely in the clear window. They span four attachment states and
+many tiny index buffers (common index counts include 4, 9, and 7). This shader
+uses the terrain-depth path in the D3D12 backend. The historically identified
+80-draw dynamic-vehicle shadow epoch instead uses `4E1DA281CC3D7EDB` plus
+two tail shaders. These are distinct; the disappearing terrain-depth draws
+must not be removed or relabeled as vehicle shadows based on timing alone.
+
+The existing GPU pass timestamps sampled four early and four clear frames.
+Early frames had 4,723–5,242 draws and 10.63–11.30 ms of summed pass GPU time;
+clear frames had 3,363–3,368 draws and 7.52–7.98 ms. A depth-only pass family
+absent from the clear frames averaged 652 draws and 1.71 ms GPU in the early
+samples. Another large family averaged 694 early versus 117 clear draws and
+2.52 versus 0.10 ms GPU. Pass families group by attachment and use their first
+draw as a label; the latter family's first draw is a post-chain shader, so
+these aggregates do not identify all enclosed draw owners. GPU pass deltas
+must not be added as independent traffic costs because other scene work also
+changes. Checkpoint JSON serialization produced a recording-time outlier;
+those wall times are not an FPS benchmark.
+
+The `race-07` and `race-18` images show the same stopped camera with no obvious
+nearby opponents in either image. Off-screen or effects work may continue
+after visible cars leave. No production optimization follows safely from a
+shader hash or pass label alone. The remaining steps are:
+
+1. Run the stationary fixture through elevated CPU sampling to compare title
+   and GPU-command stacks in the marked early and clear windows:
+
+   ```powershell
+   .\tools\capture-cpu-profile.ps1 -SkipBuild `
+     -RenderTestScript config/render-tests/fh1-race-traffic-stationary.fh1test
+   ```
+
+2. Establish source/owner and producer-to-consumer bindings for the extra
+   terrain-depth and color draws, using a focused race-frame pass capture if
+   necessary. Optimize the proved hot owner at its shared boundary, then
+   repeat uninstrumented stationary runs and compare simulation time, pass
+   timings, and images. Do not trade away traffic rendering or shadows merely
+   to reduce the draw counter.
