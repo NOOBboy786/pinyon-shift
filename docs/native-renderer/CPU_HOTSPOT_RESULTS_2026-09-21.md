@@ -226,3 +226,53 @@ geometry/texture upload counts, source/present intervals, and title/GPU thread
 stacks. Compare equivalent windows before deciding whether car rendering,
 simulation, submission, or GPU execution causes the gap. Keep the current game
 session available for manual testing; collect traces in a later run.
+
+## Counter-poll pacing trial and stationary traffic replay — 2026-09-22
+
+A temporary, default-off hook at `0x829F04BC` tested a 1 ms sleep after each
+2 ms spent in the title counter poll. The same RelWithDebInfo binary ran the
+30-second moving race window with pacing off and on. Whole-process CPU usage
+fell from 105.8 to 91.5 CPU seconds, but the consumed-swap median rose from
+21.14 to 22.76 ms (p95 29.11 versus 29.21 ms). The player was already about
+39 m apart at the `race-moving` captures, so the FPS comparison is not a
+matched-scene effect estimate. The trial showed no frame-time win and the hook
+was removed; the preview was rebuilt without it. Lower CPU use alone does not
+justify changing the guest's synchronization loop.
+
+The moving route also sent the scripted car into barriers, invalidating its
+late clear-road window as a traffic-only comparison. The new
+[`fh1-race-traffic-stationary.fh1test`](../../config/render-tests/fh1-race-traffic-stationary.fh1test)
+keeps the player stopped at the race start, captures opponents leaving every
+second, then samples the same view after they have gone. In two independent
+unpaced replays, the player's start-to-end pose drift was under 0.001 m.
+
+| Replay | Window | Median frame | p95 frame | Median draws | Median guest GPU |
+|---|---|---:|---:|---:|---:|
+| First stationary | 0–8 s, opponents departing | 20.64 ms | 25.01 ms | 4,801 | 11.34 ms |
+| First stationary | 13–18 s, clear view | 14.70 ms | 18.24 ms | 3,340 | 8.18 ms |
+| Restored build | 0–8 s, opponents departing | 21.04 ms | 28.20 ms | 4,808 | 11.28 ms |
+| Restored build | 13–18 s, clear view | 15.16 ms | 18.32 ms | 3,341 | 8.19 ms |
+
+The early window costs about 39–40% more frame time in both replays, with
+roughly 1,460 extra draws and 3.1 ms more measured guest GPU time. The
+one-second images show several opponents at the start and progressively fewer
+through seconds 1–7. None is obvious at second 8, yet draw count remains above
+4,000 until about second 13. This supports a race-traffic workload cost, but
+does not identify which draw passes, shadow work, AI, or submission costs are
+responsible; off-screen opponents may still contribute. The stationary scene
+also continues to animate, so it is a controlled comparison rather than an
+exact car-only ablation.
+
+The reproducible next profile is an elevated WPR capture of the stationary
+fixture, splitting CPU samples at `race-ready`/`race-08` and
+`race-13`/`race-18`:
+
+```powershell
+.\tools\capture-cpu-profile.ps1 -SkipBuild `
+  -RenderTestScript config/render-tests/fh1-race-traffic-stationary.fh1test
+```
+
+Attribute the extra draws by pass and vehicle/shadow
+ownership, then test a targeted change against this fixture and its images.
+GPU time increases by about 3 ms, so a GPU pass capture is useful after the
+draw owners are identified. Clean-install shader coverage remains separate.
