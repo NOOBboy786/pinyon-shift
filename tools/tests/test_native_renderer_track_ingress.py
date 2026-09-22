@@ -67,6 +67,16 @@ class NativeRendererTrackIngressTests(unittest.TestCase):
             document["classes"]["track_presentation_unified"]["vtable_slot_count"],
         )
         self.assertEqual(
+            "82444E60",
+            next(
+                row["target"]
+                for row in document["passive_observation_candidates"][
+                    "presentation_view_refcounted"
+                ]
+                if row["slot"] == 13
+            ),
+        )
+        self.assertEqual(
             "active_refcounted_unified_track_presentation_receiver",
             document["classes"]["track_presentation_refcounted_unified"]["role"],
         )

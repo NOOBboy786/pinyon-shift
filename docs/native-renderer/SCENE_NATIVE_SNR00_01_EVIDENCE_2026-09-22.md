@@ -314,6 +314,52 @@ two live parent functions track-presentation paths, but does not establish
 which camera/view invoked each slot or that every procedural receiver is a
 track mesh.
 
+### Presentation-view scheduling boundary
+
+Two more normal-exit saved-route captures observed source frame 6000 with
+read-only hooks at the track-presentation slot-75/79 entries and at their
+guarded slot-75 helper. The final capture used executable SHA-256
+`F44396CFA02BF4D7DDCE71EE23A1CF62EBA0EC7653BAA6C8BC665C74E0E71494F`.
+The logs are local at
+`.local/native-renderer/snr01/track-entry-frame-6000/title-track.log`
+(SHA-256 `91725B5AAE1F5DB668FEBC78A5F9E4CCB1E89E9F6889C289FBA7A05971066855`)
+and `.local/native-renderer/snr01/track-pass-frame-6000/title-track-pass.log`
+(SHA-256 `EE22F8C0EEB0D49E6625B060FE879DB077E418331E603AEC36AE9EF612FEA81A`).
+The latter reports 19 slot-75 calls, two slot-79 calls, 19 helper calls,
+346 procedural items, 441 emitter packets and balanced scopes. The former
+reports 19 slot-75 calls, one slot-79 call and balanced scopes. These are
+different route replays, so their call counts are not interchangeable.
+
+The regenerated track-ingress static check (local output
+`.local/native-renderer/snr01/track-ingress-static.json`, SHA-256
+`1FF5BF64E4C8554C5309B00716E7A6925562AF2F6068B42CB7B8A95B30752549`)
+verifies RTTI for `CPresentationView` and its refcounted form at vtables
+`0x8200265C` and `0x8200255C`. Both slot 13 entries point to
+`sub_82444E60`. Its generated code contains six direct calls to guarded
+helper `sub_8244CA98`, which obtains the nested track-presentation receiver
+from the view object's state and invokes vtable slot 75. In the final
+capture, each of the 19 helper entries was immediately followed by one
+slot-75 entry with matching outer receiver, context and selected raw
+arguments. No helper entry was left unmatched. The 19 helper entries came
+from six return sites in `sub_82444E60`:
+
+| Return site | Calls | Raw argument group |
+| --- | ---: | --- |
+| `0x82445B14` | 8 | `r7=1, r8=0` |
+| `0x82445B68` | 1 | `r7=2, r8=2` |
+| `0x82445CD0` | 7 | `r7=8, r8=0` |
+| `0x82445F18` | 1 | `r7=2, r8=1` |
+| `0x82445FE8` | 1 | `r7=16, r8=3` |
+| `0x82446008` | 1 | `r7=32768, r8=4` |
+
+The helper can change other arguments before the vtable call; in particular
+its `r6` and `r8` must not be equated blindly with the slot-75 entry's
+registers. The static view relationship narrows the title scheduling
+boundary, but the captured outer receiver's runtime vtable, camera object,
+meaning of the raw argument groups and their graphics passes remain
+unverified. Neither slot-79 invocation in the final frame is yet joined to
+a specific visible-list entry. This is not a complete main-view census.
+
 The next runtime capture must carry a bounded title owner/generation, view,
 record and selected LOD through final draw preparation and join the resulting
 submissions to RenderDoc phase and resource identity.

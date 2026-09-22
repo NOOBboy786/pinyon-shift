@@ -104,6 +104,9 @@ thread_local uint64_t snr01_render_state_count = 0;
 thread_local uint64_t snr01_emitter_count = 0;
 thread_local uint64_t snr01_state_wrapper_count = 0;
 thread_local uint64_t snr01_dispatch_wrapper_count = 0;
+thread_local uint64_t snr01_track75_count = 0;
+thread_local uint64_t snr01_track79_count = 0;
+thread_local uint64_t snr01_track_pass_count = 0;
 thread_local uint64_t snr01_unmatched_emitter_exits = 0;
 thread_local uint64_t snr01_unmatched_dispatch_exits = 0;
 thread_local uint64_t snr01_unmatched_render_state_exits = 0;
@@ -242,6 +245,8 @@ void PinyonShiftObserveGraphicsFrame() {
         "\"procedural_calls\":{},\"dispatch_calls\":{},"
         "\"render_state_calls\":{},\"emitter_calls\":{},"
         "\"state_wrapper_calls\":{},\"dispatch_wrapper_calls\":{},"
+        "\"track75_calls\":{},\"track79_calls\":{},"
+        "\"track_pass_calls\":{},"
         "\"unmatched_exits\":{},"
         "\"unmatched_dispatch_exits\":{},"
         "\"unmatched_render_state_exits\":{},"
@@ -255,6 +260,8 @@ void PinyonShiftObserveGraphicsFrame() {
         snr01_procedural_count, snr01_dispatch_count,
         snr01_render_state_count, snr01_emitter_count,
         snr01_state_wrapper_count, snr01_dispatch_wrapper_count,
+        snr01_track75_count, snr01_track79_count,
+        snr01_track_pass_count,
         snr01_unmatched_exits,
         snr01_unmatched_dispatch_exits,
         snr01_unmatched_render_state_exits,
@@ -274,7 +281,8 @@ void PinyonShiftObserveGraphicsFrame() {
       snr01_unmatched_dispatch_exits =
       snr01_unmatched_render_state_exits = snr01_emitter_count =
       snr01_unmatched_emitter_exits = snr01_state_wrapper_count =
-      snr01_dispatch_wrapper_count = 0;
+      snr01_dispatch_wrapper_count = snr01_track75_count =
+      snr01_track79_count = snr01_track_pass_count = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
       (title_emitter_calls || title_packet_count)) {
     rex::perf::TraceCriticalPath("title_emitter", int64_t(title_emitter_frame),
@@ -344,6 +352,64 @@ void PinyonShiftObserveTitleDrawPacketPublish(PPCRegister& r3, PPCRegister& r11,
   }
   title_last_packet_ns = now_ns;
   ++title_packet_count;
+}
+
+void PinyonShiftObserveTrackPresentation75(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8, PPCRegister& r9,
+    PPCRegister& r10) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_track75_count;
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 track presentation {{\"frame\":{},\"slot\":75,"
+        "\"call\":{},\"caller_lr\":{},\"receiver\":{},"
+        "\"arg4\":{},\"arg5\":{},\"arg6\":{},\"arg7\":{},"
+        "\"arg8\":{},\"arg9\":{},\"arg10\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r12.u32, r3.u32, r4.u32, r5.u32, r6.u32,
+        r7.u32, r8.u32, r9.u32, r10.u32);
+  }
+}
+
+void PinyonShiftObserveTrackPresentation79(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8, PPCRegister& r9,
+    PPCRegister& r10) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_track79_count;
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 track presentation {{\"frame\":{},\"slot\":79,"
+        "\"call\":{},\"caller_lr\":{},\"receiver\":{},"
+        "\"arg4\":{},\"arg5\":{},\"arg6\":{},\"arg7\":{},"
+        "\"arg8\":{},\"arg9\":{},\"arg10\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r12.u32, r3.u32, r4.u32, r5.u32, r6.u32,
+        r7.u32, r8.u32, r9.u32, r10.u32);
+  }
+}
+
+void PinyonShiftObserveTrackPassCaller(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_track_pass_count;
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 track pass caller {{\"frame\":{},\"call\":{},"
+        "\"caller_lr\":{},\"receiver\":{},\"arg4\":{},"
+        "\"arg5\":{},\"arg6\":{},\"arg7\":{},\"arg8\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r12.u32, r3.u32, r4.u32, r5.u32, r6.u32,
+        r7.u32, r8.u32);
+  }
 }
 
 void PinyonShiftObserveProceduralStateWrapperCaller(

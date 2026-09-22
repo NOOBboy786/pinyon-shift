@@ -37,6 +37,21 @@ name = "PinyonShiftObserveTitleDrawEmitterEnd"
 # the verified CProceduralModels per-record helper; the second sees its common
 # return after the original draw preparation and indirect submission.
 [[midasm_hook]]
+address = 0x82439B74
+name = "PinyonShiftObserveTrackPresentation75"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
+address = 0x8240E7B4
+name = "PinyonShiftObserveTrackPresentation79"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
+address = 0x8244CA9C
+name = "PinyonShiftObserveTrackPassCaller"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8"]
+
+[[midasm_hook]]
 address = 0x8243D2A4
 name = "PinyonShiftObserveProceduralStateWrapperCaller"
 registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9"]

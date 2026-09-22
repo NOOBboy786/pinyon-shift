@@ -15,6 +15,20 @@ FUNCTION_RE = re.compile(r"^DEFINE_REX_FUNC\(sub_([0-9A-F]{8})\) \{")
 
 
 CLASSES = {
+    "presentation_view": {
+        "decorated_name": ".?AVCPresentationView@@",
+        "vtable": 0x8200265C,
+        "slots": 31,
+        "destructor": 0x82DD24A8,
+        "role": "presentation_view_baseline",
+    },
+    "presentation_view_refcounted": {
+        "decorated_name": ".?AV?$TRefCountedObjectThreadSafe@VCPresentationView@@@@",
+        "vtable": 0x8200255C,
+        "slots": 31,
+        "destructor": 0x82DD2570,
+        "role": "refcounted_presentation_view_receiver",
+    },
     "track_presentation": {
         "decorated_name": ".?AVCTrackPresentation@@",
         "vtable": 0x82239AB4,
@@ -130,6 +144,7 @@ CLASSES = {
 }
 
 RELATIONSHIPS = (
+    ("presentation_view_refcounted", "presentation_view", "refcounted_view_overrides"),
     (
         "track_presentation_refcounted_unified",
         "track_presentation_unified",
@@ -143,6 +158,8 @@ RELATIONSHIPS = (
 )
 
 KEY_SLOTS = {
+    "presentation_view": {13: 0x82444E60},
+    "presentation_view_refcounted": {13: 0x82444E60},
     "track_presentation_refcounted_unified": {
         78: 0x82DEEEE0,
         79: 0x8240E7B0,
