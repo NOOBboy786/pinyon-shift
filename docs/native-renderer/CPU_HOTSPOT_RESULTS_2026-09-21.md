@@ -239,6 +239,39 @@ matched-scene effect estimate. The trial showed no frame-time win and the hook
 was removed; the preview was rebuilt without it. Lower CPU use alone does not
 justify changing the guest's synchronization loop.
 
+The static SNR-M02 counter map is recorded below; the pacing trial did not
+establish a safe replacement for this wait.
+
+### Static counter contract for SNR-M02 — 2026-09-22
+
+Generated title code narrows the wait's contract but does not yet establish
+its host synchronization guarantee. `sub_823E91F0` compares a requested
+position with `device+11036` minus the word at `*(device+11024)`, calls
+`sub_829F03B0` to snapshot that word, then repeatedly calls
+`sub_829F04A8` while the published position remains behind the requested
+position. `sub_829F03B0` also snapshots `r13+256+88` and the guest timebase.
+Within `sub_829F04A8`, the published word is re-read, a system counter from
+`r13+256+88` is compared with the snapshot, and a threshold is loaded from
+`0x8328CDF8`. The verified base image stores `0x1388` (5000) there. The
+counter's units and the precise meaning of expiry are not yet proved; the
+expiry branch calls `sub_82A007E0`.
+
+`sub_82457D50` is a concrete writer path: it reads `device+11036`, emits
+command words beginning with `0xC0003B00`, and, under its `device+21940`
+and `device+11069` conditions, stores that position at
+`*(device+11024)` and an associated value at the next word. It then advances
+`device+11036` by two. Initialization in `sub_829EE7B8` also writes the
+published-position word; `sub_82A007E0` has a recovery write. These title
+stores do **not** by themselves prove whether the command processor or GPU
+also writes the memory, nor when that write becomes visible relative to
+submission and fences.
+
+SNR-M02 therefore remains open. The next bounded trace must log the
+published and requested positions, the writer path taken, system-counter
+snapshot/expiry, and the corresponding command submission/fence sequence.
+Any sleep/yield trial must preserve that ordering and compare consumed-swap
+latency, tail behavior and route position against controls, not only CPU use.
+
 The moving route also sent the scripted car into barriers, invalidating its
 late clear-road window as a traffic-only comparison. The new
 [`fh1-race-traffic-stationary.fh1test`](../../config/render-tests/fh1-race-traffic-stationary.fh1test)

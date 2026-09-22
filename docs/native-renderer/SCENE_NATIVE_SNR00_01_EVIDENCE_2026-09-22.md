@@ -71,6 +71,30 @@ centres. These are **two pilot controls**, not the final control variation
 for Gate B. The older 18.922 ms post-fix trace began around X = −1743 m,
 so it is hotspot evidence, not a matched performance baseline for this route.
 
+### Frozen pilot visual reference regions
+
+The A1 control produced four 1280×720, full-resolution PPM images that fix
+review locations for the initial compatibility reference. They are local
+under `.local/native-renderer/snr00/control-a1/`; rerun the frozen route
+above to reproduce them. Hashes identify this exact set, not a claim that
+independent race replays produce identical pixels.
+
+| Image | SHA-256 | Review rectangles `(x, y, width, height)` |
+| --- | --- | --- |
+| `event-entered.ppm` | `55809BC9219B7B0F58B0FAAD6C1FCE76E4330B3FBEA1C6BEB98E464F1C57D3A7` | Festival menu/text `(220, 155, 825, 390)`; car behind UI `(0, 285, 1270, 375)` |
+| `race-ready.ppm` | `2627D7B42326DF4E400752B755798BE82EEE44A7E2EE247A93C12E48E44BE184` | Traffic body/glass `(500, 245, 580, 200)`; player body/glass `(470, 375, 335, 325)`; road/shadow `(235, 385, 660, 330)` |
+| `race-moving.ppm` | `A9DF949B91428EACB79C45641398C7D38A8A5B11C05DC42F3E28E5296E8CE80D` | Road/terrain boundary `(0, 255, 620, 465)`; grass and fence edges `(810, 265, 390, 260)`; vehicle/shadow `(475, 380, 395, 340)`; sky/exposure `(255, 0, 700, 285)` |
+| `race-sustained.ppm` | `FCD747EA54ECAABE4BDB8A57C9C1EDBB05373BAD02E63DAC642A1982A38BE4D1` | Grass/crowd alpha edges `(0, 255, 485, 365)`; player paint/glass `(465, 380, 350, 295)`; lit barriers and shadow `(180, 340, 950, 360)` |
+
+All four show HUD, with the race timer/place in the upper corners and
+speedometer at lower right during driving. `race-moving.ppm` captures the
+vehicle in motion; the installed settings disable motion blur, so it is not
+a blur reference. The menu image is a compatibility-only mode for the
+proposed main-view slice. Mirrors, photo mode, and any uncovered reflections
+still require explicit whole-frame compatibility behavior. These rectangles
+are visual review targets; Gate B still requires same-frame native and
+compatibility images and title-proved pass membership before judging parity.
+
 ## Predeclared Gate B comparison
 
 - Use the same 1× installed settings and source route, with compatibility
