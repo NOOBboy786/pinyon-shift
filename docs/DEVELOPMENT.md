@@ -94,9 +94,9 @@ comparison hoping for a better result:
   acceleration p99; the 2x comparison stopped on green/white glass and headlight
   artifacts. Later stopped controls remain unexecuted. The production omission
   cause and broad lifetime/visual acceptance are not closed by mipmap work.
-- A scaled accumulator presentation experiment is preserved on
-  `arcanite24/scaled-accumulator-presentation` at `0e0a42b`, explicitly not for
-  merge. It is not a missing production fix.
+- The scaled accumulator presentation experiment is finished and archived at
+  tag `experiments/scaled-accumulator-presentation-2026-09-01` (`0e0a42b`).
+  It failed qualification, is not for merge, and is not a missing production fix.
 
 ## Startup correctness: AUD-01 and AUD-02
 
