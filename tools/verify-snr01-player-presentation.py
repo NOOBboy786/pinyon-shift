@@ -285,6 +285,19 @@ def main() -> int:
             }),
         })
 
+    node_packets = [
+        r for r in local_packets + model_packets if "node" in r
+    ]
+    if node_packets:
+        assert len(node_packets) == 49
+        assert len({r["node"] for r in node_packets}) == 49
+        assert all(
+            r["node"] == r["list_object"] + 184
+            and r["node_index"] == r["node_count"] == 1
+            for r in node_packets
+        )
+        model_record_summary["local_car_transient_command_nodes"] = 49
+
     backend_summary = {}
     if args.require_backend_join:
         scene_by_pair = {

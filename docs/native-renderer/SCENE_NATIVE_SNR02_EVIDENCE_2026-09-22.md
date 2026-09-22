@@ -117,3 +117,22 @@ every call. The 37 flushes emitted 37 distinct transient list objects.
 --require-backend-join` checks these joins along with the 268-draw census.
 Next, follow the renderer state queues used by `sub_824167F8` and relate
 their entries to each packet's final geometry and material resources.
+
+## Command-buffer node ownership
+
+`sub_82416A00` reads its command-list object's linked-node head at +116.
+For each node it reads a count at +4 and packet pairs from the node's
+8-byte entries before writing a child indirect packet at `0x82416F18`.
+An extended read-only packet hook captured the node and entry index during
+another normal-exit, seven-capture saved-race replay (executable SHA-256
+`8736F0EF656CE9594A41EA8FBAF3EA5EF6BD14B319B2E38990F9B69E3E168E06`).
+The bounded log is `.local/native-renderer/snr02/model-node-run-a-full.log`
+(SHA-256 `442B86F2E2BA2CEDFC651E92380F39DE665CC033E4F4ECE2105C93953B2EB72A`).
+
+Every one of the local car's 49 packets used a distinct node exactly
+184 bytes after its distinct command-list object; every node had count 1
+and emitted entry 1. That partitions into 37 model and 12 presentation
+packets. The same verifier command above checks this capture and its
+268 prepared draws. These nodes are transient per-submission containers,
+not a reusable mesh identity or resource lifetime key. The resource owner
+must be found before this command-list packaging step.

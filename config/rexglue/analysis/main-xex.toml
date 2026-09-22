@@ -859,7 +859,7 @@ registers = ["r12", "r3", "r4", "r5"]
 [[midasm_hook]]
 address = 0x82416F18
 name = "PinyonShiftObserveSceneCommandBuffer"
-registers = ["r24", "r10", "r11", "r30"]
+registers = ["r24", "r10", "r11", "r30", "r28", "r29"]
 
 [[midasm_hook]]
 address = 0x82417054

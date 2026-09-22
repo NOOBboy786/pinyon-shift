@@ -2528,7 +2528,8 @@ void PinyonShiftObserveSceneCommandBufferEnd() {
 }
 
 void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
-                                         PPCRegister& r11, PPCRegister& r30) {
+                                         PPCRegister& r11, PPCRegister& r30,
+                                         PPCRegister& r28, PPCRegister& r29) {
   if (Snr01TraceCurrentFrame() &&
       ++snr01_scene_indirect_count <= kSnr01PacketLimit) {
     if (!snr01_view_scopes.empty() &&
@@ -2540,7 +2541,8 @@ void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
     REXGPU_INFO(
         "FH1 SNR01 scene indirect packet {{\"frame\":{},\"ordinal\":{},"
         "\"header_physical\":{},\"target_physical\":{},"
-        "\"words\":{},\"list_object\":{},\"caller_lr\":{},"
+        "\"words\":{},\"list_object\":{},\"node\":{},"
+        "\"node_index\":{},\"node_count\":{},\"caller_lr\":{},"
         "\"flush_caller_lr\":{},\"flush_owner\":{},"
         "\"flush_owner_first_word\":{},"
         "\"flush_input\":{},"
@@ -2551,6 +2553,7 @@ void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         snr01_scene_indirect_count, r30.u32 & 0x1FFFFFFF,
         r10.u32 & 0x1FFFFFFF, r11.u32, r24.u32,
+        r28.u32, r29.u32, SnrM02ReadU32(r28.u32 + 4),
         snr01_scene_indirect_callers.empty()
             ? 0
             : snr01_scene_indirect_callers.back(),
