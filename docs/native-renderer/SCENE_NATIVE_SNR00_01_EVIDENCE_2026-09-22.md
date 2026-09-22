@@ -1713,9 +1713,9 @@ unproved, so SNR-00, SNR-01 and Gate A remain open.
 
 The camera/view verifier now compares the post-view root's distinct prepared
 draw packet addresses in backend frame 6001 with prepared draws in backend
-frames 5999 and 6000. It asserts that addresses not seen in those prior
-frames exactly equal the source-frame-6000 direct-packet records. Four saved
-captures pass:
+frames 5999 and 6000, then reports which newly observed addresses have a
+source-frame direct, semantic or indexed write. Four earlier captures had an
+exact new-address/direct-write match:
 
 | Replay | Post-view addresses | Seen in prior frames | New direct records |
 | --- | ---: | ---: | ---: |
@@ -1734,3 +1734,68 @@ owners and allocation generations remain unknown; stable addresses and draw
 metadata do not prove stable buffer contents or a main-view pass boundary.
 The next ownership probe should follow the title references to these resident
 command buffers, then check their resource generations before any suppression.
+
+A separate normal-exit replay moved the bounded title probe to source frame
+5999 without rebuilding (the executable SHA-256 remained
+`F2CE5C3D1B2E5CB27EB61113F1D0F3149C0A753DB7442FFBEF528A8F871EE22A`).
+It produced seven PPM captures; log
+`.local/native-renderer/snr01/resident-origin-5999-run-a.log` SHA-256 was
+`E0020B75C476F1B3EF74A32AC6F18353C89FD158D3AFD1B1CD7258C2B5EDD9B5`.
+Its post-view command consumed 31 unique packet addresses in backend frame
+6000: 23 had already appeared in backend frames 5998/5999 with the same
+captured draw metadata, and the other eight exactly matched source-frame-5999
+direct writes. The title owner probe again joined one direct packet to view
+call 8. The camera/view, track-bucket (351 entries, 281 headers, zero
+unmatched in-view submissions) and cube-consumer (728 draws, four writers)
+verifiers passed. Moving the probe one frame earlier therefore did not find
+the first writes of the recurring packets. The population also varied from
+the 185-address source-frame-6000 capture, so addresses must be compared
+within each replay, not across launches. A targeted memory-write watch on
+known resident command pages is the next way to test mutation; it would not
+by itself identify the original title allocator or render owner.
+
+### Full-route survey of known packet writers
+
+A default-off survey now observes the existing semantic and direct PM4 header
+writer hooks throughout the replay, independently of the single-frame trace.
+It restricts logging to physical ranges `[0x14000000,0x16000000)` and
+`[0x17000000,0x18000000)`, with an 8,192-event cap per title thread. The
+initial broader `[0x14000000,0x18000000)` attempt hit that cap in the
+unrelated `0x16E…` primary-packet pool by source frame about 1830, so it
+cannot establish anything about later resident packets. The filter change
+excluded that pool. Survey activation is now logged explicitly.
+
+The final filtered build's executable SHA-256 was
+`3F346F83C3278B8A01DDEC792D233E391B6084A1051F423FBCA30D79614F06DC`.
+Its normal-exit seven-capture log
+`.local/native-renderer/snr01/resident-writers-run-c.log` SHA-256 was
+`06968CEDCC1CB63EA5FDAE07A34E308F078F3FD440FCF7AA2AA9D589BDD4A28B`.
+The activation marker confirms the two ranges and cap. The post-view root
+consumed 70 distinct packet addresses, 62 of them also prepared in the two
+preceding backend frames. **All 62 recurring addresses lie in the surveyed
+ranges, and the complete replay logged zero writes from the hooked semantic
+and direct packet producers in those ranges.** The other eight addresses
+exactly matched source-frame direct writes. The camera/view verifier passes
+and reports the survey coverage. The track-bucket verifier passed with 478
+entries, 324 headers and zero unmatched in-view submissions; the cube
+consumer verifier passed with 728 draws and four command writers.
+
+Two preceding survey replays also exposed a valid packet mix that the old
+camera/view verifier rejected. Their post-view roots had 245 and 248 unique
+addresses; 206 in each had appeared in prior backend frames. The newly seen
+addresses split into 38/39 direct writes and 1/3 semantic writes, all matched
+exactly with no remaining unexplained new address. Of the direct writes,
+27/29 occurred within the existing direct-emitter scope, while 11/10 used
+the indexed2 path outside it. The semantic writes record emitter caller
+`0x82412E1C` in `sub_82412DD8`. The verifier now accepts both known direct
+paths, counts semantic/indexed writers, and reports any genuinely uncovered
+new address instead of assuming all post-view writes follow indexed2.
+
+The zero-hit resident survey excludes **only** the hooked packet producers
+in its ranges during this replay. It does not prove no guest write occurred:
+another title writer, a loaded/prebuilt stream, GPU production or earlier
+allocation could supply the recurring packets. Stable packet addresses and
+draw metadata still do not establish byte freshness or owner identity.
+SNR-01/02 need a write/freshness observation on these known pages and a
+title reference back to their allocator or scene owner before this portion
+of the proposed main-view slice can be claimed or suppressed.

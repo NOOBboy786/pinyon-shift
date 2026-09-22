@@ -25,6 +25,9 @@ REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_clear_producer_trace, false, "Pinyon Shift"
 REXCVAR_DEFINE_INT32(pinyon_shift_snr01_trace_source_frame, 0, "Pinyon Shift",
                      "Trace one source frame's procedural scopes and indexed PM4 headers")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_resident_packet_writers, false,
+                    "Pinyon Shift", "Trace bounded resident PM4 packet writes")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 namespace {
 
@@ -239,6 +242,7 @@ thread_local uint64_t snr01_unmatched_second_draw_exits = 0;
 thread_local uint64_t snr01_item_node_count = 0;
 thread_local uint64_t snr01_direct_call_count = 0;
 thread_local uint64_t snr01_direct_packet_count = 0;
+thread_local uint64_t snr01_resident_packet_count = 0;
 thread_local uint64_t snr01_primary_indirect_packet_count = 0;
 thread_local uint64_t snr01_unmatched_direct_exits = 0;
 thread_local uint64_t snr01_unmatched_track_bucket_exits = 0;
@@ -290,8 +294,31 @@ uint64_t Snr01CameraMatrixHash(uint32_t camera, uint32_t offset) {
   return hash;
 }
 
+void RecordSnr01ResidentPacket(const char* path, uint32_t previous_word,
+                               uint32_t header_word, uint32_t command_owner) {
+  static const bool enabled = REXCVAR_GET(
+      pinyon_shift_snr01_trace_resident_packet_writers);
+  if (!enabled) {
+    return;
+  }
+  const uint32_t physical = (previous_word + 4) & 0x1FFFFFFF;
+  if (physical < 0x14000000 ||
+      (physical >= 0x16000000 && physical < 0x17000000) ||
+      physical >= 0x18000000 ||
+      ++snr01_resident_packet_count > kSnr01PacketLimit) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 resident packet {{\"frame\":{},\"ordinal\":{},"
+      "\"path\":\"{}\",\"header_physical\":{},"
+      "\"header_word\":{},\"command_owner\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      snr01_resident_packet_count, path, physical, header_word, command_owner);
+}
+
 void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
                                uint32_t header_word, uint32_t command_owner) {
+  RecordSnr01ResidentPacket(path, previous_word, header_word, command_owner);
   if (!Snr01TraceCurrentFrame()) {
     return;
   }
@@ -331,6 +358,7 @@ void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
 
 void RecordSnr01DirectPacket(const char* path, uint32_t previous_word,
                              uint32_t header_word, uint32_t command_owner) {
+  RecordSnr01ResidentPacket(path, previous_word, header_word, command_owner);
   if (!Snr01TraceCurrentFrame()) {
     return;
   }
@@ -526,6 +554,12 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
     return;
   }
   snr01_memory.store(memory, std::memory_order_release);
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_resident_packet_writers)) {
+    REXGPU_INFO("FH1 SNR01 resident packet survey active "
+                "range=[0x14000000,0x16000000)+[0x17000000,0x18000000) "
+                "per_thread_limit={}",
+                kSnr01PacketLimit);
+  }
   const bool enabled = ResetFh1GpuCorpus();
   graphics_system->SetPreparedDrawObserver(
       enabled || REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0

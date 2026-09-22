@@ -11,7 +11,8 @@ from pathlib import Path
 EVENT = re.compile(r"\[t(\d+)\] FH1 SNR01 (camera method|view object400|view end|"
                    r"inline indirect write|deferred indirect command|"
                    r"primary indirect packet|indirect buffer|prepared draw|"
-                   r"direct packet|indexed2 owner) (\{.*\})")
+                   r"direct packet|semantic packet|indexed packet|"
+                   r"indexed2 owner|resident packet) (\{.*\})")
 
 
 def verify(path: Path, frame: int):
@@ -20,13 +21,24 @@ def verify(path: Path, frame: int):
                                     "deferred indirect command",
                                     "primary indirect packet", "indirect buffer",
                                     "prepared draw", "direct packet",
+                                    "semantic packet", "indexed packet",
                                     "indexed2 owner")}
+    survey_ranges = []
+    resident_writes = []
     for position, line in enumerate(path.open(encoding="utf-8-sig",
                                               errors="replace")):
+        if "FH1 SNR01 resident packet survey active" in line:
+            assert not survey_ranges
+            survey_ranges = [(int(a, 16), int(b, 16)) for a, b in
+                             re.findall(r"\[0x([0-9a-f]+),0x([0-9a-f]+)\)", line)]
+            assert len(survey_ranges) == 2
         match = EVENT.search(line)
         if match:
             row = json.loads(match[3])
             row["_thread"] = int(match[1])
+            if match[2] == "resident packet":
+                resident_writes.append(row)
+                continue
             if row["frame"] in (frame, frame + 1) or (
                     match[2] == "prepared draw" and row["frame"] == frame - 1):
                 events[match[2]].append((position, row))
@@ -101,10 +113,14 @@ def verify(path: Path, frame: int):
                for surface, color, depth, bits in targets)
     direct = [row for _, row in events["direct packet"]
               if row["frame"] == frame and row["header_physical"] in packets]
+    semantic = [row for _, row in events["semantic packet"]
+                if row["frame"] == frame and row["header_physical"] in packets]
+    indexed = [row for _, row in events["indexed packet"]
+               if row["frame"] == frame and row["header_physical"] in packets]
     prior_packets = {row["packet_physical"] for _, row in
                      events["prepared draw"] if row["frame"] in (frame - 1, frame)}
-    if prior_packets:
-        assert packets - prior_packets == {row["header_physical"] for row in direct}
+    new_without_source_write = (packets - prior_packets) - {
+        row["header_physical"] for row in direct + semantic + indexed}
     fields = ("vertex_shader", "pixel_shader", "index_count",
               "index_buffer_type", "index_buffer_guest_base",
               "index_buffer_length", "guest_primitive_type",
@@ -117,11 +133,17 @@ def verify(path: Path, frame: int):
     matching_prior_metadata = sum(
         metadata.get((packet, False)) == metadata.get((packet, True))
         for packet in packets & prior_packets)
-    assert direct and all(row["direct_call"] == 0 and
-                          row["path"] == "indexed2_secondary" for row in direct)
-    callers = Counter(row.get("indexed2_caller_lr", 0) for row in direct)
-    if any("indexed2_caller_lr" in row for row in direct):
-        assert 0 not in callers
+    assert direct and all(
+        (row["path"] == "indexed2_secondary" and not row["direct_call"] and
+         ("indexed2_caller_lr" not in row or row["indexed2_caller_lr"])) or
+        (row["path"] == "secondary" and row["direct_call"] and
+         row["direct_caller_lr"])
+        for row in direct)
+    callers = Counter(row["indexed2_caller_lr"] for row in direct
+                      if row["path"] == "indexed2_secondary" and
+                      "indexed2_caller_lr" in row)
+    scoped_callers = Counter(row["direct_caller_lr"] for row in direct
+                             if row["path"] == "secondary")
     owner = events["indexed2 owner"]
     if owner:
         assert len(owner) == 1
@@ -149,16 +171,33 @@ def verify(path: Path, frame: int):
             "post_view_unique_draw_packets": len(packets),
             "post_view_packet_addresses_seen_in_prior_frames": len(
                 packets & prior_packets),
+            "post_view_new_packet_addresses_without_source_write": len(
+                new_without_source_write),
+            "post_view_source_semantic_packets": len(semantic),
+            "post_view_source_indexed_packets": len(indexed),
             "post_view_packet_addresses_with_matching_prior_metadata":
                 matching_prior_metadata,
+            "resident_survey_active": bool(survey_ranges),
+            "resident_survey_covered_recurring_addresses": sum(
+                any(start <= packet < end for start, end in survey_ranges)
+                for packet in packets & prior_packets),
+            "resident_survey_total_writes": len(resident_writes),
+            "resident_survey_recurring_writes": sum(
+                row["header_physical"] in packets & prior_packets
+                for row in resident_writes),
             "post_view_draws_by_root": {hex(root): count for root, count
                                         in sorted(draws_by_root.items())},
             "post_view_color_words": {hex(color): count for
                                       (_, color, _, _), count in targets.items()},
-            "post_view_direct_packets_outside_scope": len(direct),
+            "post_view_direct_packets_outside_scope": sum(
+                not row["direct_call"] for row in direct),
+            "post_view_direct_packets_inside_scope": sum(
+                bool(row["direct_call"]) for row in direct),
             "title_owner_probe_matched": bool(owner),
             "post_view_indexed2_callers": {hex(caller): count for caller, count
-                                           in sorted(callers.items())}}
+                                           in sorted(callers.items())},
+            "post_view_scoped_direct_callers": {
+                hex(caller): count for caller, count in sorted(scoped_callers.items())}}
 
 
 if __name__ == "__main__":
