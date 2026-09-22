@@ -2260,3 +2260,36 @@ selector-table formula in
 `sub_8243CCF0` provide a bounded next boundary for recovering part/LOD meaning;
 numeric selector values remain unnamed until their producer or data schema is
 proved.
+
+### Local car title buffers join exactly to prepared draws and fetches
+
+The full timestamp-ordered replay log, including backend frame 6001, is local
+at `.local/native-renderer/snr01/local-car-selection-run-a-full.log` with
+SHA-256
+`2BB523AFC9BDEC60CE7034D720FEBA4D93777F60047F7412FFD2822807FC88BC`.
+The player-presentation verifier's `--require-backend-join` mode uses each
+scene packet's exact header/target pair to find backend indirect executions,
+then uses execution identity to select prepared draws and their fetch records.
+It does not use shader or address proximity to infer ownership.
+
+All 49 local-car title buffers matched at least one backend execution. Repeated
+execution produced 108 child executions and 268 prepared draws: 156 under the
+local presentation and 112 under its model. The immediately preceding replay
+had the same 108/268 and 156/112 counts. Every draw used the observed scene
+color/depth binding (`surface_info 0x14020500`, color `0xC0000`, depth
+`0x10400`, binding bits 3). The draws span 46 shader pairs and 104 distinct
+index-buffer range/primitive tuples.
+
+The backend emitted all expected fetch records for those draws: 716 vertex
+fetches and 1,238 texture fetches. They resolve to 48 distinct
+base/length/stride/type vertex-buffer tuples and 25 distinct texture payload
+tuples (base, mip base, format, dimension and extent). Every vertex fetch
+names one of the matched local-car executions as a state source. This is the
+first exact local-player owner → title list → backend draw → geometry/texture
+resource census and supplies an authoritative starting set for SNR-02.
+
+These backend tuples describe prepared state, not semantic material roles or
+resource generations. Repeated executions must not be counted as additional
+title instances, and shared buffer addresses need allocation/payload lifetime
+proof before native admission. Shader pairs remain diagnostics rather than
+paint, glass, decal or other role labels.

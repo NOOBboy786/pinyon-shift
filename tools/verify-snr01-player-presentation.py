@@ -16,6 +16,10 @@ DISCOVERY_PREFIX = "FH1 SNR01 local car presentation shared pointer "
 SCENE_PACKET_PREFIX = "FH1 SNR01 scene indirect packet "
 CAR_OWNER_CALL_PREFIX = "FH1 SNR01 car owner call "
 CAR_OWNER_SELECTION_PREFIX = "FH1 SNR01 car owner selection "
+INDIRECT_BUFFER_PREFIX = "FH1 SNR01 indirect buffer "
+PREPARED_DRAW_PREFIX = "FH1 SNR01 prepared draw "
+VERTEX_FETCH_PREFIX = "FH1 SNR01 prepared vertex fetch "
+TEXTURE_FETCH_PREFIX = "FH1 SNR01 prepared texture fetch "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -34,6 +38,7 @@ def main() -> int:
     parser.add_argument("--require-local-presentation", action="store_true")
     parser.add_argument("--require-local-model", action="store_true")
     parser.add_argument("--require-owner-calls", action="store_true")
+    parser.add_argument("--require-backend-join", action="store_true")
     args = parser.parse_args()
 
     players = [r for r in records(args.log, PLAYER_PREFIX) if r["frame"] == args.frame]
@@ -83,6 +88,7 @@ def main() -> int:
         args.require_local_presentation
         or args.require_local_model
         or args.require_owner_calls
+        or args.require_backend_join
     )
     if require_local:
         assert len(local_presentations) == 1
@@ -102,7 +108,7 @@ def main() -> int:
         assert {r["flush_owner_first_word"] for r in local_packets} == {0x82003A54}
         assert len({r["target_physical"] for r in local_packets}) == 12
     model_packets = []
-    if args.require_local_model or args.require_owner_calls:
+    if args.require_local_model or args.require_owner_calls or args.require_backend_join:
         assert local["model_vtable"] == 0x82001618
         model_packets = [
             r for r in scene_packets
@@ -202,6 +208,102 @@ def main() -> int:
             },
         }
 
+    backend_summary = {}
+    if args.require_backend_join:
+        scene_by_pair = {
+            (r["header_physical"], r["target_physical"]): r
+            for r in local_packets + model_packets
+        }
+        assert len(scene_by_pair) == 49
+        executions_by_pair = {}
+        for row in records(args.log, INDIRECT_BUFFER_PREFIX):
+            if row["frame"] == args.frame + 1:
+                executions_by_pair.setdefault(
+                    (row["dispatch_packet_physical"], row["command_buffer"]),
+                    [],
+                ).append(row)
+        assert all(executions_by_pair.get(pair) for pair in scene_by_pair)
+        scene_by_execution = {
+            execution["execution"]: scene
+            for pair, scene in scene_by_pair.items()
+            for execution in executions_by_pair[pair]
+        }
+        assert len(scene_by_execution) == 108
+
+        draws = [
+            r for r in records(args.log, PREPARED_DRAW_PREFIX)
+            if r["frame"] == args.frame + 1
+            and r["indirect_execution"] in scene_by_execution
+        ]
+        assert len(draws) == 268
+        assert Counter(
+            scene_by_execution[r["indirect_execution"]]["flush_owner"]
+            for r in draws
+        ) == {local["presentation"]: 156, local["model"]: 112}
+        assert all(
+            r["surface_info"] == 0x14020500
+            and r["color_info"] == [0xC0000, 0, 0, 0]
+            and r["depth_info"] == 0x10400
+            and r["render_target_bits"] == 3
+            for r in draws
+        )
+        shader_pairs = {(r["vertex_shader"], r["pixel_shader"]) for r in draws}
+        index_ranges = {
+            (
+                r["index_buffer_guest_base"],
+                r["index_buffer_length"],
+                r["index_count"],
+                r["guest_primitive_type"],
+            )
+            for r in draws
+        }
+        assert len(shader_pairs) == 46
+        assert len(index_ranges) == 104
+
+        draw_keys = {(r["ordinal"], r["packet_physical"]) for r in draws}
+        vertex_fetches = [
+            r for r in records(args.log, VERTEX_FETCH_PREFIX)
+            if r["frame"] == args.frame + 1
+            and (r["draw"], r["packet_physical"]) in draw_keys
+        ]
+        texture_fetches = [
+            r for r in records(args.log, TEXTURE_FETCH_PREFIX)
+            if r["frame"] == args.frame + 1
+            and (r["draw"], r["packet_physical"]) in draw_keys
+        ]
+        assert len(vertex_fetches) == sum(r["vertex_fetch_count"] for r in draws)
+        assert len(texture_fetches) == sum(r["texture_fetch_count"] for r in draws)
+        assert len(vertex_fetches) == 716
+        assert len(texture_fetches) == 1238
+        assert all(
+            r["source_execution_0"] in scene_by_execution
+            or r["source_execution_1"] in scene_by_execution
+            for r in vertex_fetches
+        )
+        vertex_buffers = {
+            (r["guest_base"], r["length"], r["stride_words"], r["type"])
+            for r in vertex_fetches
+        }
+        textures = {
+            (
+                r["base_address"], r["mip_address"], r["format"],
+                r["dimension"], r["width"], r["height"], r["stack_depth"],
+            )
+            for r in texture_fetches
+        }
+        assert len(vertex_buffers) == 48
+        assert len(textures) == 25
+        backend_summary = {
+            "local_scene_backend_executions": len(scene_by_execution),
+            "local_scene_prepared_draws": len(draws),
+            "local_scene_shader_pairs": len(shader_pairs),
+            "local_scene_index_ranges": len(index_ranges),
+            "local_scene_vertex_fetches": len(vertex_fetches),
+            "local_scene_vertex_buffers": len(vertex_buffers),
+            "local_scene_texture_fetches": len(texture_fetches),
+            "local_scene_textures": len(textures),
+        }
+
     text = args.log.read_text(encoding="utf-8", errors="replace")
     direct_links = text.count("FH1 SNR01 local car owner link ")
     reverse_links = text.count("FH1 SNR01 local presentation car link ")
@@ -220,6 +322,7 @@ def main() -> int:
         "reverse_links": reverse_links,
     }
     summary.update(owner_call_summary)
+    summary.update(backend_summary)
     print(json.dumps(summary, indent=2))
     return 0
 
