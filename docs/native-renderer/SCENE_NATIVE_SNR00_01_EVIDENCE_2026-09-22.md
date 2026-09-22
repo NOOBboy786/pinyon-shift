@@ -648,3 +648,56 @@ candidate, not proof that every descendant draw belongs to the view call:
 the buffer can contain packets recorded outside that scope, and address reuse
 needs lifetime evidence. Capture exact buffer record/submit boundaries and
 the visible-list owner before promoting these candidates to an ownership map.
+
+### Track bucket entries to draw packets
+
+`CTrackPresentation` slot 75 (`sub_82439B70`) indexes a pair of pointers at
+`presenter + 56808 + 16 * (5 * arg5 + arg6)`. Their difference is divided
+by 20, and the loop at `0x8243AB5C` visits that many 20-byte entries. It
+first reads a pointer from entry word 0; a second branch reads entry word 1.
+This is an authoritative title-side record traversal, but its pointer types,
+record ownership and selected LOD remain unknown. Read-only hooks at
+`0x8243AB64`, `0x8243AC8C` and `0x8243AD74` bracket each iteration and
+record which pointer path it took and the packet ordinals emitted within it.
+
+The final saved race exited normally with executable SHA-256
+`F072059784D4689D9E067EC9CF81F0372FAB4B3D7010511E364E0C9EEDFD0C1C`.
+Its local combined log is
+`.local/native-renderer/snr01/track-bucket-secondary-frame-6000/title-backend-track-bucket-secondary.log`
+(SHA-256 `D1FA08572A6E329C9EBC625CD6510CF5784F360978B5E887876E35544B2FBC44`).
+Source frame 6000 had 445 logged entries, with no cap hit, unfinished scope
+or unmatched exit. All had one view pointer (`0x4311F710`) and one nested
+presenter (`0x41B10010`); every entry occurred inside a matching view call.
+The bucket offset formula matched the observed slot-75 arguments. The eight
+view calls contained `156, 10, 9, 8, 11, 6, 12, 233` entries respectively.
+
+| Pointer path | Entries | Entries with packets | Distinct packet headers | Backend-6001 prepared-draw callbacks |
+| --- | ---: | ---: | ---: | ---: |
+| First word | 314 | 8 | 209 | 294 |
+| Second word | 131 | 36 | 116 | 201 |
+| Total | 445 | 44 | 325 | 495 |
+
+The verifier checks that the two paths are exclusive, every scoped packet
+ordinal exists exactly once on the same title thread, packet physical
+addresses are distinct, and every one has at least one exact backend
+prepared-draw packet-address match. The indirect-join verifier separately
+matched all 132 backend-frame-6001 roots to title primary-ring packets;
+that frame had 1,623 indirect executions and 5,123 prepared draws.
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/track-bucket-secondary-frame-6000/title-backend-track-bucket-secondary.log `
+  --source-frame 6000 --backend-frame 6001
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/track-bucket-secondary-frame-6000/title-backend-track-bucket-secondary.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+The other 401 entries produced no *observed semantic or direct* packet
+inside their iteration. That is not yet evidence of intentional culling:
+other work may be deferred, emitted by another path, or skipped for a
+reason not captured here. Packet-address reuse across frames and record
+allocation lifetime also remain unproven. This closes a bounded
+view → presenter → raw bucket entry → PM4 header → backend draw chain for
+325 packets, but it does not yet name mesh/instance, material, final
+transform, LOD or pass, nor account for all draws in the selected view.
