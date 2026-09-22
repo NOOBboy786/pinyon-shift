@@ -329,6 +329,16 @@ terrain-depth work in multiple views, but does not identify the title owner or
 prove which output each later consumer needs. The diagnostic edit was removed,
 and the normal RelWithDebInfo preview rebuilt successfully.
 
+The historical vehicle-shadow shader `4E1DA281CC3D7EDB` remains at about 70
+draws per frame in both windows on attachment `152BC4D46BC006B2`; it is not
+the disappearing family. The largest color attachment
+(`84241CB4C5BD3DC8`) rises from about 880 to 1,700 draws per frame. Its
+stable road/scene shader `B8489164D5A86043/68150A8E959006CD` stays near
+385 draws in both windows; the additional color work is distributed across
+many other shader pairs. This supports a multi-material scene workload rather
+than a single repeated draw, but the corpus cannot assign those pairs to
+individual vehicles without a title-object or binding join.
+
 1. Run the stationary fixture through elevated CPU sampling to compare title
    and GPU-command stacks in the marked early and clear windows:
 
