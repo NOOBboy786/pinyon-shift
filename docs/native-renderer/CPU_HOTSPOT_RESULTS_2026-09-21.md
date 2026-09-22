@@ -319,6 +319,16 @@ nearby opponents in either image. Off-screen or effects work may continue
 after visible cars leave. No production optimization follows safely from a
 shader hash or pass label alone. The remaining steps are:
 
+A temporary focused binding dump at source frame 5000 recorded 710 of the
+`5A28C7FAFD86F112` depth draws. It found two prepared pipelines, four
+attachment states, eight dynamic-state hashes, 444 distinct index-buffer
+bases, and 103 distinct vertex-fetch sets. The draws form several contiguous
+state groups, including one with 332 draws, rather than repeated copies of a
+single identical operation. The data strengthens the case for repeated
+terrain-depth work in multiple views, but does not identify the title owner or
+prove which output each later consumer needs. The diagnostic edit was removed,
+and the normal RelWithDebInfo preview rebuilt successfully.
+
 1. Run the stationary fixture through elevated CPU sampling to compare title
    and GPU-command stacks in the marked early and clear windows:
 
