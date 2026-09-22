@@ -1501,4 +1501,36 @@ called directly by `sub_823F10C8` at `0x823F1454` after its render-request
 loop. These are **different title call paths** to the same refill function;
 the post-view command is not merely another write inside the presentation
 callback. The immediate parent of `sub_823F10C8`, its relationship to view
-call 8, and the command's camera ownership remain open.
+call 8, and the command's camera ownership were left open by this capture.
+
+### Render-thread parent of post-view publication
+
+A bounded hook at the entry and common return of `sub_823F10C8` records
+its caller on inline writes nested beneath it. The next sustained replay
+exited normally with seven captures. Executable SHA-256:
+`500BFEB8D546FB13E827B30D1D39ABFB94A30EF1711FAAD33C5EEADFC5148D04`.
+`.local/native-renderer/snr01/render-request-caller-runtime.log` SHA-256:
+`18701737EEFB870FFC3834AC78A28DF60A2D0B3C983F18E8F6040830D95A6CE1`.
+The exact-command verifier passed for 728 cube-sampling draws from nine
+primary roots. Its four command words divide as follows:
+
+| Physical command | Cube draws | View call | Refill caller | Render-request caller |
+| --- | ---: | ---: | --- | --- |
+| `0x13246204` | 419 | 8 | `0x82413CF8` | none |
+| `0x1324620C` | 119 | 8 | `0x82467A88` | none |
+| `0x13246224` | 121 | 8 | `0x82413CF8` | none |
+| `0x1324622C` | 69 | outside view scope | `0x824696CC` | `0x8245B870` |
+
+The three in-view writes join camera `0x2E4B3200` through view
+`0x4221FB90`; the post-view write has no active camera scope. Static title
+code places `0x8245B870` in `sub_8245AEF8`, calling `sub_823F10C8`.
+Base-image RTTI identifies vtable `0x82003284` as `CRenderThread` (locator
+`0x822F182C`), with `sub_8245AEF8` in slot 8. Thus the post-view command
+comes through the render-thread slot-8 path and then
+`sub_823F10C8` → `sub_82469478` → `sub_8240CF68` →
+`sub_8240D070`. This is a call-path join, not a camera or view-owner join.
+The track-bucket verifier independently passed for source frame 6000 and
+backend frame 6001 with 408 visible-list entries, 332 packet headers and
+zero unmatched submitted items inside a view. SNR-01 still needs the
+render-thread request's source view/camera relationship and a title-level
+camera state/transform map before the full deferred path is owned.
