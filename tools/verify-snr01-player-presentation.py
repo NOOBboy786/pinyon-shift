@@ -22,6 +22,7 @@ VERTEX_FETCH_PREFIX = "FH1 SNR01 prepared vertex fetch "
 TEXTURE_FETCH_PREFIX = "FH1 SNR01 prepared texture fetch "
 MODEL_RECORD_PREFIX = "FH1 SNR02 car model record "
 MODEL_INPUT_PREFIX = "FH1 SNR02 car model inputs "
+MODEL_DESCRIPTOR_PREFIX = "FH1 SNR02 car descriptor "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -255,6 +256,36 @@ def main() -> int:
             "local_model_direct_records": len(model_records),
             "local_model_submodels": expected_names,
         }
+
+        descriptors = [
+            r for r in records(args.log, MODEL_DESCRIPTOR_PREFIX)
+            if r["frame"] == args.frame and r["view_call"] == 8
+            and r["presentation"] == local["presentation"]
+        ]
+        if descriptors:
+            assert len(descriptors) == len(direct_calls) == 29
+            assert {r["next_call"] for r in descriptors} == set(direct_calls)
+            assert len({r["table_root"] for r in descriptors}) == 1
+            assert all(r["table_root"] for r in descriptors)
+            assert Counter(
+                (r["header"] - r["table_root"]) // 16 for r in descriptors
+            ) == {1799: 27, 1913: 2}
+            packet_by_call = {
+                r["owner_call"]: r for r in model_packets
+                if r["flush_caller_lr"] == 0x824399F0
+            }
+            assert len(packet_by_call) == 29
+            assert all(
+                r["header_begin"] <= r["entry"] < r["header_end"]
+                and (r["entry"] - r["header_begin"]) % 12 == 0
+                and r["entry_words"][:2] == [r["selector"]] * 2
+                and r["entry_words"][2] == r["list"]
+                and direct_calls[r["next_call"]]["owner_args"][2:4]
+                    == [r["selector"], r["list"]]
+                and packet_by_call[r["next_call"]]["list_object"] == r["list"]
+                for r in descriptors
+            )
+            model_record_summary["local_model_title_descriptors"] = 29
 
     model_inputs = [
         r for r in records(args.log, MODEL_INPUT_PREFIX)

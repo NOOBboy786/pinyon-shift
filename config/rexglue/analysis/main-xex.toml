@@ -822,6 +822,23 @@ address = 0x82439990
 name = "PinyonShiftObserveSnr02CarModelRecord"
 registers = ["r3"]
 
+# The presentation's 12-byte model descriptor supplies selector and command
+# list immediately before the model call. Keep the header/entry join read-only.
+[[midasm_hook]]
+address = 0x82437868
+name = "PinyonShiftObserveSnr02CarDescriptor"
+registers = ["r31", "r30", "r28", "r6", "r7"]
+
+[[midasm_hook]]
+address = 0x824378FC
+name = "PinyonShiftObserveSnr02CarDescriptor"
+registers = ["r31", "r30", "r28", "r6", "r7"]
+
+[[midasm_hook]]
+address = 0x8245AB40
+name = "PinyonShiftObserveSnr02CarDescriptor"
+registers = ["r27", "r30", "r11", "r6", "r7"]
+
 [[midasm_hook]]
 address = 0x82419A34
 name = "PinyonShiftObserveSnr01CarOwnerCall"

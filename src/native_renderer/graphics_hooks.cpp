@@ -2451,6 +2451,26 @@ void PinyonShiftObserveSnr02CarModelRecord(PPCRegister& r3) {
   }
 }
 
+void PinyonShiftObserveSnr02CarDescriptor(
+    PPCRegister& presentation, PPCRegister& header, PPCRegister& entry,
+    PPCRegister& selector, PPCRegister& list) {
+  if (Snr01TraceCurrentFrame()) {
+    REXGPU_INFO(
+        "FH1 SNR02 car descriptor {{\"frame\":{},\"next_call\":{},"
+        "\"presentation\":{},\"table_root\":{},\"header\":{},"
+        "\"header_begin\":{},\"header_end\":{},\"entry\":{},"
+        "\"selector\":{},\"entry_words\":[{},{},{}],"
+        "\"list\":{},\"view_call\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        snr01_car_owner_call_count + 1, presentation.u32,
+        SnrM02ReadU32(presentation.u32 + 6044), header.u32,
+        SnrM02ReadU32(header.u32), SnrM02ReadU32(header.u32 + 4),
+        entry.u32, selector.u32, SnrM02ReadU32(entry.u32),
+        SnrM02ReadU32(entry.u32 + 4), SnrM02ReadU32(entry.u32 + 8),
+        list.u32, snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
+  }
+}
+
 void PinyonShiftObserveSnr01VehiclePoseOwner(PPCRegister& r30,
                                               PPCRegister& r31) {
   if (Snr01TraceCurrentFrame()) {

@@ -136,3 +136,31 @@ packets. The same verifier command above checks this capture and its
 268 prepared draws. These nodes are transient per-submission containers,
 not a reusable mesh identity or resource lifetime key. The resource owner
 must be found before this command-list packaging step.
+
+## Title model descriptor to draw provenance
+
+The two direct-model call sites in `sub_82437600` and the third in
+`sub_8245AA98` read the model selector and command-list pointer from a
+12-byte entry in a vector rooted at `CCarPresentation + 6044`. Both paths
+pass those fields directly to `sub_82439960`. Read-only hooks immediately
+before the three calls captured the vector header, entry and fields. The
+normal-exit, seven-capture replay used executable SHA-256
+`13DE77BC8E502F7687CA5F89FC3727CD05BA30B25DFD77E43B377C66438F8F4A`;
+`.local/native-renderer/snr02/model-descriptor-run-a-full.log` has SHA-256
+`2C328AA8D5EED843BF161356632E97C8282A6239794CB9C301A90794E0F38050`.
+
+All 29 local direct-model calls joined one-to-one to distinct live title
+descriptor entries. Twenty-seven entries came from table header 1799 and
+two from header 1913; every entry lay within its header's begin/end range
+on the 12-byte stride. Its selector matched the selected `CCarSubModel`, and
+its command-list pointer matched the corresponding title packet's list
+object. The existing packet-to-backend join then accounts for all 72 draws
+from these descriptors. The separate two-call, 40-draw model path does not
+use this descriptor loop. `--require-model-records --require-backend-join`
+now verifies the full descriptor-to-draw chain when these records are present.
+
+These descriptors provide an exact title submission identity for the direct
+model path. They still do not identify the mesh/material allocation or
+freshness behind each prepared draw. The next ownership trace must follow
+who populates the command-list descriptor and its child PM4 buffer, while
+keeping the separate path distinct.
