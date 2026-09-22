@@ -141,6 +141,11 @@ struct Snr01TrackBucketScope {
   uint32_t bound_vertex_descriptor = 0;
   uint32_t bound_vertex_address = 0;
   uint32_t bound_vertex_size = 0;
+  uint32_t vegetation_owner = 0;
+  uint32_t vegetation_record_offset = 0;
+  uint32_t vegetation_stream_offset = 0;
+  uint32_t vegetation_record_base = 0;
+  uint32_t vegetation_selected_record = 0;
 };
 struct Snr01SecondDrawScope {
   uint64_t bucket_entry;
@@ -156,6 +161,11 @@ struct Snr01SecondDrawScope {
   uint32_t bound_vertex_descriptor;
   uint32_t bound_vertex_address;
   uint32_t bound_vertex_size;
+  uint32_t vegetation_owner;
+  uint32_t vegetation_record_offset;
+  uint32_t vegetation_stream_offset;
+  uint32_t vegetation_record_base;
+  uint32_t vegetation_selected_record;
   uint64_t first_semantic_packet;
   uint64_t first_direct_packet;
   uint64_t ordinal;
@@ -1097,6 +1107,9 @@ void PinyonShiftObserveSecondDrawBegin(
        bucket.bound_context, bucket.bound_slot, bucket.bound_record,
        bucket.bound_target, bucket.bound_vertex_descriptor,
        bucket.bound_vertex_address, bucket.bound_vertex_size,
+       bucket.vegetation_owner, bucket.vegetation_record_offset,
+       bucket.vegetation_stream_offset, bucket.vegetation_record_base,
+       bucket.vegetation_selected_record,
        snr01_semantic_packet_count, snr01_direct_packet_count,
        ++snr01_second_draw_count});
 }
@@ -1129,6 +1142,24 @@ void PinyonShiftObserveSecondStateBind(
   }
 }
 
+void PinyonShiftObserveVegetationStateBind(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCRegister& r11,
+    PPCRegister& r23, PPCRegister& r24, PPCRegister& r26, PPCRegister& r27) {
+  PinyonShiftObserveSecondStateBind(r3, r4, r5, r11);
+  if (!Snr01TraceCurrentFrame() || snr01_track_bucket_scopes.empty()) {
+    return;
+  }
+  auto& bucket = snr01_track_bucket_scopes.back();
+  bucket.vegetation_owner = r23.u32;
+  bucket.vegetation_record_offset = r24.u32;
+  bucket.vegetation_stream_offset = r26.u32;
+  bucket.vegetation_selected_record = r27.u32;
+  if (auto* memory = snr01_memory.load(std::memory_order_acquire)) {
+    bucket.vegetation_record_base = rex::memory::load_and_swap<uint32_t>(
+        memory->TranslateVirtual(r23.u32 + 108 + r26.u32));
+  }
+}
+
 void PinyonShiftObserveSecondDrawEnd() {
   if (snr01_second_draw_scopes.empty()) {
     if (Snr01TraceCurrentFrame() && !snr01_track_bucket_scopes.empty()) {
@@ -1151,6 +1182,9 @@ void PinyonShiftObserveSecondDrawEnd() {
         "\"bound_record\":{},\"bound_target\":{},"
         "\"bound_vertex_descriptor\":{},\"bound_vertex_address\":{},"
         "\"bound_vertex_size\":{},"
+        "\"vegetation_owner\":{},\"vegetation_record_offset\":{},"
+        "\"vegetation_stream_offset\":{},\"vegetation_record_base\":{},"
+        "\"vegetation_selected_record\":{},"
         "\"first_semantic\":{},\"last_semantic\":{},"
         "\"first_direct\":{},\"last_direct\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
@@ -1159,6 +1193,9 @@ void PinyonShiftObserveSecondDrawEnd() {
         scope.bound_context, scope.bound_slot, scope.bound_record,
         scope.bound_target, scope.bound_vertex_descriptor,
         scope.bound_vertex_address, scope.bound_vertex_size,
+        scope.vegetation_owner, scope.vegetation_record_offset,
+        scope.vegetation_stream_offset, scope.vegetation_record_base,
+        scope.vegetation_selected_record,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_direct_packet + 1, snr01_direct_packet_count);
   }

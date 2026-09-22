@@ -188,8 +188,8 @@ registers = ["r3", "r4", "r5", "r6"]
 
 [[midasm_hook]]
 address = 0x82413A0C
-name = "PinyonShiftObserveSecondStateBind"
-registers = ["r3", "r4", "r5", "r11"]
+name = "PinyonShiftObserveVegetationStateBind"
+registers = ["r3", "r4", "r5", "r11", "r23", "r24", "r26", "r27"]
 
 [[midasm_hook]]
 address = 0x82413A84

@@ -1176,3 +1176,31 @@ title descriptor fields are present. This proves the selected draws use
 the captured title-side fetch descriptor. It does not yet prove who owns
 the referenced allocation, how long it lives, or which final instance
 transform belongs to each packet. Other draw paths remain open.
+
+### Vegetation owner-to-record join
+
+The generated vegetation dispatch at `0x824136F0` retains its object in
+`r23`, selects one of the pointer words at owner offsets 152, 156 or 160
+(`r26` is 44, 48 or 52), and advances `r24` by 40 bytes per selected
+record. It passes `r27 = selected pointer + r24` to the state-bind call
+at `0x824139F4`. A bounded hook at that call captured those registers and
+the pointer word before the original call ran.
+
+The replay exited normally with seven captures, executable SHA-256
+`5E764111540FF0216C1117A03D31F6BA2842C5803EEA5C68A860FDB429D3F9A7`.
+Its combined log is
+`.local/native-renderer/snr01/vegetation-owner-frame-6000/title-backend-vegetation-owner.log`
+(SHA-256 `AB895054F1D9DF719DF0AEEF2B420348BC468701CBA15B452FFE9023CC2FE994`).
+The route diverged from the earlier pilot controls, so this run supplies
+ownership evidence only; it is not a matched performance comparison.
+
+For source frame 6000, all 84 vegetation draw calls belonged to four
+dispatch-owner objects. Every owner equaled its enclosing bucket's resolved
+object; every selected record equaled the bound record and its captured
+stream base plus a multiple-of-40 offset. These calls produced 84 packets
+and 152 backend draw callbacks; all 152 fetch descriptors still matched
+the title-side words. The verifier checks these joins, while 42 distinct
+records each appeared twice in this frame. This proves the selected
+vegetation owner-to-record-to-fetch route, but not the vertex allocation's
+ownership or lifetime, material semantics, final transform, or whether the
+three stream offsets are LODs rather than another title grouping.

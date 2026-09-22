@@ -360,6 +360,7 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         bound_records = collections.defaultdict(collections.Counter)
         bound_record_counts = {}
         binding_targets = collections.defaultdict(collections.Counter)
+        vegetation_owners = set()
         fetches_by_record = collections.defaultdict(lambda: collections.defaultdict(set))
         records_by_fetch = collections.defaultdict(lambda: collections.defaultdict(set))
         child_packets = set()
@@ -397,6 +398,15 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 assert (record_key not in bound_record_counts or
                         bound_record_counts[record_key] == draw["arg5"])
                 bound_record_counts[record_key] = draw["arg5"]
+                if target == "procedural_vegetation" and "vegetation_owner" in draw:
+                    assert draw["vegetation_owner"] == bucket["secondary_resolved"]
+                    assert draw["vegetation_stream_offset"] in (44, 48, 52)
+                    assert draw["vegetation_record_offset"] % 40 == 0
+                    assert (draw["vegetation_record_base"] +
+                            draw["vegetation_record_offset"] ==
+                            draw["vegetation_selected_record"] == draw["bound_record"])
+                    vegetation_owners.add(draw["vegetation_owner"])
+                    second_targets[target]["verified_owner_records"] += 1
             second_targets[target]["child_calls"] += 1
             produced = 0
             for kind, label in (("semantic packet", "semantic"),
@@ -438,6 +448,9 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                     produced += 1
             second_targets[target]["packetless_child_calls"] += not bool(produced)
         assert child_packets == expected_second_packets
+        if vegetation_owners:
+            second_targets["procedural_vegetation"]["owner_objects"] = len(
+                vegetation_owners)
         for target, records in bound_records.items():
             second_targets[target]["bound_records"] = len(records)
             second_targets[target]["bound_record_multiplicity"] = dict(sorted(
