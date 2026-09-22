@@ -117,6 +117,7 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             assert camera["view"] == writer["view"]
         return {"address": hex(address), "writer_frame": writer["frame"],
                 "writer_path": writer.get("path", "linked"),
+                "writer_refill_caller_lr": hex(writer.get("refill_caller_lr", 0)),
                 "writer_view_call": writer["view_call"],
                 "writer_view": hex(writer["view"]),
                 "writer_camera": hex(camera["object"]) if camera else None,

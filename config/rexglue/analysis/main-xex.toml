@@ -338,6 +338,15 @@ name = "PinyonShiftObserveInlineIndirectBegin"
 registers = ["r12"]
 
 [[midasm_hook]]
+address = 0x8240CF6C
+name = "PinyonShiftObserveCommandRefillBegin"
+registers = ["r12"]
+
+[[midasm_hook]]
+address = 0x8240D050
+name = "PinyonShiftObserveCommandRefillEnd"
+
+[[midasm_hook]]
 address = 0x8240D100
 name = "PinyonShiftObserveInlineIndirectCachedWrite"
 registers = ["r3", "r9", "r11", "r31"]

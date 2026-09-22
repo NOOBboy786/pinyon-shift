@@ -1475,3 +1475,30 @@ The camera pointer join establishes two distinct camera objects and the
 view-8 camera for in-scope command writes. The title's post-view publication
 step and camera state/transform semantics remain to be traced before the
 entire deferred cube path can be assigned to a view or the main camera.
+
+### Distinct callers for in-view and post-view command refills
+
+`sub_8240CF68` refills the device command stream and calls the inline writer
+`sub_8240D070`. A default-off hook now records its immediate title caller on
+each inline write. In the next normal-exit sustained replay, seven captures
+were produced with executable SHA-256
+`82BA4FB095D68F911AB1767E9AC86BE596CDD34CE37ACBA482266CCD23C4393E`.
+`.local/native-renderer/snr01/refill-caller-runtime.log` has SHA-256
+`B43785363493D146A102A7A27364E4A1010952430E0E242723683EBE1CCB0AAD`.
+The cube verifier passed for 728 draws from six primary roots, and the
+track-bucket verifier passed for 435 visible-list entries, 322 packet
+headers and zero unmatched submitted items inside a view.
+
+| Physical command | Cube draws | View call | Refill caller | Camera |
+| --- | ---: | ---: | --- | --- |
+| `0x131C6F0C` | 538 | 8 | `0x82467A88` | `0x2E486200` |
+| `0x131C6F24` | 20 | 8 | `0x82467A88` | `0x2E486200` |
+| `0x131C6F2C` | 170 | outside view scope | `0x824696CC` | unassigned |
+
+Static code places `0x82467A88` in `sub_824679E8` after a buffer copy and
+`0x824696CC` in `sub_82469478` after `sub_8243BEE0`. The latter function is
+called directly by `sub_823F10C8` at `0x823F1454` after its render-request
+loop. These are **different title call paths** to the same refill function;
+the post-view command is not merely another write inside the presentation
+callback. The immediate parent of `sub_823F10C8`, its relationship to view
+call 8, and the command's camera ownership remain open.
