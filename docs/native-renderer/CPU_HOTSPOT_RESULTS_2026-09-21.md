@@ -113,16 +113,10 @@ There were 1,210 consumed swaps in 30.05 s, with a 24.870 ms median and
 45.778 ms p95 wall interval. Source-frame intervals had a 24.193 ms median
 and 45.639 ms p95. These are the same moving phase, not a stationary menu.
 
-The captured `consumed_swap` IDs were one ahead of the corresponding
-`SourceFrame` IDs. Subtracting one for this ETL yields 1,207 ordered pairs
-with no negative producer-to-consumer latencies. The source code now emits
-the source ordinal directly. For 1,206 fully paired frames (4,930–6,135),
-the median source-to-submission-begin latency is 25.133 ms (p95 39.323 ms),
-submission takes 2.097 ms (p95 2.869 ms), and source-to-present is 27.781 ms
-(p95 42.499 ms). Submission-end to consumed swap is 0.038 ms median, and
-consumed swap to present is 0.446 ms median. Most measured latency precedes
-submission; these spans are elapsed time, not proof that a particular task
-blocks the frame.
+The captured `consumed_swap` IDs were one ahead of their intended ordinal.
+The source code now emits the ordinal directly. The earlier phase join also
+mistook D3D12 submission IDs for source-frame IDs, so its phase latencies are
+superseded by the corrected post-fix trace below.
 
 In that 29.99 s window the GPU command thread used 26.175 s of sampled CPU.
 Its logging stacks account for 5.404 s in `file_helper::flush` and 2.296 s
@@ -176,3 +170,44 @@ An installation without a prior legacy shader cache cannot gain these
 save-specific shaders from this seeding path. The retail-disc corpus remains
 the clean-install baseline; any newly encountered missing hash still needs a
 separate producer source or specialization.
+
+## Post-fix elevated CPU trace — 2026-09-22
+
+The same sustained route completed normally with seven captures and a valid
+ETL at `.local/cpu-profile/20260921-212706/`: 395,079 CPU samples, 1,151,404
+waits, only 210 samples lacking stacks (0.05%), and zero lost events. The
+saved race started at X = -1743.19 m and travelled 380.1 m between the
+`race-moving` and `race-sustained` captures. Its 1,621 consumed swaps over
+30.028 s had an 18.922 ms median and 26.074 ms p95, consistent with the
+earlier repaired no-WPR run from X = -1743.50 m (18.825/27.479 ms). This
+supports the observed improvement without assuming that WPR caused it.
+The session's runtime log had no GPU ERRORs; one unrelated filesystem device
+lookup ERROR remained.
+
+The moving window spans source frames 5,626–7,247. Source-frame intervals
+have an 18.734 ms median and 26.017 ms p95. For 1,621 complete ordinal
+pairs, source boundary to consumed swap is 19.826 ms median (p95 27.509 ms),
+consumed swap to closing D3D12 submission begin is 0.060 ms, submission is
+2.525 ms, and submission end to present is 0.480 ms. Source to present is
+22.889 ms median (p95 31.090 ms). The closing submission ID is the consumed
+swap ordinal plus one; the `source_frame` field on asynchronous submission
+events is only a snapshot. These spans are elapsed latency, not additive CPU
+work or proof of a single critical function.
+
+The title frame thread used 27.884 s of sampled CPU in this roughly 30 s
+window; the GPU command thread used 25.730 s. On the title thread,
+`sub_829F04A8` accounts for 9.320 s of leaf samples and appears in 10.867 s
+of stacks. Its caller `sub_823E91F0` appears in 19.012 s of stacks; these
+inclusive amounts overlap. The generated code shows a loop polling a guest
+counter with repeated `db16cyc` delay hints, which currently recompile to
+no-ops. This looks like a busy wait, but its synchronization role and effect
+on frame pacing need a controlled test before changing it.
+
+On the GPU command thread, `DeferredCommandList::Execute` appears in 3.774 s
+of stacks, `UpdateBindings` in 2.395 s, and shared-memory `UploadRanges` in
+2.157 s; these stacks may overlap. Only 0.002 s of that thread's samples
+contain `spdlog`, confirming that the prior logging hotspot is gone. The
+command thread is still busy, so the title wait-loop experiment should be
+compared with a GPU submission timeline before treating reduced title CPU as
+a frame-time win. Do not add another logging or shader-cache optimization
+based on the pre-fix trace.
