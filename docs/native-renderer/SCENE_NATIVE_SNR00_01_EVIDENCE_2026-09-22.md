@@ -1240,3 +1240,38 @@ not permission to exclude the other views or suppress draws. Fifteen
 eighth-view buckets in later track calls had no packet in this frame;
 the reason remains to be classified. SNR-00's exact slice and SNR-01's
 camera/pass proof remain open.
+
+### View attachments and GPU-copy destinations
+
+The prepared-draw observer now records the raw `RB_SURFACE_INFO`, four
+`RB_COLOR_INFO` values and `RB_DEPTH_INFO` alongside the attachment-state
+hash. The existing copy observer already had those registers; SNR-01 now
+logs bounded copies when its default-off trace flag is enabled. This lets
+the view-to-packet verifier's title ownership join continue through the
+actual draw target and subsequent GPU copy. A dedicated log path with a
+100 MiB rotation limit preserved the complete target-frame window. The
+saved-race run exited normally with seven captures. Its executable SHA-256
+was `ECF5309B58A4DAD1A594EA38ECBB7E3FE472E333D4936B3B46009744F0D669B5`,
+the D3D12 DLL SHA-256 was
+`BCE2BF101FF3AE684EE087264587CC032192DA57AF7E27FE195537FBD600A128`,
+and the log is `.local/native-renderer/snr01/attachment-copy-full-runtime.log`
+(SHA-256 `CDDDFE7C205BFC2CDC73A52A13E831D52CB6E7252B9BB46E96672B60CE8DA33C`).
+Both prior SNR-01 ownership verifiers and
+`tools/verify-snr01-attachment-copy-join.py` passed on source frame 6000
+and backend frame 6001.
+
+| View call | Joined backend draws | Raw attachment pattern | Copy relationship |
+| --- | ---: | --- | --- |
+| 1 | 74 | Depth only: surface `335545600`, color 0, depth `65536` | Copy 8 resolves 1280×720 |
+| 2–7 | 6, 5, 5, 7, 5, 7 | Shared surface `67174720`, color 0 `196608`, depth `65664` | Each call's draws are followed by exactly one successful 256×256 copy, ordinals 11–16, to six distinct guest destinations |
+| 8 | 367 | 229 draws on color 0 `196608`; 138 on color 0 `786432`; both surface `335676672`, depth `66560` | Twelve copies, ordinals 65–76, match the first raw target; none matches the second |
+
+The six middle calls come from `sub_82409ED0`, which iterates six resource
+slots and selects arguments 0, 4, 2, 1, 3 and 5. Their draw/copy ordering and
+distinct 256×256 destinations establish a six-output rendering cycle. The
+purpose of those outputs and their later consumers still require an address
+and texture-binding join; a shared EDRAM attachment alone does not prove a
+reflection pass. View 8 remains the main-view candidate. Its two color
+targets and the unmatched second target mean the final presentation and
+retained-pass dependency cut are not yet established. The trace does not
+authorize suppressing any view or pass.

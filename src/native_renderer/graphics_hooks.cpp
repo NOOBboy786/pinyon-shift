@@ -352,7 +352,9 @@ void ObservePreparedDraw(
       "\"index_buffer_type\":{},\"index_buffer_guest_base\":{},"
       "\"index_buffer_length\":{},\"guest_primitive_type\":{},"
       "\"vertex_fetch_count\":{},"
-      "\"render_target_bits\":{}}}",
+      "\"render_target_bits\":{},\"attachment_state\":{},"
+      "\"surface_info\":{},\"color_info\":[{},{},{},{}],"
+      "\"depth_info\":{}}}",
       observation.frame_sequence, logged_draws,
       observation.indirect_buffer_execution_id,
       observation.indirect_buffer_parent_execution_id,
@@ -365,7 +367,11 @@ void ObservePreparedDraw(
       observation.index_buffer_type, observation.index_buffer_guest_base,
       observation.index_buffer_length, observation.guest_primitive_type,
       observation.vertex_fetch_count,
-      observation.bound_render_target_bits);
+      observation.bound_render_target_bits,
+      observation.fh1_execution_key.attachment_state,
+      observation.surface_info, observation.color_info[0],
+      observation.color_info[1], observation.color_info[2],
+      observation.color_info[3], observation.depth_info);
   if (observation.frame_sequence == uint64_t(target) + 1) {
     for (uint32_t i = 0;
          i < observation.vertex_fetch_count &&
@@ -417,6 +423,40 @@ void ObserveIndirectBuffer(
 
 void ObserveCopy(const rex::system::GraphicsCopyObservation& observation) {
   RecordFh1GpuCopy(observation);
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  if (target <= 0 || observation.frame_sequence + 1 < uint64_t(target) ||
+      observation.frame_sequence > uint64_t(target) + 1) {
+    return;
+  }
+  static thread_local uint64_t logged_frame = 0;
+  static thread_local uint64_t logged_copies = 0;
+  if (logged_frame != observation.frame_sequence) {
+    logged_frame = observation.frame_sequence;
+    logged_copies = 0;
+  }
+  if (++logged_copies > kSnr01PacketLimit) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 copy {{\"frame\":{},\"ordinal\":{},"
+      "\"copy_sequence\":{},\"attachment_state\":{},"
+      "\"surface_info\":{},\"color_info\":[{},{},{},{}],"
+      "\"depth_info\":{},\"copy_control\":{},"
+      "\"source_base_tiles\":{},\"resolve_base_tiles\":{},"
+      "\"resolve_width\":{},\"resolve_height\":{},"
+      "\"dest_base\":{},\"dest_pitch\":{},"
+      "\"written_address\":{},\"written_length\":{},"
+      "\"succeeded\":{}}}",
+      observation.frame_sequence, logged_copies, observation.copy_sequence,
+      observation.fh1_execution_key.attachment_state,
+      observation.surface_info, observation.color_info[0],
+      observation.color_info[1], observation.color_info[2],
+      observation.color_info[3], observation.depth_info,
+      observation.rb_copy_control, observation.source_target_base_tiles,
+      observation.resolve_source_base_tiles, observation.resolve_guest_width,
+      observation.resolve_guest_height, observation.rb_copy_dest_base,
+      observation.rb_copy_dest_pitch, observation.written_address,
+      observation.written_length, observation.succeeded);
 }
 
 }  // namespace
@@ -436,7 +476,10 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
       REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
           ? &ObserveIndirectBuffer
           : nullptr);
-  graphics_system->SetCopyObserver(enabled ? &ObserveCopy : nullptr);
+  graphics_system->SetCopyObserver(
+      enabled || REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
+          ? &ObserveCopy
+          : nullptr);
 }
 
 void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
