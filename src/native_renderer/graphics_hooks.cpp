@@ -108,7 +108,38 @@ namespace {
 
 void ObservePreparedDraw(
     const rex::system::GraphicsPreparedDrawObservation& observation) {
-  RecordFh1GpuExecution(observation);
+  static const bool corpus_enabled =
+      rex::cvar::GetFlagByName("pinyon_shift_fh1_gpu_corpus") == "true";
+  if (corpus_enabled) {
+    RecordFh1GpuExecution(observation);
+  }
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  if (target <= 0 || observation.frame_sequence + 1 < uint64_t(target) ||
+      observation.frame_sequence > uint64_t(target) + 1) {
+    return;
+  }
+  static thread_local uint64_t logged_frame = 0;
+  static thread_local uint64_t logged_draws = 0;
+  if (logged_frame != observation.frame_sequence) {
+    logged_frame = observation.frame_sequence;
+    logged_draws = 0;
+  }
+  if (++logged_draws > kSnr01PacketLimit) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 prepared draw {{\"frame\":{},\"ordinal\":{},"
+      "\"packet_physical\":{},\"command_buffer\":{},"
+      "\"command_bytes\":{},\"draw_end_offset\":{},\"vertex_shader\":{},"
+      "\"pixel_shader\":{},\"index_count\":{},"
+      "\"render_target_bits\":{}}}",
+      observation.frame_sequence, logged_draws,
+      observation.draw_packet_physical_address,
+      observation.command_buffer_physical_address,
+      observation.command_buffer_bytes,
+      observation.command_buffer_end_offset, observation.vertex_shader_hash,
+      observation.pixel_shader_hash, observation.index_count,
+      observation.bound_render_target_bits);
 }
 
 void ObserveCopy(const rex::system::GraphicsCopyObservation& observation) {
@@ -123,8 +154,10 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
     return;
   }
   const bool enabled = ResetFh1GpuCorpus();
-  graphics_system->SetPreparedDrawObserver(enabled ? &ObservePreparedDraw
-                                                   : nullptr);
+  graphics_system->SetPreparedDrawObserver(
+      enabled || REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
+          ? &ObservePreparedDraw
+          : nullptr);
   graphics_system->SetCopyObserver(enabled ? &ObserveCopy : nullptr);
 }
 

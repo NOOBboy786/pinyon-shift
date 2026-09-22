@@ -166,9 +166,42 @@ shared command context, not a render owner. Guest packet addresses and
 header words are recorded for the later backend join. Counts from this run
 are not a draw census for every view or route position.
 
+### Exact packet address to prepared-draw join
+
+The next default-off diagnostic adds the PM4 draw-header physical address,
+command-buffer base, capacity and draw-end offset to ShiftGlue's prepared-draw
+observation. The saved route again exited normally, using executable SHA-256
+`1E165D50D34E4528F1B60C6214874419ACA9A45F8AE4AFAD93AACE93ED6511E8`.
+The final SDK GPU DLL SHA-256 was
+`1A41505285B1E8172DA5D71424A9D3F2350330C9CA8002FADC61E4FCB453AC09`.
+The local combined log at
+`.local/native-renderer/snr01/backend-join-final-frame-6000/title-backend-packets.log`
+has SHA-256
+`3B770AF21DC6780F0710C6E671578C770FA37585BCB9D6273B431042C1C9794E`.
+This instrumented run saw 441 distinct procedural-emitter header addresses,
+290 inside item scopes. Every one appeared in a prepared-draw callback in
+backend frame 6001, while the title hook labelled its source frame 6000.
+Every matched callback also satisfied
+`(command_buffer + draw_end_offset - packet_physical) % command_bytes == 12`,
+the three-word draw packet length. The match used the physical address and
+buffer position, not a shader, attachment or image size. Backend frame 6000
+preceded the title submissions and is not joined to them.
+
+The 441 headers yielded 593 prepared-draw callbacks: 329 headers appeared
+once, 72 twice and 40 three times. This shows repeated execution of packet
+addresses; the exact replay/bin cause remains to be proved. Matched callbacks
+span 26 shader pairs and render-target bit values 1, 2 and 3, so these
+packets cannot be assumed to be one pass. Forty-five generic indexed-wrapper
+headers did **not** match a prepared draw in frame 6001, and 4,285 of that
+frame's 4,878 prepared draws matched neither observed title header class.
+They remain unclassified; some may use other title emitters. The join proves
+packet identity for this source frame, not view, material, resource generation,
+visibility or complete coverage. This capture is diagnostic and must not be
+used as a timing comparison.
+
 The next runtime capture must carry a bounded title owner/generation, view,
-record and selected LOD through final draw preparation and join those exact
-packet addresses to backend prepared draw sequence and RenderDoc phase.
+record and selected LOD through final draw preparation and join the resulting
+submissions to RenderDoc phase and resource identity.
 Capture helper entry **and post-original state** so transforms/palettes are
 not read before the title finishes them. Distinguish main, shadow and
 reflection dispatch by owner/view relationships. Record unmatched title
