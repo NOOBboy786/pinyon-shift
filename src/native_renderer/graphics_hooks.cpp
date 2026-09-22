@@ -92,7 +92,18 @@ struct Snr01EmitterScope {
   uint64_t first_semantic_packet;
   uint64_t ordinal;
 };
+struct Snr01DirectScope {
+  uint32_t caller_lr;
+  uint32_t owner;
+  uint32_t arg4;
+  uint32_t arg5;
+  uint32_t arg6;
+  uint32_t arg7;
+  uint64_t first_packet;
+  uint64_t ordinal;
+};
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
+thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -107,6 +118,9 @@ thread_local uint64_t snr01_dispatch_wrapper_count = 0;
 thread_local uint64_t snr01_track75_count = 0;
 thread_local uint64_t snr01_track79_count = 0;
 thread_local uint64_t snr01_track_pass_count = 0;
+thread_local uint64_t snr01_direct_call_count = 0;
+thread_local uint64_t snr01_direct_packet_count = 0;
+thread_local uint64_t snr01_unmatched_direct_exits = 0;
 thread_local uint64_t snr01_unmatched_emitter_exits = 0;
 thread_local uint64_t snr01_unmatched_dispatch_exits = 0;
 thread_local uint64_t snr01_unmatched_render_state_exits = 0;
@@ -158,6 +172,29 @@ void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
           ? 0 : snr01_emitter_scopes.back().ordinal,
       snr01_emitter_scopes.empty()
           ? 0 : snr01_emitter_scopes.back().caller_lr);
+}
+
+void RecordSnr01DirectPacket(const char* path, uint32_t previous_word,
+                             uint32_t header_word, uint32_t command_owner) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_direct_packet_count;
+  if (ordinal > kSnr01PacketLimit) {
+    return;
+  }
+  const uint32_t guest_address = previous_word + 4;
+  REXGPU_INFO(
+      "FH1 SNR01 direct packet {{\"frame\":{},\"ordinal\":{},"
+      "\"path\":\"{}\",\"header_guest\":{},"
+      "\"header_physical\":{},\"header_word\":{},"
+      "\"command_owner\":{},\"direct_call\":{},"
+      "\"direct_caller_lr\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      ordinal, path, guest_address, guest_address & 0x1FFFFFFF,
+      header_word, command_owner,
+      snr01_direct_scopes.empty() ? 0 : snr01_direct_scopes.back().ordinal,
+      snr01_direct_scopes.empty() ? 0 : snr01_direct_scopes.back().caller_lr);
 }
 
 bool ClearProducerTraceEnabled() {
@@ -247,6 +284,10 @@ void PinyonShiftObserveGraphicsFrame() {
         "\"state_wrapper_calls\":{},\"dispatch_wrapper_calls\":{},"
         "\"track75_calls\":{},\"track79_calls\":{},"
         "\"track_pass_calls\":{},"
+        "\"direct_calls_swap_thread\":{},"
+        "\"direct_packets_swap_thread\":{},"
+        "\"unmatched_direct_exits_swap_thread\":{},"
+        "\"unfinished_direct_scopes_swap_thread\":{},"
         "\"unmatched_exits\":{},"
         "\"unmatched_dispatch_exits\":{},"
         "\"unmatched_render_state_exits\":{},"
@@ -262,6 +303,8 @@ void PinyonShiftObserveGraphicsFrame() {
         snr01_state_wrapper_count, snr01_dispatch_wrapper_count,
         snr01_track75_count, snr01_track79_count,
         snr01_track_pass_count,
+        snr01_direct_call_count, snr01_direct_packet_count,
+        snr01_unmatched_direct_exits, snr01_direct_scopes.size(),
         snr01_unmatched_exits,
         snr01_unmatched_dispatch_exits,
         snr01_unmatched_render_state_exits,
@@ -272,6 +315,7 @@ void PinyonShiftObserveGraphicsFrame() {
         kSnr01PacketLimit, kSnr01ProceduralLimit);
   }
   snr01_emitter_scopes.clear();
+  snr01_direct_scopes.clear();
   snr01_dispatch_scopes.clear();
   snr01_render_state_scopes.clear();
   snr01_procedural_scopes.clear();
@@ -282,7 +326,9 @@ void PinyonShiftObserveGraphicsFrame() {
       snr01_unmatched_render_state_exits = snr01_emitter_count =
       snr01_unmatched_emitter_exits = snr01_state_wrapper_count =
       snr01_dispatch_wrapper_count = snr01_track75_count =
-      snr01_track79_count = snr01_track_pass_count = 0;
+      snr01_track79_count = snr01_track_pass_count =
+      snr01_direct_call_count = snr01_direct_packet_count =
+      snr01_unmatched_direct_exits = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
       (title_emitter_calls || title_packet_count)) {
     rex::perf::TraceCriticalPath("title_emitter", int64_t(title_emitter_frame),
@@ -673,6 +719,51 @@ void PinyonShiftObserveProceduralDrawPacketSecondary(PPCRegister& r6,
                                                     PPCRegister& r9,
                                                     PPCRegister& r31) {
   RecordSnr01SemanticPacket("secondary", r6.u32, r9.u32, r31.u32);
+}
+
+void PinyonShiftObserveDirectIndexedBegin(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_direct_call_count;
+  snr01_direct_scopes.push_back(
+      {r12.u32, r3.u32, r4.u32, r5.u32, r6.u32, r7.u32,
+       snr01_direct_packet_count, ordinal});
+}
+
+void PinyonShiftObserveDirectIndexedPacketPrimary(
+    PPCRegister& r25, PPCRegister& r11, PPCRegister& r31) {
+  RecordSnr01DirectPacket("primary", r25.u32, r11.u32, r31.u32);
+}
+
+void PinyonShiftObserveDirectIndexedPacketSecondary(
+    PPCRegister& r5, PPCRegister& r9, PPCRegister& r31) {
+  RecordSnr01DirectPacket("secondary", r5.u32, r9.u32, r31.u32);
+}
+
+void PinyonShiftObserveDirectIndexedEnd() {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  if (snr01_direct_scopes.empty()) {
+    ++snr01_unmatched_direct_exits;
+    return;
+  }
+  const auto scope = snr01_direct_scopes.back();
+  snr01_direct_scopes.pop_back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 direct call {{\"frame\":{},\"call\":{},"
+        "\"caller_lr\":{},\"owner\":{},\"arg4\":{},"
+        "\"arg5\":{},\"arg6\":{},\"arg7\":{},"
+        "\"first_packet\":{},\"last_packet\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.caller_lr, scope.owner, scope.arg4,
+        scope.arg5, scope.arg6, scope.arg7, scope.first_packet + 1,
+        snr01_direct_packet_count);
+  }
 }
 
 // Read-only hooks at the checked producer entry/common epilogue. Logging is

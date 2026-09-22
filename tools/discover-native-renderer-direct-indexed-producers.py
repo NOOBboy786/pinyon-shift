@@ -112,7 +112,12 @@ def build(functions: dict[int, dict[int, str]], image: bytes) -> dict:
     require_instructions(
         functions,
         DRAW_EMITTER,
-        {DRAW_EMITTER_EXIT: "addi r1,r1,208"},
+        {
+            0x82416380: "mflr r12",
+            0x824166E4: "stwu r11,4(r25)",
+            0x82416774: "stwu r9,4(r5)",
+            DRAW_EMITTER_EXIT: "addi r1,r1,208",
+        },
     )
 
     if rtti_name(image, TRACK_MESH_VTABLE) != ".?AVCTrackMesh@@":

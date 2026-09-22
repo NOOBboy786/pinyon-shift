@@ -124,6 +124,26 @@ address = 0x824162F4
 name = "PinyonShiftObserveProceduralDrawPacketSecondary"
 registers = ["r6", "r9", "r31"]
 
+# Direct indexed draws bypass both the generic wrapper and procedural emitter.
+[[midasm_hook]]
+address = 0x82416384
+name = "PinyonShiftObserveDirectIndexedBegin"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7"]
+
+[[midasm_hook]]
+address = 0x824166E4
+name = "PinyonShiftObserveDirectIndexedPacketPrimary"
+registers = ["r25", "r11", "r31"]
+
+[[midasm_hook]]
+address = 0x82416774
+name = "PinyonShiftObserveDirectIndexedPacketSecondary"
+registers = ["r5", "r9", "r31"]
+
+[[midasm_hook]]
+address = 0x824167EC
+name = "PinyonShiftObserveDirectIndexedEnd"
+
 # Observe the native UI4 scene-registry construction after the title's
 # constructor returns. This is default-off and records registers only.
 [[midasm_hook]]

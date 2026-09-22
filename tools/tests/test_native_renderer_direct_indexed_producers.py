@@ -14,9 +14,12 @@ def fixture():
     functions = {}
     for function, call, _return, _classification in MODULE.EXPECTED_CALLS:
         functions.setdefault(function, {})[call] = "bl 0x82416380"
-    functions.setdefault(MODULE.DRAW_EMITTER, {})[
-        MODULE.DRAW_EMITTER_EXIT
-    ] = "addi r1,r1,208"
+    functions.setdefault(MODULE.DRAW_EMITTER, {}).update({
+        MODULE.DRAW_EMITTER: "mflr r12",
+        0x824166E4: "stwu r11,4(r25)",
+        0x82416774: "stwu r9,4(r5)",
+        MODULE.DRAW_EMITTER_EXIT: "addi r1,r1,208",
+    })
     functions[MODULE.TRACK_HELPER].update(
         {
             0x82C5ADD8: "mr r26,r6",

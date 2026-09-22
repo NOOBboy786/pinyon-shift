@@ -360,6 +360,56 @@ meaning of the raw argument groups and their graphics passes remain
 unverified. Neither slot-79 invocation in the final frame is yet joined to
 a specific visible-list entry. This is not a complete main-view census.
 
+### Direct indexed packet coverage and remaining gap
+
+The verified direct indexed emitter `sub_82416380` is a third PM4 draw
+producer, separate from the generic wrapper and procedural emitter. The
+updated static verifier checks its two draw-header stores at `0x824166E4`
+and `0x82416774`, common exit `0x824167EC`, and 13 direct caller sites.
+Its local output is `.local/native-renderer/snr01/direct-indexed-static.json`
+(SHA-256 `8427DB3762EAFF57A0BC8989CCF5114AA04CE1118AE545B487356A272484ABF0`).
+
+A default-off, read-only trace on the sustained race exited normally with
+executable SHA-256
+`C9CBAE6D1185B963BE29CF7927F352FFCCF17BAF1309C1A7FD5010C9DB37B0F6`.
+The combined rotated log is
+`.local/native-renderer/snr01/direct-packet-frame-6000/title-backend-direct.log`
+(SHA-256 `15C260B49C642C3DB252539042A92C01FF6367B0DF7D94CACF588CD1A6A80920`).
+In source frame 6000, two title threads made 552 direct-emitter calls and
+published exactly one draw header each: 506 at the primary store and 46 at
+the secondary store. The swap thread's summary reports only its own 338
+calls; the other thread made 214. Both threads' call scopes balanced, and
+neither per-thread packet limit was reached. Direct call ordinals are local
+to each thread and must be paired with the thread ID in the log prefix.
+
+The live direct callers were vector font (`0x82412D90`: 162), D3D9 device
+helpers (`0x824131F4`: 88; `0x823F59C8`: 9), navigation-map renderer
+(`0x8240F020`: 67) and a title graphics helper (`0x8243C8FC`: 226).
+The statically verified unified track-mesh caller `0x82C5B038` did not
+occur in this frame. These names classify the immediate source functions;
+they do not label the visual content of each backend draw.
+
+All 552 direct header physical addresses exactly matched prepared-draw
+callbacks in backend frame 6001, accounting for 746 callbacks after some
+buffers were executed more than once. The 406 procedural headers matched
+586 callbacks; 44 generic-wrapper headers matched none. The three packet
+classes had no shared addresses. Of 4,908 prepared callbacks, **3,576**
+matched none of these classes. Those unmatched callbacks span 768 observed
+command-buffer base addresses; their raw render-target-binding bits were
+3 for 2,437 callbacks, 1 for 1,134 and 2 for five. Those bits are binding
+shape, not proven view or pass identity. The direct emitter was worth
+checking, but it does not close the main scene coverage gap. Next work must
+recover how the many other command buffers are produced and pair their
+title owner/view with backend packet identity; adding shader or target
+heuristics would not establish that join.
+
+The generated-code constant scan found two other functions with analogous
+draw-header stores: `sub_8240DC70` at `0x8240E01C`/`0x8240E0B0` and
+`sub_82408B70` at `0x82408F7C`/`0x8240900C`. A separate store at
+`0x829F0A4C` occurs in `sub_829F0928`. They are the next bounded packet
+probe candidates; their runtime activity, backend joins and owner roles
+have not yet been established.
+
 The next runtime capture must carry a bounded title owner/generation, view,
 record and selected LOD through final draw preparation and join the resulting
 submissions to RenderDoc phase and resource identity.
