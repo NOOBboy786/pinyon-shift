@@ -353,3 +353,51 @@ individual vehicles without a title-object or binding join.
    repeat uninstrumented stationary runs and compare simulation time, pass
    timings, and images. Do not trade away traffic rendering or shadows merely
    to reduce the draw counter.
+
+## Elevated stationary CPU capture and depth ablation — 2026-09-22
+
+The user supplied a valid, zero-dropped-event WPR capture at
+`.local/cpu-profile/20260921-224902` for the stationary script. Symbolized
+export had 8,411 source markers, 372,519 CPU samples, and 174 samples without
+stacks. Split at the exact `race-ready`/`race-08` and `race-13`/`race-18`
+output-frame markers, the traffic and clear windows had 343 frames in 8.003 s
+and 328 frames in 4.992 s respectively:
+
+| ETW metric | Traffic | Clear |
+|---|---:|---:|
+| Source interval median | 21.30 ms | 14.86 ms |
+| Title emitter median | 0.175 ms | 0.062 ms |
+| Command-tape replay median | 2.547 ms | 1.934 ms |
+| Closing submission recording median | 2.651 ms | 2.066 ms |
+| Guest vblank lateness median | 0.725 ms | 0.735 ms |
+
+The title source thread used 931/959 sampled CPU ms per wall second in the
+traffic/clear windows; the GPU-command thread used 833/839. Both stay busy as
+frame throughput changes. On the GPU thread, `UpdateBindings` leaf samples
+rose from 43.9 to 53.7 ms per second, `ExecutePacket` from 28.4 to 36.6,
+and `RegisterFile::GetRegisterInfo` from 20.0 to 29.6. These are sampling
+rates, not additive frame latencies. `DeferredCommandList::Execute` project
+caller samples were lower in traffic (115.5 versus 133.6 ms per second), so
+it is not supported as the incremental hotspot. The title counter poll still
+dominates absolute samples but was already tested with pacing; reducing its
+CPU did not improve FPS. Queueing and guest synchronization can make saturated
+thread CPU a consequence of slower frames.
+
+A temporary, default-off backend probe omitted only depth-only shader
+`5A28C7FAFD86F112` draws without memexport or an active query. The same
+RelWithDebInfo binary ran the stationary route once with the probe off and
+once on; both exited normally. In the traffic window, median draws fell from
+4,810 to 4,303 and median frame time from 21.01 to 20.40 ms. Median guest GPU
+time was unchanged at 11.22/11.24 ms. The clear window, which has none of
+these draws, also improved from 14.01 to 13.23 ms, so the single-run frame
+difference is not a qualified effect. Amplified race-start image differences
+cluster around vehicles, lights, and shadows, but ordinary repeat runs also
+differ there. The probe deliberately removes guest depth writes, and final
+image parity was not proved; it must not ship for this unproven gain. The probe
+was removed and the normal RelWithDebInfo preview rebuilt.
+
+The depth family is therefore not a viable traffic fix by deletion. The
+multi-material color workload and title-side render preparation remain the
+substantial candidates. A race-frame render-target/consumer capture is needed
+to classify which color draws are genuinely visible, reflected, shadowed, or
+otherwise consumed before changing title culling or native batching.
