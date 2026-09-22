@@ -451,3 +451,42 @@ reflection dispatch by owner/view relationships. Record unmatched title
 entries and GPU draws on both sides of the join. Until this is demonstrated,
 SNR-01 and Gate A stay open and no shader/attachment heuristic authorizes
 suppression.
+
+### Backend indirect-buffer execution graph
+
+Prepared-draw observations now carry an indirect-buffer execution ID, parent
+execution ID, and the dispatch packet's physical address. The command
+processor assigns a fresh ID on each indirect dispatch and restores its
+parent context after nested execution. This identifies repeated executions
+of the same physical buffer without changing the draw path. The default-off
+SNR-01 trace logs these fields alongside the draw packet and command buffer.
+
+The RelWithDebInfo build completed, and the saved sustained-race route exited
+normally. The executable SHA-256 was
+`C1C5BA1F45DF3DBFD245E3577C5E5B448248AB37558FEC82BEB64088C7C15BBE`.
+The combined rotated log is
+`.local/native-renderer/snr01/indirect-dispatch-frame-6000/title-backend-dispatch.log`
+(SHA-256 `16D84CC90020C59B663826A0D7845661E920552E1D0E98C919589BB654A5C588`).
+Backend frames 5999, 6000 and 6001 reported 4,965, 4,759 and 5,122
+prepared callbacks across 1,493, 1,458 and 1,572 draw-bearing indirect
+executions, respectively. All observed execution IDs and dispatch addresses
+were nonzero; no execution ID recurred across these frames. Within each
+frame, every execution ID mapped to exactly one parent, dispatch address,
+command-buffer address and size.
+
+In backend frame 6001, 3,986 callbacks had a nonzero parent execution ID.
+Of the 1,572 draw-bearing executions, 1,122 had a parent that also produced
+a prepared draw; every one of those child dispatch packets lay within the
+parent's observed command-buffer range. The other parent executions cannot
+be checked by this draw-only observation. Across that frame, 833 draw packet
+physical addresses occurred under more than one execution ID, with as many
+as 85 executions sharing one address. Physical address alone therefore
+cannot identify a draw generation.
+
+Comparing the bounded source-frame-6000 header probes with backend frame
+6001 produced 1,334 address-matched and 3,788 unmatched callbacks. Only 23
+draw-bearing executions had all callback addresses matched; four were mixed
+and 1,545 had none matched. These are address correlations, not title-owner
+or generation joins. The backend execution graph is established, but title
+command-buffer submission, owner/view, record and LOD still need a bounded
+join to these executions before SNR-01 or Gate A can close.

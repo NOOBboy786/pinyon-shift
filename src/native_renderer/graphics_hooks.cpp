@@ -230,11 +230,16 @@ void ObservePreparedDraw(
   }
   REXGPU_INFO(
       "FH1 SNR01 prepared draw {{\"frame\":{},\"ordinal\":{},"
+      "\"indirect_execution\":{},\"indirect_parent\":{},"
+      "\"dispatch_packet_physical\":{},"
       "\"packet_physical\":{},\"command_buffer\":{},"
       "\"command_bytes\":{},\"draw_end_offset\":{},\"vertex_shader\":{},"
       "\"pixel_shader\":{},\"index_count\":{},"
       "\"render_target_bits\":{}}}",
       observation.frame_sequence, logged_draws,
+      observation.indirect_buffer_execution_id,
+      observation.indirect_buffer_parent_execution_id,
+      observation.indirect_dispatch_packet_physical_address,
       observation.draw_packet_physical_address,
       observation.command_buffer_physical_address,
       observation.command_buffer_bytes,
