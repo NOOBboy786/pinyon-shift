@@ -1059,3 +1059,71 @@ The selected geometry and instance identities, final transforms and
 material resources, view role, and packetless entries remain unresolved.
 Do not infer geometry from these state-record addresses or publish mutable
 guest state after frame publication. SNR-01 remains open.
+
+### Resource-stage and decoded vertex-fetch join
+
+A read-only hook at `0x82415C6C` now records the first-path resource-bind
+target, and the prepared-draw callback reports index and vertex-fetch
+descriptors without copying guest payloads. The generated render-context
+vtable candidates at `0x8200306C` and `0x821451EC` both map offset 88 to
+`0x82415C88`, offset 124 to the state bind above, and offset 164 to
+`sub_82412DD8`. `0x82415C88` passes the resolved object to
+`sub_82442528`, which writes resource fetch-state words. This is a
+resource-stage bind, not a geometry-object proof.
+
+The first saved-race replay exited normally with executable SHA-256
+`10C991C6942C7FF84334BB6504E0E32EF06515E21DA206B405F985E38DC38204`.
+Its combined log is
+`.local/native-renderer/snr01/resource-index-frame-6000/title-backend-resource-index.log`
+(SHA-256 `550275DA884BB6104C00C763B38653B49B4E861B6EE3910D0B6B690815B1D3E9`).
+All 196 successful first-path resolutions reached exactly one
+`0x82415C88` bind with the same object, slot and render context. The
+decoded first-path, character and vegetation draws used non-indexed
+primitive type 13; their index-buffer base and length were zero.
+Animated-scene child draws instead used indexed primitive type 4. This
+rules out an index-buffer address as the geometry identity for the other
+three paths.
+
+The next replay added a borrowed, eight-entry vertex-fetch view to the
+ShiftGlue prepared-draw observation (`cf1b680`). It exited normally with
+executable
+SHA-256
+`C77B3827C7F0A61DD9E93EE2C4A8B0E97E5D52F704CDFA0291CCCA17CD3D8320`.
+The log is
+`.local/native-renderer/snr01/vertex-fetch-frame-6000/title-backend-vertex-fetch.log`
+(SHA-256 `387F427686CAE8E4BB662F03EC3A7C3891D3375B2CE13A9B81B3D19ABC748BC0`).
+All 5,236 backend-frame-6001 draw callbacks had their declared fetch
+lists captured: 8,333 fetch records total, none truncated or unmatched.
+
+| Selected path | Packets | Backend callbacks | Fetch evidence |
+| --- | ---: | ---: | --- |
+| First | 208 | 256 | One nonzero fetch 95 per packet; 152 distinct signatures |
+| Animated scene | 13 | 27 | One or two fetches; six distinct index-buffer bases |
+| Characters | 24 | 30 | One fetch 95; 12 state records ↔ 12 fetch signatures |
+| Vegetation | 80 | 135 | One fetch 95; 40 state records ↔ 40 fetch signatures |
+
+Each character and vegetation packet had one fetch signature across all
+of its backend executions. Within each class, every observed state record
+mapped to one signature and each signature to one state record. The
+signatures contain the decoded guest base, byte length, stride, fetch
+slot and type; the verifier checks nonzero bases and lengths. This is a
+frame-local **correlation**, not a proven allocation owner, mesh format,
+or resource generation. A different route in this replay had one
+animated-scene child call with no packet; the verifier reports it as a
+packetless child while requiring exact ownership of every produced packet.
+Its reason remains unclassified.
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/vertex-fetch-frame-6000/title-backend-vertex-fetch.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/vertex-fetch-frame-6000/title-backend-vertex-fetch.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+The next SNR-01 join must trace these fetch bases back to title-owned
+vertex allocations and selected instances, then identify final transforms
+and the view role. SNR-02 must prove payload freshness before any native
+scene uses these addresses.

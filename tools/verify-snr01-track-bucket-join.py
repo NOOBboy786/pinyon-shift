@@ -65,9 +65,31 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         packets[kind] = {(thread, row["ordinal"]): row
                          for thread, row in events[kind]
                          if row["frame"] == source_frame}
+    prepared = [(thread, row) for thread, row in events["prepared draw"]
+                if row["frame"] == backend_frame]
     draws = collections.Counter(row["packet_physical"]
-                                for _, row in events["prepared draw"]
-                                if row["frame"] == backend_frame)
+                                for _, row in prepared)
+    prepared_by_header = collections.defaultdict(list)
+    for thread, row in prepared:
+        prepared_by_header[row["packet_physical"]].append((thread, row))
+    vertex_fetches = [(thread, row) for thread, row in events["prepared vertex fetch"]
+                      if row["frame"] == backend_frame]
+    fetch_signature_by_draw = {}
+    if vertex_fetches:
+        fetches_by_draw = collections.defaultdict(list)
+        for thread, row in vertex_fetches:
+            fetches_by_draw[thread, row["draw"]].append(row)
+        assert sum(row["vertex_fetch_count"] for _, row in prepared) == len(vertex_fetches)
+        for thread, row in prepared:
+            fetches = fetches_by_draw.pop((thread, row["ordinal"]), [])
+            assert len(fetches) == row["vertex_fetch_count"]
+            assert [fetch["slot"] for fetch in fetches] == list(range(len(fetches)))
+            assert all(fetch["packet_physical"] == row["packet_physical"]
+                       for fetch in fetches)
+            fetch_signature_by_draw[thread, row["ordinal"]] = tuple(
+                (fetch["fetch_constant"], fetch["guest_base"], fetch["length"],
+                 fetch["stride_words"], fetch["type"]) for fetch in fetches)
+        assert not fetches_by_draw
     draw_index_counts = collections.defaultdict(set)
     for _, row in events["prepared draw"]:
         if row["frame"] == backend_frame:
@@ -78,6 +100,7 @@ def verify(path: Path, source_frame: int, backend_frame: int,
     physical_headers = set()
     bucket_by_semantic = {}
     counts = collections.Counter()
+    first_fetch_signatures = set()
     for thread, row in entries:
         assert row["bucket"] == presenter + 56808 + 16 * (
             (row["bucket"] - presenter - 56808) // 16)
@@ -112,11 +135,25 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 physical_headers.add(packet["header_physical"])
                 callbacks = draws[packet["header_physical"]]
                 assert callbacks, "record packet has no backend draw"
+                if first and fetch_signature_by_draw:
+                    backend_draws = prepared_by_header[packet["header_physical"]]
+                    signatures = {fetch_signature_by_draw[draw_thread, draw["ordinal"]]
+                                  for draw_thread, draw in backend_draws}
+                    assert len(signatures) == 1
+                    signature = next(iter(signatures))
+                    assert len(signature) == 1 and signature[0][0] == 95
+                    assert signature[0][1] and signature[0][2]
+                    assert all(draw["index_buffer_type"] == 0 and
+                               draw["guest_primitive_type"] == 13
+                               for _, draw in backend_draws)
+                    first_fetch_signatures.add(signature)
                 counts[path_name + "_packets"] += 1
                 counts[path_name + "_draw_callbacks"] += callbacks
                 produced += 1
         counts[path_name + "_producing_entries"] += bool(produced)
     assert len(physical_headers) == len(claimed), "packet header address reused"
+    if first_fetch_signatures:
+        counts["first_vertex_fetch_signatures"] = len(first_fetch_signatures)
 
     descriptor_bases = {}
     descriptor_kinds = collections.Counter()
@@ -252,6 +289,21 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             counts["resolved_resource_objects"] = len({
                 obj for objects in objects_by_key.values() for obj in objects})
 
+            binds = [(thread, row) for thread, row in events["resource bind"]
+                     if row["frame"] == source_frame]
+            if binds:
+                assert len(binds) == len(resolutions)
+                resolutions_by_call = {(thread, row["call"]): row
+                                       for thread, row in resolutions}
+                for thread, bind in binds:
+                    key = (thread, bind["call"])
+                    assert key in resolutions_by_call
+                    assert bind["object"] == resolutions_by_call[key]["object"]
+                    assert bind["slot"] == candidates_by_call[key]["slot"]
+                    assert bind["context"] == items[key]["submit_context"]
+                    assert bind["target"] == 0x82415C88
+                counts["resource_binds"] = len(binds)
+
     second_targets = collections.defaultdict(collections.Counter)
     dispatches = [(thread, row) for thread, row in events["second track dispatch"]
                   if row["frame"] == source_frame]
@@ -295,6 +347,8 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         bound_records = collections.defaultdict(collections.Counter)
         bound_record_counts = {}
         binding_targets = collections.defaultdict(collections.Counter)
+        fetches_by_record = collections.defaultdict(lambda: collections.defaultdict(set))
+        records_by_fetch = collections.defaultdict(lambda: collections.defaultdict(set))
         child_packets = set()
         expected_second_packets = set()
         for (thread, _), bucket in buckets.items():
@@ -341,11 +395,25 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                     packet = packets[kind][(thread, ordinal)]
                     header = packet["header_physical"]
                     assert draws[header]
+                    if fetch_signature_by_draw and target in (
+                            "procedural_characters", "procedural_vegetation"):
+                        backend_draws = prepared_by_header[header]
+                        signatures = {fetch_signature_by_draw[draw_thread, backend["ordinal"]]
+                                      for draw_thread, backend in backend_draws}
+                        assert len(signatures) == 1
+                        signature = next(iter(signatures))
+                        assert len(signature) == 1 and signature[0][0] == 95
+                        assert signature[0][1] and signature[0][2]
+                        assert all(backend["index_buffer_type"] == 0 and
+                                   backend["guest_primitive_type"] == 13
+                                   for _, backend in backend_draws)
+                        fetches_by_record[target][draw["bound_record"]].add(signature)
+                        records_by_fetch[target][signature].add(draw["bound_record"])
                     if target in ("procedural_characters", "procedural_vegetation"):
                         assert draw["arg4"] == 13
                         assert draw_index_counts[header] == {4 * draw["arg5"]}
                     produced += 1
-            assert produced
+            second_targets[target]["packetless_child_calls"] += not bool(produced)
         assert child_packets == expected_second_packets
         for target, records in bound_records.items():
             second_targets[target]["bound_records"] = len(records)
@@ -355,7 +423,17 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 second_targets[target]["binding_targets"] = {
                     hex(address): count for address, count
                     in sorted(binding_targets[target].items())}
+            if fetches_by_record[target]:
+                assert all(len(signatures) == 1 for signatures in
+                           fetches_by_record[target].values())
+                assert all(len(bound) == 1 for bound in
+                           records_by_fetch[target].values())
+                second_targets[target]["vertex_fetch_signatures"] = len(
+                    records_by_fetch[target])
         counts["second_draw_skips"] = summary["second_draw_skips"]
+
+    if vertex_fetches:
+        counts["prepared_vertex_fetches"] = len(vertex_fetches)
 
     return {
         "source_frame": source_frame,

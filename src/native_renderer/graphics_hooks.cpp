@@ -322,6 +322,9 @@ void ObservePreparedDraw(
       "\"packet_physical\":{},\"command_buffer\":{},"
       "\"command_bytes\":{},\"draw_end_offset\":{},\"vertex_shader\":{},"
       "\"pixel_shader\":{},\"index_count\":{},"
+      "\"index_buffer_type\":{},\"index_buffer_guest_base\":{},"
+      "\"index_buffer_length\":{},\"guest_primitive_type\":{},"
+      "\"vertex_fetch_count\":{},"
       "\"render_target_bits\":{}}}",
       observation.frame_sequence, logged_draws,
       observation.indirect_buffer_execution_id,
@@ -332,7 +335,26 @@ void ObservePreparedDraw(
       observation.command_buffer_bytes,
       observation.command_buffer_end_offset, observation.vertex_shader_hash,
       observation.pixel_shader_hash, observation.index_count,
+      observation.index_buffer_type, observation.index_buffer_guest_base,
+      observation.index_buffer_length, observation.guest_primitive_type,
+      observation.vertex_fetch_count,
       observation.bound_render_target_bits);
+  if (observation.frame_sequence == uint64_t(target) + 1) {
+    for (uint32_t i = 0;
+         i < observation.vertex_fetch_count &&
+         i < observation.vertex_fetch_capacity; ++i) {
+      const auto& fetch = observation.vertex_fetches[i];
+      REXGPU_INFO(
+          "FH1 SNR01 prepared vertex fetch {{\"frame\":{},"
+          "\"draw\":{},\"packet_physical\":{},\"slot\":{},"
+          "\"fetch_constant\":{},\"stride_words\":{},"
+          "\"guest_base\":{},\"length\":{},\"type\":{}}}",
+          observation.frame_sequence, logged_draws,
+          observation.draw_packet_physical_address, i,
+          fetch.fetch_constant, fetch.stride_words, fetch.guest_base,
+          fetch.length, fetch.type);
+    }
+  }
 }
 
 void ObserveIndirectBuffer(
@@ -1007,6 +1029,23 @@ void PinyonShiftObserveProceduralResourceResolution(PPCRegister& r3) {
         "\"object\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         scope.ordinal, r3.u32);
+  }
+}
+
+void PinyonShiftObserveProceduralResourceBind(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r11) {
+  if (!Snr01TraceCurrentFrame() || snr01_procedural_scopes.empty()) {
+    return;
+  }
+  const auto& scope = snr01_procedural_scopes.back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 resource bind {{\"frame\":{},\"call\":{},"
+        "\"context\":{},\"slot\":{},\"object\":{},"
+        "\"target\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, r3.u32, r4.u32, r5.u32, r11.u32);
   }
 }
 
