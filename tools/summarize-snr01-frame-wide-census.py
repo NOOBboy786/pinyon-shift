@@ -18,6 +18,7 @@ PREFIXES = {
     "view_end": "FH1 SNR01 view end ",
     "direct": "FH1 SNR01 direct packet ",
     "semantic": "FH1 SNR01 semantic packet ",
+    "clear": "FH1 clear producer ",
 }
 
 
@@ -82,6 +83,18 @@ def summarize(records, frames, backend_frame):
         assert key in primary, f"root without title packet: {key}"
         root_sources[root["execution"]] = primary[key]
 
+    clear_ranges = collections.defaultdict(list)
+    for row in records["clear"]:
+        if (row.get("refills") or row.get("nested") or
+                "command_cursor_before" not in row or
+                "command_cursor_after" not in row):
+            continue
+        begin = row["command_cursor_before"] & 0x1FFFFFFF
+        end = row["command_cursor_after"] & 0x1FFFFFFF
+        # ponytail: cap joins at 4 KiB; broaden only with buffer-lifetime proof.
+        if begin < end and end - begin <= 4096:
+            clear_ranges[row["frame"]].append((begin, end, row))
+
     target_classes = collections.defaultdict(collections.Counter)
     target_views = collections.defaultdict(collections.Counter)
     target_no_attachment_write = collections.Counter()
@@ -103,8 +116,17 @@ def summarize(records, frames, backend_frame):
         packet = scene.get((execution["dispatch_packet_physical"],
                             execution["command_buffer"])) if execution["parent"] else None
         title_packet = title_draw_packets.get(draw["packet_physical"]) if not execution["parent"] else None
+        clear_producer = None
+        if (not execution["parent"] and title_packet is None and
+                draw.get("packet_bytes", 0) > 0):
+            end = draw["packet_physical"] + draw["packet_bytes"]
+            matches = [row for begin, limit, row in clear_ranges[source["frame"]]
+                       if begin <= draw["packet_physical"] and end <= limit]
+            assert len(matches) <= 1, f"ambiguous clear producer for draw {draw['ordinal']}"
+            clear_producer = matches[0] if matches else None
         if packet is None:
-            classification = "unmatched_indirect" if execution["parent"] else "direct_root"
+            classification = ("unmatched_indirect" if execution["parent"] else
+                              "title_clear" if clear_producer else "direct_root")
         elif not packet["view_call"]:
             classification = "out_of_view_scene"
         elif not packet["flush_owner"]:
@@ -174,6 +196,8 @@ def summarize(records, frames, backend_frame):
                 title_packet[1].get("procedural_receiver") or
                 title_packet[1].get("dispatch_receiver") or 0
             ) if title_packet else None,
+            "clear_producer_record": clear_producer["record"] if clear_producer else None,
+            "clear_producer_flags": clear_producer["flags"] if clear_producer else None,
         })
     assert sorted(r["ordinal"] for r in detail) == list(range(1, len(detail) + 1))
     assert sum(classifications.values()) == len(records["draw"])

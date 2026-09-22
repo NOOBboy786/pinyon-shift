@@ -49,6 +49,7 @@ struct ClearProducerSample {
   uint64_t frame;
   uint32_t shader_copies = 0, shader_bytes = 0, refills = 0;
   uint32_t first_shader_source = 0, first_shader_destination = 0;
+  uint32_t command_cursor_before = 0;
   bool nested = false;
   ClearClock::time_point begin;
 };
@@ -2322,6 +2323,7 @@ void PinyonShiftObserveClearProducerBegin(PPCRegister& r3, PPCRegister& r4,
                              f1.f64, static_cast<uint64_t>(rex::perf::GetTotalCounter(
                                          rex::perf::CounterId::kSourceFrameCount))};
   clear_producers.push_back(sample);
+  clear_producers.back().command_cursor_before = SnrM02ReadU32(sample.device + 48);
   clear_producers.back().begin = ClearClock::now();
 }
 
@@ -2374,12 +2376,14 @@ void PinyonShiftObserveClearProducerEnd(PPCRegister& r31, PPCRegister& r1) {
       "\"device\":{},\"flags\":{},\"rectangle\":{},\"colour\":{},"
       "\"stencil\":{},\"depth\":{},\"elapsed_ns\":{},\"shader_copies\":{},"
       "\"shader_bytes\":{},\"first_shader_source\":{},"
-      "\"first_shader_destination\":{},\"refills\":{},\"nested\":{}}}",
+      "\"first_shader_destination\":{},\"refills\":{},\"nested\":{},"
+      "\"command_cursor_before\":{},\"command_cursor_after\":{}}}",
       record, std::hash<std::thread::id>{}(std::this_thread::get_id()), sample.frame,
       sample.device, sample.flags, sample.rectangle, sample.colour, sample.stencil,
       sample.depth, std::chrono::duration_cast<std::chrono::nanoseconds>(end - sample.begin).count(),
       sample.shader_copies, sample.shader_bytes, sample.first_shader_source,
-      sample.first_shader_destination, sample.refills, sample.nested);
+      sample.first_shader_destination, sample.refills, sample.nested,
+      sample.command_cursor_before, SnrM02ReadU32(sample.device + 48));
 }
 
 void PinyonShiftObserveSceneListFlushBegin(

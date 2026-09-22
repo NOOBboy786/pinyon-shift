@@ -33,7 +33,7 @@ class FrameWideCensusTest(unittest.TestCase):
     def test_scene_owner_direct_root_and_unmatched_child(self):
         records = {key: [] for key in
                    ("primary", "scene", "execution", "draw", "view_begin",
-                    "view_end", "direct", "semantic")}
+                    "view_end", "direct", "semantic", "clear")}
         for frame in (10, 11):
             for call in range(1, 9):
                 row = {"frame": frame, "call": call, "view": frame * 100 + call}
@@ -67,15 +67,26 @@ class FrameWideCensusTest(unittest.TestCase):
         ]
         records["draw"][0]["color_mask"] = 15
         records["draw"][1]["depth_control"] = 2
+        records["draw"][1]["packet_bytes"] = 4
+        records["clear"] = [
+            {"frame": 10, "record": 7, "flags": 63,
+             "command_cursor_before": 0xA0000006,
+             "command_cursor_after": 0xA000000C,
+             "refills": 0, "nested": False},
+        ]
         result = SUMMARIZE(records, [10, 11], 11)
         self.assertEqual(result["totals"]["draws"], 4)
         self.assertEqual(result["totals"]["classifications"],
-                         {"view_owner": 1, "direct_root": 2,
+                         {"view_owner": 1, "title_clear": 1, "direct_root": 1,
                           "unmatched_indirect": 1})
         self.assertEqual(result["totals"]["draws_by_scene_source_frame"], {10: 1})
         self.assertEqual(result["targets"]["00000001/00000002/00000003/00000003"]
                          ["no_attachment_write_draws"], 2)
         self.assertEqual(len(result["draws"]), 4)
+        self.assertEqual(result["draws"][1]["clear_producer_record"], 7)
+        records["clear"][0]["refills"] = 1
+        self.assertEqual(SUMMARIZE(records, [10, 11], 11)["draws"][1]
+                         ["classification"], "direct_root")
 
 
 if __name__ == "__main__":

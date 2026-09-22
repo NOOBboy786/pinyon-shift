@@ -2423,3 +2423,47 @@ joined to this packet. A bounded packet-to-producer/clear-result join is the
 next useful check. If it proves a retained scene-target clear, classify its
 image write as a prerequisite to the view-8 object slice and carry its
 resource dependency into SNR-05; otherwise keep it in the unresolved set.
+
+### Title clear producer joins the candidate scene-target packet
+
+A default-off replay paired the existing `sub_8240E130` clear-producer scope
+with its device command cursor before and after the call. The saved sustained
+race exited normally with seven captures. Executable SHA-256 was
+`C9C57BD9B6030F7AAAE5B6C5486703565C0DED512EEE0A78D56F4DBDDB3EDEF5`.
+The ordered source-frame-6000/6001 and backend-frame-6001 log at
+`.local/native-renderer/snr01/clear-cursor-run-a-full.log` has SHA-256
+`2D1A0CFC9B0EB28C8C1F281B164C6632F9C344126F172B272C04BC02C6A6A91C`;
+the draw ledger at `.local/native-renderer/snr01/clear-cursor-run-a.json` has
+SHA-256
+`36D4998312280B14243E8D0BBB1A84931307742848D466698A1C4BB66594D43A`.
+The exact primary-root and camera/view verifiers pass. Traffic again varied:
+this backend frame had 5,165 prepared draws and 133 roots, so the addresses
+and counts below belong to this replay only.
+
+The one candidate direct-root gap was draw ordinal 1971, an 8-byte packet at
+physical `0x131A5D08`, in a 592-byte root published in source frame 6000.
+Title clear-producer record 62152 was in the same source frame on the title
+thread. Its command cursor advanced from guest `0xB31A5B3C` to
+`0xB31A5D1C`, physical `0x131A5B3C`–`0x131A5D1C`, with zero refills and no
+nested producer. The complete draw packet lies inside that range; no other
+clear-producer range contains it. The producer used flags 63 and the draw
+targeted the candidate `0x30000` color/depth attachments with writes enabled.
+This proves title clear **packet provenance** and pass order, not that the
+SDK's optional native rectangle-clear replacement accepted this exact draw
+or that the resulting resource contents were validated. Keep the clear and
+its target writes on the compatibility path as a prerequisite to the selected
+view-8 scene image.
+
+The ledger conservatively labels only direct-root packets wholly contained
+in one non-refilled, non-nested clear-producer range as `title_clear`: 12 of
+5,165 draws, including this candidate gap. For the two candidate target
+tuples together, 3,067 attachment-write-enabled draws have captured view-8
+title paths (2,109 scene-list draws with a flush owner, 24 without one,
+one, and 934 direct-root title packets). One retained title clear precedes
+them; the 24 unmatched indirect point draws have no color/depth/stencil
+attachment writes in this replay and remain compatibility work. There are
+therefore **zero unattributed attachment-writing candidate draws** in this
+capture. This resolves the two candidate view gaps at the image/pass boundary,
+but does not freeze the complete object slice: semantic owners for the 934
+direct-root packets and 24 ownerless scene-list draws, material/geometry
+identity, resource freshness, and retained-pass consumers remain open.
