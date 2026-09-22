@@ -57,10 +57,40 @@ struct Snr01ProceduralScope {
   uint64_t first_semantic_packet;
   uint64_t ordinal;
 };
+struct Snr01DispatchScope {
+  uint32_t receiver;
+  uint32_t context;
+  uint32_t arg6;
+  uint32_t arg7;
+  uint32_t arg8;
+  uint32_t arg9;
+  uint32_t arg10;
+  uint64_t first_semantic_packet;
+  uint64_t first_procedural_call;
+  uint64_t ordinal;
+};
+struct Snr01EmitterScope {
+  uint32_t caller_lr;
+  uint32_t owner;
+  uint32_t arg4;
+  uint32_t arg5;
+  uint32_t arg6;
+  uint64_t first_semantic_packet;
+  uint64_t ordinal;
+};
+thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
+thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
+thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
 thread_local uint64_t snr01_packet_count = 0;
 thread_local uint64_t snr01_semantic_packet_count = 0;
 thread_local uint64_t snr01_procedural_count = 0;
+thread_local uint64_t snr01_dispatch_count = 0;
+thread_local uint64_t snr01_render_state_count = 0;
+thread_local uint64_t snr01_emitter_count = 0;
+thread_local uint64_t snr01_unmatched_emitter_exits = 0;
+thread_local uint64_t snr01_unmatched_dispatch_exits = 0;
+thread_local uint64_t snr01_unmatched_render_state_exits = 0;
 thread_local uint64_t snr01_unmatched_exits = 0;
 constexpr uint64_t kSnr01PacketLimit = 8192;
 constexpr uint64_t kSnr01ProceduralLimit = 4096;
@@ -86,14 +116,29 @@ void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
       "FH1 SNR01 semantic packet {{\"frame\":{},\"ordinal\":{},"
       "\"path\":\"{}\",\"header_guest\":{},\"header_physical\":{},"
       "\"header_word\":{},\"command_owner\":{},"
-      "\"procedural_receiver\":{},\"procedural_call\":{}}}",
+      "\"procedural_receiver\":{},\"procedural_call\":{},"
+      "\"dispatch_receiver\":{},\"dispatch_call\":{},"
+      "\"render_state_receiver\":{},\"render_state_call\":{},"
+      "\"emitter_call\":{},\"emitter_caller_lr\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       ordinal, path, guest_address, guest_address & 0x1FFFFFFF,
       header_word, command_owner,
       snr01_procedural_scopes.empty()
           ? 0 : snr01_procedural_scopes.back().receiver,
       snr01_procedural_scopes.empty()
-          ? 0 : snr01_procedural_scopes.back().ordinal);
+          ? 0 : snr01_procedural_scopes.back().ordinal,
+      snr01_dispatch_scopes.empty()
+          ? 0 : snr01_dispatch_scopes.back().receiver,
+      snr01_dispatch_scopes.empty()
+          ? 0 : snr01_dispatch_scopes.back().ordinal,
+      snr01_render_state_scopes.empty()
+          ? 0 : snr01_render_state_scopes.back().receiver,
+      snr01_render_state_scopes.empty()
+          ? 0 : snr01_render_state_scopes.back().ordinal,
+      snr01_emitter_scopes.empty()
+          ? 0 : snr01_emitter_scopes.back().ordinal,
+      snr01_emitter_scopes.empty()
+          ? 0 : snr01_emitter_scopes.back().caller_lr);
 }
 
 bool ClearProducerTraceEnabled() {
@@ -178,16 +223,39 @@ void PinyonShiftObserveGraphicsFrame() {
     REXGPU_INFO(
         "FH1 SNR01 summary {{\"frame\":{},\"indexed_packets\":{},"
         "\"semantic_packets\":{},"
-        "\"procedural_calls\":{},\"unmatched_exits\":{},"
-        "\"unfinished_scopes\":{},\"packet_limit\":{},\"scope_limit\":{}}}",
+        "\"procedural_calls\":{},\"dispatch_calls\":{},"
+        "\"render_state_calls\":{},\"emitter_calls\":{},"
+        "\"unmatched_exits\":{},"
+        "\"unmatched_dispatch_exits\":{},"
+        "\"unmatched_render_state_exits\":{},"
+        "\"unmatched_emitter_exits\":{},"
+        "\"unfinished_scopes\":{},\"unfinished_dispatch_scopes\":{},"
+        "\"unfinished_render_state_scopes\":{},"
+        "\"unfinished_emitter_scopes\":{},"
+        "\"packet_limit\":{},\"scope_limit\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         snr01_packet_count, snr01_semantic_packet_count,
-        snr01_procedural_count, snr01_unmatched_exits,
-        snr01_procedural_scopes.size(), kSnr01PacketLimit, kSnr01ProceduralLimit);
+        snr01_procedural_count, snr01_dispatch_count,
+        snr01_render_state_count, snr01_emitter_count,
+        snr01_unmatched_exits,
+        snr01_unmatched_dispatch_exits,
+        snr01_unmatched_render_state_exits,
+        snr01_unmatched_emitter_exits,
+        snr01_procedural_scopes.size(), snr01_dispatch_scopes.size(),
+        snr01_render_state_scopes.size(),
+        snr01_emitter_scopes.size(),
+        kSnr01PacketLimit, kSnr01ProceduralLimit);
   }
+  snr01_emitter_scopes.clear();
+  snr01_dispatch_scopes.clear();
+  snr01_render_state_scopes.clear();
   snr01_procedural_scopes.clear();
   snr01_packet_count = snr01_semantic_packet_count =
-      snr01_procedural_count = snr01_unmatched_exits = 0;
+      snr01_procedural_count = snr01_dispatch_count =
+      snr01_render_state_count = snr01_unmatched_exits =
+      snr01_unmatched_dispatch_exits =
+      snr01_unmatched_render_state_exits = snr01_emitter_count =
+      snr01_unmatched_emitter_exits = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
       (title_emitter_calls || title_packet_count)) {
     rex::perf::TraceCriticalPath("title_emitter", int64_t(title_emitter_frame),
@@ -259,13 +327,102 @@ void PinyonShiftObserveTitleDrawPacketPublish(PPCRegister& r3, PPCRegister& r11,
   ++title_packet_count;
 }
 
-void PinyonShiftObserveProceduralItemBegin(PPCRegister& r3) {
+void PinyonShiftObserveProceduralDispatchBegin(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r6, PPCRegister& r7,
+    PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_dispatch_count;
+  snr01_dispatch_scopes.push_back(
+      {r3.u32, r4.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32,
+       snr01_semantic_packet_count, snr01_procedural_count, ordinal});
+}
+
+void PinyonShiftObserveProceduralDispatchEnd() {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  if (snr01_dispatch_scopes.empty()) {
+    ++snr01_unmatched_dispatch_exits;
+    return;
+  }
+  const auto scope = snr01_dispatch_scopes.back();
+  snr01_dispatch_scopes.pop_back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 procedural dispatch {{\"frame\":{},\"call\":{},"
+        "\"receiver\":{},\"context\":{},\"arg6\":{},\"arg7\":{},"
+        "\"arg8\":{},\"arg9\":{},\"arg10\":{},"
+        "\"first_semantic_packet\":{},\"last_semantic_packet\":{},"
+        "\"first_item_call\":{},\"last_item_call\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.receiver, scope.context, scope.arg6, scope.arg7,
+        scope.arg8, scope.arg9, scope.arg10,
+        scope.first_semantic_packet + 1, snr01_semantic_packet_count,
+        scope.first_procedural_call + 1, snr01_procedural_count);
+  }
+}
+
+void PinyonShiftObserveProceduralRenderStateBegin(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r6, PPCRegister& r7,
+    PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_render_state_count;
+  snr01_render_state_scopes.push_back(
+      {r3.u32, r4.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32,
+       snr01_semantic_packet_count, snr01_procedural_count, ordinal});
+}
+
+void PinyonShiftObserveProceduralRenderStateEnd() {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  if (snr01_render_state_scopes.empty()) {
+    ++snr01_unmatched_render_state_exits;
+    return;
+  }
+  const auto scope = snr01_render_state_scopes.back();
+  snr01_render_state_scopes.pop_back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 render state {{\"frame\":{},\"call\":{},"
+        "\"receiver\":{},\"context\":{},\"arg6\":{},\"arg7\":{},"
+        "\"arg8\":{},\"arg9\":{},\"arg10\":{},"
+        "\"first_semantic_packet\":{},\"last_semantic_packet\":{},"
+        "\"first_item_call\":{},\"last_item_call\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.receiver, scope.context, scope.arg6, scope.arg7,
+        scope.arg8, scope.arg9, scope.arg10,
+        scope.first_semantic_packet + 1, snr01_semantic_packet_count,
+        scope.first_procedural_call + 1, snr01_procedural_count);
+  }
+}
+
+void PinyonShiftObserveProceduralItemBegin(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r7, PPCRegister& r8,
+    PPCRegister& r9, PPCRegister& r10) {
   if (!Snr01TraceCurrentFrame()) {
     return;
   }
   const uint64_t ordinal = ++snr01_procedural_count;
   snr01_procedural_scopes.push_back(
       {r3.u32, snr01_packet_count, snr01_semantic_packet_count, ordinal});
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 item arguments {{\"frame\":{},\"call\":{},"
+        "\"receiver\":{},\"context\":{},\"arg7\":{},\"arg8\":{},"
+        "\"arg9\":{},\"arg10\":{},\"dispatch_call\":{},"
+        "\"render_state_call\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r3.u32, r4.u32, r7.u32, r8.u32, r9.u32, r10.u32,
+        snr01_dispatch_scopes.empty() ? 0
+                                     : snr01_dispatch_scopes.back().ordinal,
+        snr01_render_state_scopes.empty()
+            ? 0 : snr01_render_state_scopes.back().ordinal);
+  }
 }
 
 void PinyonShiftObserveProceduralItemEnd() {
@@ -288,6 +445,41 @@ void PinyonShiftObserveProceduralItemEnd() {
         scope.ordinal, scope.receiver, scope.first_packet + 1,
         snr01_packet_count, scope.first_semantic_packet + 1,
         snr01_semantic_packet_count, snr01_procedural_scopes.size());
+  }
+}
+
+void PinyonShiftObserveProceduralEmitterBegin(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_emitter_count;
+  snr01_emitter_scopes.push_back(
+      {r12.u32, r3.u32, r4.u32, r5.u32, r6.u32,
+       snr01_semantic_packet_count, ordinal});
+}
+
+void PinyonShiftObserveProceduralEmitterEnd() {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  if (snr01_emitter_scopes.empty()) {
+    ++snr01_unmatched_emitter_exits;
+    return;
+  }
+  const auto scope = snr01_emitter_scopes.back();
+  snr01_emitter_scopes.pop_back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 emitter {{\"frame\":{},\"call\":{},"
+        "\"caller_lr\":{},\"owner\":{},\"arg4\":{},"
+        "\"arg5\":{},\"arg6\":{},"
+        "\"first_semantic_packet\":{},\"last_semantic_packet\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.caller_lr, scope.owner, scope.arg4,
+        scope.arg5, scope.arg6, scope.first_semantic_packet + 1,
+        snr01_semantic_packet_count);
   }
 }
 

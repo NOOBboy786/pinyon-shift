@@ -37,9 +37,27 @@ name = "PinyonShiftObserveTitleDrawEmitterEnd"
 # the verified CProceduralModels per-record helper; the second sees its common
 # return after the original draw preparation and indirect submission.
 [[midasm_hook]]
+address = 0x82417BC4
+name = "PinyonShiftObserveProceduralDispatchBegin"
+registers = ["r3", "r4", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
+address = 0x82418F38
+name = "PinyonShiftObserveProceduralDispatchEnd"
+
+[[midasm_hook]]
+address = 0x824170DC
+name = "PinyonShiftObserveProceduralRenderStateBegin"
+registers = ["r3", "r4", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
+address = 0x82417410
+name = "PinyonShiftObserveProceduralRenderStateEnd"
+
+[[midasm_hook]]
 address = 0x8241741C
 name = "PinyonShiftObserveProceduralItemBegin"
-registers = ["r3"]
+registers = ["r3", "r4", "r7", "r8", "r9", "r10"]
 
 [[midasm_hook]]
 address = 0x82417B80
@@ -47,6 +65,15 @@ name = "PinyonShiftObserveProceduralItemEnd"
 
 # The two verified PM4_DRAW_INDX stores in the procedural submission emitter.
 # They bypass the generic indexed wrapper observed at 0x82410328.
+[[midasm_hook]]
+address = 0x82415F6C
+name = "PinyonShiftObserveProceduralEmitterBegin"
+registers = ["r12", "r3", "r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x82416374
+name = "PinyonShiftObserveProceduralEmitterEnd"
+
 [[midasm_hook]]
 address = 0x82416260
 name = "PinyonShiftObserveProceduralDrawPacketPrimary"

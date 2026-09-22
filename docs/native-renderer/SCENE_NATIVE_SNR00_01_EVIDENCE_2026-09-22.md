@@ -199,6 +199,48 @@ packet identity for this source frame, not view, material, resource generation,
 visibility or complete coverage. This capture is diagnostic and must not be
 used as a timing comparison.
 
+### Receiver phases and emitter callers
+
+An additional default-off source-frame 6000 capture ran to normal exit with
+executable SHA-256
+`146B63C46CE4936B32F0E018CA898D30647FAFA7D133AD3BEE110316A25F2562`.
+The combined title/backend log is
+`.local/native-renderer/snr01/emitter-caller-frame-6000/title-backend-emitter.log`
+(SHA-256
+`E89040F6801C2848DAC756511D5E7B90E790F4BCBC6349C88C72EE26B59644EF`).
+The source `runtime.1.log` and `runtime.log` were both required because the
+diagnostic output rotated at 5 MiB. Its summary reports 100 balanced
+`CProceduralModels` slot-41 dispatch calls, nine balanced slot-40
+render-state calls, 296 balanced item calls and 386 balanced emitter calls,
+with no unfinished scope or trace cap hit.
+
+The 100 slot-41 calls and 296 item calls share 44 distinct receiver
+addresses and one observed graphics-context address, but **no item call or
+draw packet is nested inside slot 41**. The nine slot-40 calls use one
+aggregate receiver and contain all 296 item calls. The item path emits 235
+packets; 61 items emit none. The other 151 procedural packets occur outside
+slot 40. This separates two title phases and avoids treating the slot-41
+receiver as the direct draw owner. The argument values on either path are
+still unlabelled; a value such as 1 or 2 is not yet a view identity.
+
+The original caller return address at `0x82415F6C` partitions all 386
+emitter invocations and packet stores. Each packet passed the exact
+physical-address and ring-buffer-position join in backend frame 6001:
+
+| Caller LR / static function | Title packets | Prepared-draw callbacks | Item/render-state overlap | Distinct shader pairs | Observed target bits |
+| --- | ---: | ---: | --- | ---: | --- |
+| `0x82415D1C` / `sub_82415CE0` | 235 | 299 | all 235 | 8 | 1, 3 |
+| `0x82412E1C` / `sub_82412DD8` | 129 | 213 | none | 7 | 1, 3 |
+| `0x82442B64` / `sub_824426B8` | 22 | 22 | none | 11 | 2 |
+
+The 386 title headers produced 534 backend callbacks because some packet
+addresses execute more than once. Of 4,635 prepared draws in backend frame
+6001, 4,101 matched none of these headers or the 44 generic-wrapper header
+addresses. The generic headers also had no match in that frame. The three
+caller functions are proven by the generated title code, but their scene
+role, view, material and resource lifetimes remain unproved. A render-target
+bit or shader family cannot substitute for those relationships.
+
 The next runtime capture must carry a bounded title owner/generation, view,
 record and selected LOD through final draw preparation and join the resulting
 submissions to RenderDoc phase and resource identity.
