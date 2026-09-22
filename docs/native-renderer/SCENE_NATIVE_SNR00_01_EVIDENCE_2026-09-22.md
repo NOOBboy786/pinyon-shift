@@ -555,3 +555,35 @@ capture, so the complete title-to-root claim applies only to backend frame
 view, visible-list entry, selected LOD, material or allocation generation.
 Trace the two immediate callers back to their queue producers and title
 owners before using this chain for native scene admission or draw suppression.
+
+### Queue helper caller split
+
+The generated `sub_82409668` queues a target and may submit it directly to
+`sub_82409398`. Its common exit is `0x82409838`. A read-only scope records
+the helper's caller for each primary-ring packet, including calls that cross
+the source-frame boundary. The replay exited normally with executable
+SHA-256 `FB8FE05B05EB198582023F908622D1F2F2CC1291BC8F9E5F62160692F66D05BE`.
+The local combined log is
+`.local/native-renderer/snr01/queued-caller-frame-6000/title-backend-queued.log`
+(SHA-256 `99A9B894965B3C05C288A30EB9AC92E6FB15EAA67B7666BF06A33C0939DDE7C0`).
+The indirect-join verifier again passed: source frames 6000/6001 each wrote
+133 primary packets, and all 133 backend-6001 roots were matched by unique
+address, target and order. That backend frame contained 1,621 indirect
+executions and 5,133 prepared draws, with no trace cap hit.
+
+| Source frame / title caller path | Backend-6001 roots | Roots with draws | Prepared draws |
+| --- | ---: | ---: | ---: |
+| 6000 / `sub_8240CF68` → `0x8240CFF8` | 41 | 0 | 0 |
+| 6000 / `sub_8240D070` → `0x8240D1B0` | 41 | 8 | 1,860 |
+| 6000 / `sub_82469290` → `0x824693E4` / `0x82469434` | 2 | 0 | 0 |
+| 6000 / `sub_829F5FF0` → `0x829F6308` | 18 | 0 | 0 |
+| 6001 / `sub_829F5FF0` → `0x829F6308` | 31 | 19 | 3,273 |
+
+The static code shows `sub_8240D070` computes a command-buffer length from
+the device's command start and write cursor before calling the queued helper.
+`sub_829F5FF0` interprets command words and submits an indirect target at
+its `0x829F6308` site. Thus these caller sites classify device-level
+publication paths, not the scene owner that originally recorded a buffer.
+No-draw roots may still perform clears, copies or state changes. The next
+join must follow queue/command-buffer production back to the view and its
+visible objects; adding more device-flush callers alone cannot prove SNR-01.

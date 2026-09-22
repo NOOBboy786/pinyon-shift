@@ -154,6 +154,15 @@ registers = ["r30", "r11", "r31"]
 # The title's primary-ring indirect packet writer. The packet is about to be
 # stored at ring_base + ring_index * 4; the following words select the buffer.
 [[midasm_hook]]
+address = 0x8240966C
+name = "PinyonShiftObserveQueuedIndirectBegin"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9"]
+
+[[midasm_hook]]
+address = 0x82409838
+name = "PinyonShiftObserveQueuedIndirectEnd"
+
+[[midasm_hook]]
 address = 0x8240939C
 name = "PinyonShiftObservePrimaryIndirectBegin"
 registers = ["r12", "r3", "r4", "r5"]

@@ -105,6 +105,7 @@ struct Snr01DirectScope {
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
 thread_local std::vector<uint32_t> snr01_primary_indirect_callers;
+thread_local std::vector<uint32_t> snr01_queued_indirect_callers;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -818,6 +819,20 @@ void PinyonShiftObserveIndexed2PacketPrimary(PPCRegister& r30,
   RecordSnr01DirectPacket("indexed2_primary", r30.u32, r11.u32, r31.u32);
 }
 
+void PinyonShiftObserveQueuedIndirectBegin(
+    PPCRegister& r12, PPCRegister&, PPCRegister&, PPCRegister&, PPCRegister&,
+    PPCRegister&, PPCRegister&, PPCRegister&) {
+  if (Snr01TracePrimaryIndirectFrame()) {
+    snr01_queued_indirect_callers.push_back(r12.u32);
+  }
+}
+
+void PinyonShiftObserveQueuedIndirectEnd() {
+  if (!snr01_queued_indirect_callers.empty()) {
+    snr01_queued_indirect_callers.pop_back();
+  }
+}
+
 void PinyonShiftObservePrimaryIndirectBegin(PPCRegister& r12, PPCRegister&,
                                            PPCRegister&, PPCRegister&) {
   if (Snr01TracePrimaryIndirectFrame()) {
@@ -843,13 +858,16 @@ void PinyonShiftObservePrimaryIndirectPacket(
       "\"header_physical\":{},\"header_word\":{},\"gpu_target\":{},"
       "\"device\":{},\"entry_array\":{},\"entry_count\":{},"
       "\"entry_index\":{},\"ring_mask\":{},\"mode\":{},"
-      "\"caller_lr\":{}}}",
+      "\"caller_lr\":{},\"queued_caller_lr\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       ordinal, guest_address & 0x1FFFFFFF, r10.u32, r31.u32, r27.u32,
       r24.u32, r25.u32, r26.u32, r29.u32, r21.u32,
       snr01_primary_indirect_callers.empty()
           ? 0
-          : snr01_primary_indirect_callers.back());
+          : snr01_primary_indirect_callers.back(),
+      snr01_queued_indirect_callers.empty()
+          ? 0
+          : snr01_queued_indirect_callers.back());
 }
 
 void PinyonShiftObservePrimaryIndirectEnd() {

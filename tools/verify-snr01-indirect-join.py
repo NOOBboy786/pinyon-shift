@@ -62,7 +62,7 @@ def verify(path: Path, source_frames: set[int], backend_frame: int) -> dict:
         source_by_address[roots[root_id(row["indirect_execution"])]["dispatch_packet_physical"]][0]["frame"]
         for row in draws
     )
-    return {
+    result = {
         "backend_frame": backend_frame,
         "source_packets": {str(frame): sum(row["frame"] == frame for row in source)
                            for frame in sorted(source_frames)},
@@ -73,6 +73,14 @@ def verify(path: Path, source_frames: set[int], backend_frame: int) -> dict:
         "draws": len(draws),
         "draws_by_source_frame": dict(sorted(draw_sources.items())),
     }
+    if all("queued_caller_lr" in row for row in source):
+        result["queued_callers"] = dict(sorted(collections.Counter(
+            hex(row["queued_caller_lr"]) for row in source).items()))
+        result["draws_by_queued_caller"] = dict(sorted(collections.Counter(
+            hex(source_by_address[roots[root_id(row["indirect_execution"])][
+                "dispatch_packet_physical"]][0]["queued_caller_lr"])
+            for row in draws).items()))
+    return result
 
 
 def main() -> None:
