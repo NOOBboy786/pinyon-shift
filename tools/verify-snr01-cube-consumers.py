@@ -13,7 +13,8 @@ FACE_ORDER = [0, 4, 2, 1, 3, 5]
 FACE_BYTES = 256 * 256 * 4
 
 
-def verify(path: Path, source_frame: int, backend_frame: int):
+def verify(path: Path, source_frame: int, backend_frame: int,
+           allow_missing_view_trace: bool = False):
     events = collections.defaultdict(list)
     for line_number, line in enumerate(path.open(encoding="utf-8-sig",
                                                   errors="replace")):
@@ -94,16 +95,43 @@ def verify(path: Path, source_frame: int, backend_frame: int):
                                    for ordinal in range(
                                        bucket["first_" + label],
                                        bucket["last_" + label] + 1))
-    assert tracked_headers
+    assert tracked_headers or allow_missing_view_trace
+    worker_scopes = {(row["stream"], row["queue"]): row
+                     for _, _, row in events["deferred worker end"]
+                     if row["frame"] == source_frame}
+    if worker_scopes:
+        begins = {(row["stream"], row["queue"]): row
+                  for _, _, row in events["deferred worker begin"]
+                  if row["frame"] == source_frame}
+        assert set(begins) == set(worker_scopes)
+        assert all(begins[key]["first_packet"] == end["first_packet"]
+                   for key, end in worker_scopes.items())
+    if allow_missing_view_trace and not tracked_headers:
+        assert worker_scopes, "missing both view and worker ownership traces"
 
     targets = collections.Counter()
     source_callers = collections.Counter()
+    source_packets = collections.Counter()
+    devices = set()
+    entry_arrays = set()
+    worker_streams = set()
+    worker_queues = set()
     for _, fetch in consumers:
         draw = prepared[fetch["draw"]][1]
         assert draw["packet_physical"] not in tracked_headers
         source = source_for(draw)
+        if worker_scopes:
+            scope = worker_scopes[source["worker_stream"],
+                                  source["worker_queue"]]
+            assert scope["first_packet"] <= source["ordinal"] <= scope[
+                "last_packet"]
         source_callers[(source["frame"], source["caller_lr"],
                         source["queued_caller_lr"])] += 1
+        source_packets[source["header_physical"]] += 1
+        devices.add(source["device"])
+        entry_arrays.add(source["entry_array"])
+        worker_streams.add(source.get("worker_stream", 0))
+        worker_queues.add(source.get("worker_queue", 0))
         targets[(draw["surface_info"], tuple(draw["color_info"]),
                  draw["depth_info"], draw["render_target_bits"])] += 1
     assert len(source_callers) == len(targets) == 1
@@ -114,6 +142,11 @@ def verify(path: Path, source_frame: int, backend_frame: int):
             "cube_descriptor": {"format": next(iter(descriptors))[0],
                                 "mip_address": hex(next(iter(descriptors))[1])},
             "consumer_draws": len(consumers),
+            "consumer_primary_packets": len(source_packets),
+            "consumer_devices": [hex(device) for device in sorted(devices)],
+            "consumer_entry_arrays": [hex(address) for address in sorted(entry_arrays)],
+            "consumer_worker_streams": [hex(address) for address in sorted(worker_streams)],
+            "consumer_worker_queues": [hex(address) for address in sorted(worker_queues)],
             "consumer_source": [{"frame": key[0], "caller_lr": hex(key[1]),
                                  "queued_caller_lr": hex(key[2]), "draws": count}
                                 for key, count in source_callers.items()],
@@ -121,7 +154,7 @@ def verify(path: Path, source_frame: int, backend_frame: int):
                                   "color_info": key[1], "depth_info": key[2],
                                   "bound_bits": key[3], "draws": count}
                                  for key, count in targets.items()],
-            "tracked_view_packet_overlap": 0}
+            "tracked_view_packet_overlap": (0 if tracked_headers else None)}
 
 
 if __name__ == "__main__":
@@ -129,6 +162,8 @@ if __name__ == "__main__":
     parser.add_argument("log", type=Path)
     parser.add_argument("--source-frame", type=int, required=True)
     parser.add_argument("--backend-frame", type=int, required=True)
+    parser.add_argument("--allow-missing-view-trace", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(verify(args.log, args.source_frame, args.backend_frame),
+    print(json.dumps(verify(args.log, args.source_frame, args.backend_frame,
+                            args.allow_missing_view_trace),
                      indent=2))

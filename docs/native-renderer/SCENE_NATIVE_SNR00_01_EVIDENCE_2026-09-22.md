@@ -1276,7 +1276,8 @@ in [PERF-05](PERFORMANCE_02_05_RESULTS_2026-09-21.md). The title view call,
 draw target and copy now establish these as the **reflection face producers**
 for this captured allocation. The verifier asserts the ordered offsets and
 size without hard-coding the base; this address can be reused or relocated.
-The later texture-binding and generation join remains open.
+The texture-binding join is established below; the generation and semantic
+owner remain open.
 
 View 8 remains the main-view candidate. Its two color targets and the
 unmatched second target mean the final presentation and retained-pass
@@ -1319,3 +1320,39 @@ EDRAM registers do not prove they belong to view 8. SNR-01 must recover this
 path's source owner, view/camera and ordering before the proposed main-view
 slice can be frozen or suppressed. SNR-05 must preserve the cube production,
 mip publication and sampling dependency across that boundary.
+
+### Deferred command worker carrying the cube consumers
+
+Generated title code shows `sub_829F6360` calls the command interpreter
+`sub_829F5FF0` at `0x829F6604` with a stream and queue pointer. Default-off
+begin/end probes at that call bracket the primary packets written by the
+interpreter. The final `fh1-race-sustained.fh1test` replay with
+`--pinyon_shift_snr01_trace_source_frame=6000` exited normally with seven
+captures. Its executable SHA-256 was
+`5C67409D5BE1C242BA5D11CFA0966EFE8D24DF890094BCFE5EC8CDBBF581E7E7`.
+The AppData log rotated at 5 MiB; the chronological concatenation of this
+run's `runtime.4.log` through `runtime.1.log` and `runtime.log` is saved as
+`.local/native-renderer/snr01/deferred-worker-final-sustained-combined.log`
+(SHA-256 `3624D932D32D0C45963E27774DD89A8CED45B1AA74B3A65AF1F1E3F21F3B86A9`).
+The cube-consumer verifier passed for source/backend frame 6001 with
+`--allow-missing-view-trace`, requiring every consumer root to fall within a
+matching worker begin/end packet range. The earlier view-trace replay passed
+without that flag and found zero tracked-view packet overlap.
+
+This capture has 728 cube-sampling draws from eight primary packet roots. All
+roots were written by `sub_829F5FF0` at return `0x829F6308` under queue
+`0x401600C8`, using worker streams `0xD3083004` and `0xD308313C`. The smaller
+stream covered source-frame-6001 primary packet ordinals 50–55 and the larger
+stream covered 56–98. The same worker probes bracketed two earlier
+source-frame-6000 streams on that queue. Root count is capture-specific: a
+previous worker-trace replay had ten roots and the view-trace replay had nine,
+each for the same 728 fetches. Device
+`0x4015D580`, entry array `0x7042FDF0`, shader-used fetch descriptor and raw
+draw target agreed across the two captures.
+
+The worker boundary identifies **where** deferred commands are interpreted,
+not who enqueued them or which scene view owns them. A bounded probe at the
+candidate queue-write instruction `0x829F680C` saw no events in source frames
+5998–6001 and was removed; this does not rule out earlier or other enqueue
+paths. SNR-01 still needs the command-stream producer and semantic camera/view
+join. No main-view exclusion or native pass admission follows from this trace.

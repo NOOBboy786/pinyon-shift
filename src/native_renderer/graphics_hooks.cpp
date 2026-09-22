@@ -198,6 +198,12 @@ thread_local std::vector<Snr01SecondDrawScope> snr01_second_draw_scopes;
 thread_local std::vector<Snr01ItemNodeScope> snr01_item_node_scopes;
 thread_local std::vector<uint32_t> snr01_primary_indirect_callers;
 thread_local std::vector<uint32_t> snr01_queued_indirect_callers;
+struct Snr01WorkerScope {
+  uint32_t stream;
+  uint32_t queue;
+  uint64_t first_packet;
+};
+thread_local std::vector<Snr01WorkerScope> snr01_worker_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -1462,6 +1468,35 @@ void PinyonShiftObserveQueuedIndirectEnd() {
   }
 }
 
+void PinyonShiftObserveDeferredWorkerBegin(PPCRegister& r3,
+                                           PPCRegister& r4) {
+  if (!Snr01TracePrimaryIndirectFrame()) {
+    return;
+  }
+  snr01_worker_scopes.push_back(
+      {r3.u32, r4.u32, snr01_primary_indirect_packet_count});
+  REXGPU_INFO(
+      "FH1 SNR01 deferred worker begin {{\"frame\":{},"
+      "\"stream\":{},\"queue\":{},\"first_packet\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      r3.u32, r4.u32, snr01_primary_indirect_packet_count + 1);
+}
+
+void PinyonShiftObserveDeferredWorkerEnd() {
+  if (snr01_worker_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr01_worker_scopes.back();
+  snr01_worker_scopes.pop_back();
+  REXGPU_INFO(
+      "FH1 SNR01 deferred worker end {{\"frame\":{},"
+      "\"stream\":{},\"queue\":{},"
+      "\"first_packet\":{},\"last_packet\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      scope.stream, scope.queue, scope.first_packet + 1,
+      snr01_primary_indirect_packet_count);
+}
+
 void PinyonShiftObservePrimaryIndirectBegin(PPCRegister& r12, PPCRegister&,
                                            PPCRegister&, PPCRegister&) {
   if (Snr01TracePrimaryIndirectFrame()) {
@@ -1486,7 +1521,8 @@ void PinyonShiftObservePrimaryIndirectPacket(
       "\"header_physical\":{},\"header_word\":{},\"gpu_target\":{},"
       "\"device\":{},\"entry_array\":{},\"entry_count\":{},"
       "\"entry_index\":{},\"ring_mask\":{},\"mode\":{},"
-      "\"caller_lr\":{},\"queued_caller_lr\":{}}}",
+      "\"caller_lr\":{},\"queued_caller_lr\":{},"
+      "\"worker_stream\":{},\"worker_queue\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       ordinal, guest_address & 0x1FFFFFFF, r10.u32, r31.u32, r27.u32,
       r24.u32, r25.u32, r26.u32, r29.u32, r21.u32,
@@ -1495,7 +1531,9 @@ void PinyonShiftObservePrimaryIndirectPacket(
           : snr01_primary_indirect_callers.back(),
       snr01_queued_indirect_callers.empty()
           ? 0
-          : snr01_queued_indirect_callers.back());
+          : snr01_queued_indirect_callers.back(),
+      snr01_worker_scopes.empty() ? 0 : snr01_worker_scopes.back().stream,
+      snr01_worker_scopes.empty() ? 0 : snr01_worker_scopes.back().queue);
 }
 
 void PinyonShiftObservePrimaryIndirectEnd() {
