@@ -177,6 +177,42 @@ name = "PinyonShiftObserveSecondTrackDispatch"
 registers = ["r31", "r11", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 
 [[midasm_hook]]
+address = 0x82413A80
+name = "PinyonShiftObserveSecondDrawBegin"
+registers = ["r3", "r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x82413A84
+name = "PinyonShiftObserveSecondDrawEnd"
+
+[[midasm_hook]]
+address = 0x8245AE9C
+name = "PinyonShiftObserveSecondDrawBegin"
+registers = ["r3", "r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x8245AEA0
+name = "PinyonShiftObserveSecondDrawEnd"
+
+[[midasm_hook]]
+address = 0x823FDF94
+name = "PinyonShiftObserveSecondDrawBegin"
+registers = ["r3", "r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x823FDF98
+name = "PinyonShiftObserveSecondDrawEnd"
+
+[[midasm_hook]]
+address = 0x823FE08C
+name = "PinyonShiftObserveSecondDrawBegin"
+registers = ["r3", "r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x823FE090
+name = "PinyonShiftObserveSecondDrawEnd"
+
+[[midasm_hook]]
 address = 0x82417B7C
 name = "PinyonShiftObserveProceduralGeometrySubmit"
 registers = ["r3", "r4", "r5", "r6"]

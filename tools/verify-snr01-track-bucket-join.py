@@ -280,6 +280,57 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             second_targets[target]["producing_entries"] += bool(produced)
         assert dispatched == expected
 
+    second_draws = [(thread, row) for thread, row in events["second draw call"]
+                    if row["frame"] == source_frame]
+    if second_draws:
+        assert summary["second_draw_calls"] == len(second_draws) < summary["scope_limit"]
+        assert not summary["unfinished_second_draw_scopes"]
+        assert not summary["unmatched_second_draw_exits"]
+        assert [row["ordinal"] for _, row in second_draws] == list(
+            range(1, len(second_draws) + 1))
+        buckets = {(thread, row["ordinal"]): row for thread, row in entries}
+        target_by_bucket = {(thread, row["bucket_entry"]): row["target"]
+                            for thread, row in dispatches}
+        child_packets = set()
+        expected_second_packets = set()
+        for (thread, _), bucket in buckets.items():
+            if bucket["record"]:
+                continue
+            for kind, label in (("semantic packet", "semantic"),
+                                ("direct packet", "direct")):
+                expected_second_packets.update(
+                    (kind, thread, ordinal)
+                    for ordinal in range(bucket["first_" + label],
+                                         bucket["last_" + label] + 1))
+        for thread, draw in second_draws:
+            key = (thread, draw["bucket_entry"])
+            bucket = buckets[key]
+            assert not bucket["record"]
+            assert draw["target"] == target_by_bucket[key]
+            target = SECOND_TARGETS[draw["target"]]
+            assert target != "procedural_models"
+            second_targets[target]["child_calls"] += 1
+            produced = 0
+            for kind, label in (("semantic packet", "semantic"),
+                                ("direct packet", "direct")):
+                assert bucket["first_" + label] <= draw["first_" + label]
+                assert draw["last_" + label] <= bucket["last_" + label]
+                for ordinal in range(draw["first_" + label],
+                                     draw["last_" + label] + 1):
+                    packet_key = (kind, thread, ordinal)
+                    assert packet_key not in child_packets
+                    child_packets.add(packet_key)
+                    packet = packets[kind][(thread, ordinal)]
+                    header = packet["header_physical"]
+                    assert draws[header]
+                    if target in ("procedural_characters", "procedural_vegetation"):
+                        assert draw["arg4"] == 13
+                        assert draw_index_counts[header] == {4 * draw["arg5"]}
+                    produced += 1
+            assert produced
+        assert child_packets == expected_second_packets
+        counts["second_draw_skips"] = summary["second_draw_skips"]
+
     return {
         "source_frame": source_frame,
         "backend_frame": backend_frame,

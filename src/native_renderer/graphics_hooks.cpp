@@ -131,6 +131,18 @@ struct Snr01TrackBucketScope {
   uint32_t auxiliary_resolved = 0;
   uint32_t auxiliary_flag = 0;
   bool auxiliary_seen = false;
+  uint32_t second_dispatch_target = 0;
+};
+struct Snr01SecondDrawScope {
+  uint64_t bucket_entry;
+  uint32_t target;
+  uint32_t context;
+  uint32_t arg4;
+  uint32_t arg5;
+  uint32_t arg6;
+  uint64_t first_semantic_packet;
+  uint64_t first_direct_packet;
+  uint64_t ordinal;
 };
 struct Snr01ItemNodeScope {
   uint32_t node;
@@ -148,6 +160,7 @@ thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
 thread_local std::vector<Snr01ViewScope> snr01_view_scopes;
 thread_local std::vector<Snr01TrackBucketScope> snr01_track_bucket_scopes;
+thread_local std::vector<Snr01SecondDrawScope> snr01_second_draw_scopes;
 thread_local std::vector<Snr01ItemNodeScope> snr01_item_node_scopes;
 thread_local std::vector<uint32_t> snr01_primary_indirect_callers;
 thread_local std::vector<uint32_t> snr01_queued_indirect_callers;
@@ -169,6 +182,9 @@ thread_local uint64_t snr01_view_begin_count = 0;
 thread_local uint64_t snr01_view_selected_count = 0;
 thread_local uint64_t snr01_view_track_count = 0;
 thread_local uint64_t snr01_track_bucket_count = 0;
+thread_local uint64_t snr01_second_draw_count = 0;
+thread_local uint64_t snr01_second_draw_skips = 0;
+thread_local uint64_t snr01_unmatched_second_draw_exits = 0;
 thread_local uint64_t snr01_item_node_count = 0;
 thread_local uint64_t snr01_direct_call_count = 0;
 thread_local uint64_t snr01_direct_packet_count = 0;
@@ -387,6 +403,9 @@ void PinyonShiftObserveGraphicsFrame() {
         "\"track_bucket_entries\":{},"
         "\"unfinished_track_bucket_scopes\":{},"
         "\"unmatched_track_bucket_exits\":{},"
+        "\"second_draw_calls\":{},\"unfinished_second_draw_scopes\":{},"
+        "\"unmatched_second_draw_exits\":{},"
+        "\"second_draw_skips\":{},"
         "\"item_nodes\":{},\"unfinished_item_node_scopes\":{},"
         "\"unmatched_item_node_exits\":{},"
         "\"direct_calls_swap_thread\":{},"
@@ -410,6 +429,9 @@ void PinyonShiftObserveGraphicsFrame() {
         snr01_track_pass_count,
         snr01_track_bucket_count, snr01_track_bucket_scopes.size(),
         snr01_unmatched_track_bucket_exits,
+        snr01_second_draw_count, snr01_second_draw_scopes.size(),
+        snr01_unmatched_second_draw_exits,
+        snr01_second_draw_skips,
         snr01_item_node_count, snr01_item_node_scopes.size(),
         snr01_unmatched_item_node_exits,
         snr01_direct_call_count, snr01_direct_packet_count,
@@ -425,6 +447,7 @@ void PinyonShiftObserveGraphicsFrame() {
   }
   snr01_emitter_scopes.clear();
   snr01_track_bucket_scopes.clear();
+  snr01_second_draw_scopes.clear();
   snr01_item_node_scopes.clear();
   snr01_direct_scopes.clear();
   snr01_dispatch_scopes.clear();
@@ -439,6 +462,8 @@ void PinyonShiftObserveGraphicsFrame() {
       snr01_dispatch_wrapper_count = snr01_track75_count =
       snr01_track79_count = snr01_track_pass_count =
       snr01_track_bucket_count = snr01_unmatched_track_bucket_exits =
+      snr01_second_draw_count = snr01_unmatched_second_draw_exits =
+      snr01_second_draw_skips =
       snr01_item_node_count = snr01_unmatched_item_node_exits =
       snr01_direct_call_count = snr01_direct_packet_count =
       snr01_unmatched_direct_exits = 0;
@@ -984,7 +1009,8 @@ void PinyonShiftObserveSecondTrackDispatch(
   if (!Snr01TraceCurrentFrame() || snr01_track_bucket_scopes.empty()) {
     return;
   }
-  const auto& bucket = snr01_track_bucket_scopes.back();
+  auto& bucket = snr01_track_bucket_scopes.back();
+  bucket.second_dispatch_target = r11.u32;
   if (bucket.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(
         "FH1 SNR01 second track dispatch {{\"frame\":{},"
@@ -994,6 +1020,47 @@ void PinyonShiftObserveSecondTrackDispatch(
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         bucket.ordinal, r31.u32, r11.u32, r4.u32, r5.u32,
         r6.u32, r7.u32, r8.u32, r9.u32, r10.u32);
+  }
+}
+
+void PinyonShiftObserveSecondDrawBegin(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCRegister& r6) {
+  if (!Snr01TraceCurrentFrame() || snr01_track_bucket_scopes.empty()) {
+    return;
+  }
+  const auto& bucket = snr01_track_bucket_scopes.back();
+  snr01_second_draw_scopes.push_back(
+      {bucket.ordinal, bucket.second_dispatch_target,
+       r3.u32, r4.u32, r5.u32, r6.u32,
+       snr01_semantic_packet_count, snr01_direct_packet_count,
+       ++snr01_second_draw_count});
+}
+
+void PinyonShiftObserveSecondDrawEnd() {
+  if (snr01_second_draw_scopes.empty()) {
+    if (Snr01TraceCurrentFrame() && !snr01_track_bucket_scopes.empty()) {
+      ++snr01_second_draw_skips;
+    }
+    return;
+  }
+  const auto scope = snr01_second_draw_scopes.back();
+  snr01_second_draw_scopes.pop_back();
+  if (snr01_track_bucket_scopes.empty() ||
+      snr01_track_bucket_scopes.back().ordinal != scope.bucket_entry) {
+    ++snr01_unmatched_second_draw_exits;
+  }
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 second draw call {{\"frame\":{},\"ordinal\":{},"
+        "\"bucket_entry\":{},\"target\":{},\"context\":{},"
+        "\"arg4\":{},\"arg5\":{},\"arg6\":{},"
+        "\"first_semantic\":{},\"last_semantic\":{},"
+        "\"first_direct\":{},\"last_direct\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.bucket_entry, scope.target,
+        scope.context, scope.arg4, scope.arg5, scope.arg6,
+        scope.first_semantic_packet + 1, snr01_semantic_packet_count,
+        scope.first_direct_packet + 1, snr01_direct_packet_count);
   }
 }
 

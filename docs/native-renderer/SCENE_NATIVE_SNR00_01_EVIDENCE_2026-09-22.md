@@ -920,3 +920,61 @@ python tools/verify-snr01-indirect-join.py `
 SNR-01 remains open: target class identity is stronger than an anonymous
 secondary record, but no selected second-path packet has a verified
 mesh/instance, transform or material owner yet.
+
+### Second-path child calls and draw counts
+
+The generated slot-41 implementations have different child submission
+routes. `CProceduralAnimatedScene` calls `sub_82414A00` at
+`0x823FDF94` and `0x823FE08C`; `CProceduralCharacters` reaches its
+render-context vtable offset-164 call at `0x8245AE9C`; and
+`CProceduralVegetation` reaches the corresponding call at `0x82413A80`
+inside a loop. The character count argument comes from object offset 156.
+Vegetation reads a per-entry count and can multiply it by three before
+the call. These are raw title paths; their mesh and material roles are
+still unverified.
+
+Read-only begin/end hooks around those calls captured exact per-child
+semantic/direct packet ranges. The saved sustained race exited normally
+with executable SHA-256
+`062E15D13CFA12F8788046ED9F1D7E56E062416DA74BB13B06371E1974AC8F3A`.
+The combined log is
+`.local/native-renderer/snr01/second-draw-final-frame-6000/title-backend-second-draw-final.log`
+(SHA-256 `71BB10E66CAD38B45C1ECC1BFCDA5FD92DC66D7C872FE88834AC054B43FBD79F`).
+
+In source frame 6000, all 142 second-path packets belonged to exactly
+one child call, nested under the matching second bucket entry and its
+slot-41 target. Every packet had an exact backend-frame-6001 prepared-draw
+address match. No child scope was unfinished or returned under a different
+bucket. The 52 continuations reached without a child call are counted as
+skipped call sites; they do not establish intentional culling.
+
+| Second-path class | Bucket entries | Child calls | Packets | Backend draw callbacks |
+| --- | ---: | ---: | ---: | ---: |
+| Procedural models | 91 | 0 | 0 | 0 |
+| Animated scene | 12 | 9 | 10 direct | 21 |
+| Characters | 24 | 24 | 24 semantic | 29 |
+| Vegetation | 12 | 108 | 108 semantic | 200 |
+| Total | 139 | 141 | 142 | 250 |
+
+For every character and vegetation child packet, all matching backend
+callbacks had `index_count = 4 ×` the title call's `r5` argument. The
+animated-scene `r5` does not satisfy that count relation. The expanded
+verifier requires exact child/bucket packet-set
+equality and checks the count relation by packet address; the separate
+indirect verifier passed for 133 backend roots, 1,705 executions and
+5,123 prepared draws:
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/second-draw-final-frame-6000/title-backend-second-draw-final.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/second-draw-final-frame-6000/title-backend-second-draw-final.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+This closes packet ownership at the child-call level for the observed
+second path. SNR-01 still needs the selected mesh/instance and final
+transform/material identities, view-role classification, and an account
+of packetless entries before Gate A can be considered.
