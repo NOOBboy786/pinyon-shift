@@ -29,6 +29,8 @@ class DriveWindowTest(unittest.TestCase):
             result = MODULE.summarize(perf, events, "race-moving", "race-sustained")
             self.assertEqual(result["samples"], 3)
             self.assertEqual(result["median_frame_time_us"], 3000)
+            self.assertEqual(result["end_pose"], [5.0, 0.0, 0.0])
+            self.assertEqual(result["p99_frame_time_us"], 3000)
             self.assertEqual(result["distance_m"], 2)
             self.assertEqual(result["simulation_ticks"], 3)
 

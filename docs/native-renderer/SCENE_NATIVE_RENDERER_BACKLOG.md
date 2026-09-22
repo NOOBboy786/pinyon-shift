@@ -5,6 +5,8 @@ This is the primary execution roadmap for new renderer architecture. The
 [performance backlog](PERFORMANCE_BACKLOG.md) remains the record of previous
 experiments; the [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md)
 remains the acceptance ledger for resource ownership and eventual Xenos retirement.
+The [SNR-00/01 evidence log](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md)
+records the first clean controls and the current title-to-GPU join gaps.
 
 ## Decision and scope
 

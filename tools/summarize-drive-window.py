@@ -46,9 +46,11 @@ def summarize(perf_path, events_path, start_name, end_name):
         "simulation_seconds": round(simulation_ns / 1_000_000_000, 3),
         "simulation_ticks": simulation_ticks,
         "start_pose": first_pose,
+        "end_pose": last_pose,
         "distance_m": round(math.dist(first_pose, last_pose), 1),
         "median_frame_time_us": statistics.median(durations),
         "p95_frame_time_us": durations[int((len(durations) - 1) * 0.95)],
+        "p99_frame_time_us": durations[int((len(durations) - 1) * 0.99)],
     }
 
 
