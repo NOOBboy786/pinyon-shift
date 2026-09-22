@@ -51,6 +51,7 @@ struct ClearProducerSample {
 };
 thread_local std::vector<ClearProducerSample> clear_producers;
 std::atomic<uint64_t> clear_producer_records{0};
+std::atomic<uint32_t> snr02_vehicle_material_bindings{0};
 
 struct TitleEmitterSample {
   uint64_t frame;
@@ -2474,6 +2475,23 @@ void PinyonShiftObserveSnr02CarDescriptor(
         list.u32, SnrM02ReadU32(list.u32),
         snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
   }
+}
+
+void PinyonShiftObserveSnr02VehicleMaterialBinding(
+    PPCRegister& caller, PPCRegister& root, PPCRegister& binding,
+    PPCRegister& load_ui, PPCRegister& slod) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      snr02_vehicle_material_bindings.fetch_add(1) >= 512) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR02 vehicle material binding {{\"frame\":{},"
+      "\"caller\":{},\"root\":{},\"root_first_word\":{},"
+      "\"binding\":{},\"binding_offset\":{},"
+      "\"load_ui\":{},\"slod\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      caller.u32, root.u32, SnrM02ReadU32(root.u32), binding.u32,
+      binding.u32 - root.u32, load_ui.u32, slod.u32);
 }
 
 void PinyonShiftObserveSnr01VehiclePoseOwner(PPCRegister& r30,

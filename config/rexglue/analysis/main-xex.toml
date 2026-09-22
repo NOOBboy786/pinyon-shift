@@ -839,6 +839,12 @@ address = 0x8245AB40
 name = "PinyonShiftObserveSnr02CarDescriptor"
 registers = ["r27", "r30", "r11", "r6", "r7"]
 
+# Observe the title-owned tire/wheel material binding during resource load.
+[[midasm_hook]]
+address = 0x82549674
+name = "PinyonShiftObserveSnr02VehicleMaterialBinding"
+registers = ["r12", "r3", "r4", "r5", "r6"]
+
 [[midasm_hook]]
 address = 0x82419A34
 name = "PinyonShiftObserveSnr01CarOwnerCall"

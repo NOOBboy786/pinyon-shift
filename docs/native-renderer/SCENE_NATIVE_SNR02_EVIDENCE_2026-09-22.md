@@ -211,3 +211,25 @@ record the root, binding object, load-UI/SLOD flags and asset-key identity at
 its backend geometry. The static audit alone does not prove which selected
 local-car draw uses that binding, any other material role, geometry ownership
 or resource freshness. No native admission follows from it.
+
+### Runtime binding observations
+
+A default-off, 512-record-capped hook at `0x82549674` ran the saved sustained
+race to normal exit with seven captures. Executable SHA-256 was
+`190190F83B5CAD5C85F0ED10234D9AB12ED0F585B2D5FDB998D71DBB387B5307`;
+the ordered diagnostic log at
+`.local/native-renderer/snr02/material-binding-run-a-full.log` has SHA-256
+`FDBE5D7ED1A2AE375D5670A22C7F94A2A162C24544C5A52D170A1BD2B0CE4E48`.
+The local-car model/backend verifier and camera/view verifier both pass on
+this replay; the former again finds 49 buffers and 268 prepared draws.
+
+The hook observed 32 calls between source frames 1449 and 4092. Every call
+returned to `0x824D2EE0` within the car-resource construction path, used
+binding offset 1056, and passed zero for both load-UI and SLOD flags. The
+root address is sometimes reused, while its first word changes; it must not
+be treated as a stable resource identity or vtable. Generated
+`sub_82543558` reads the asset-key string at root offset 1712 and its capacity
+at offset 1732 before appending that key to the tire settings path. A later
+probe can record a bounded key hash and the resulting material object, then
+join them to the exact selected title draw. These 32 loading-time records do
+not yet establish that any specific local-player draw uses this family.
