@@ -1267,11 +1267,18 @@ and backend frame 6001.
 | 8 | 367 | 229 draws on color 0 `196608`; 138 on color 0 `786432`; both surface `335676672`, depth `66560` | Twelve copies, ordinals 65–76, match the first raw target; none matches the second |
 
 The six middle calls come from `sub_82409ED0`, which iterates six resource
-slots and selects arguments 0, 4, 2, 1, 3 and 5. Their draw/copy ordering and
-distinct 256×256 destinations establish a six-output rendering cycle. The
-purpose of those outputs and their later consumers still require an address
-and texture-binding join; a shared EDRAM attachment alone does not prove a
-reflection pass. View 8 remains the main-view candidate. Its two color
-targets and the unmatched second target mean the final presentation and
-retained-pass dependency cut are not yet established. The trace does not
-authorize suppressing any view or pass.
+slots and selects arguments 0, 4, 2, 1, 3 and 5. The six copy destinations
+are `0x1C879000`, `0x1C979000`, `0x1C8F9000`, `0x1C8B9000`, `0x1C939000`
+and `0x1C9B9000`: exactly `0x1C879000 + face × 0x40000` for those indices.
+Each successful copy writes 256 KiB. This matches the independently recorded
+256×256, six-face R10G10B10A2 reflection-cube allocation, base and face order
+in [PERF-05](PERFORMANCE_02_05_RESULTS_2026-09-21.md). The title view call,
+draw target and copy now establish these as the **reflection face producers**
+for this captured allocation. The verifier asserts the ordered offsets and
+size without hard-coding the base; this address can be reused or relocated.
+The later texture-binding and generation join remains open.
+
+View 8 remains the main-view candidate. Its two color targets and the
+unmatched second target mean the final presentation and retained-pass
+dependency cut are not yet established. The trace does not authorize
+suppressing any view or pass.

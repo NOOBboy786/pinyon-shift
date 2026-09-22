@@ -79,6 +79,7 @@ def verify(path: Path, source_frame: int, backend_frame: int):
             assert all(row["render_target_bits"] == 3 for _, row in selected)
             assert (copied[0][1]["resolve_width"],
                     copied[0][1]["resolve_height"]) == (256, 256)
+            assert copied[0][1]["written_length"] == 256 * 256 * 4
         else:
             assert len(targets) == 2 and len(selected) > 300
             assert all(row["render_target_bits"] == 3 for _, row in selected)
@@ -89,7 +90,13 @@ def verify(path: Path, source_frame: int, backend_frame: int):
                                    for target, count in targets.items()],
                        "matched_copies": [row["ordinal"] for _, row in copied],
                        "copy_destinations": [row["dest_base"] for _, row in copied]})
-    assert len({row["copy_destinations"][0] for row in result[1:7]}) == 6
+    face_destinations = [row["copy_destinations"][0] for row in result[1:7]]
+    cube_base = min(face_destinations)
+    face_bytes = 256 * 256 * 4
+    assert [(address - cube_base) // face_bytes
+            for address in face_destinations] == [0, 4, 2, 1, 3, 5]
+    assert all((address - cube_base) % face_bytes == 0
+               for address in face_destinations)
     return result
 
 
