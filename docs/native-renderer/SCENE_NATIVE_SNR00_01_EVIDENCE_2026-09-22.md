@@ -2306,3 +2306,61 @@ alone does not identify the main camera, pass membership or material class.
 This bounded census quantifies why the proved local-car chain cannot freeze
 the full main-view slice: other title owners and the relationship between
 these two color words must be resolved before SNR-00/01 can close.
+
+### Two-source-frame, every-draw ownership census
+
+The existing one-frame title trace omitted the following frame's root
+publication, even though backend frame 6001 consumes roots from both source
+frames 6000 and 6001. A new default-off
+`--pinyon_shift_snr01_trace_following_frame=true` option observes both source
+frames and resets view ordinals at their boundary. The saved sustained-race
+replay exited normally with seven captures; executable SHA-256 was
+`FD24EAAA1ACAAC2C7C55D21FFDC828AF312AC81E2218C750D77EADF61CF2715A`.
+The ordered diagnostic log at
+`.local/native-renderer/snr01/frame-wide-census-run-a-full.log` has SHA-256
+`81195506136F8624B23E6D21755342F3A426130C90FD322FA7DB038678641EED`.
+`tools/summarize-snr01-frame-wide-census.py` generated the per-draw ledger
+`.local/native-renderer/snr01/frame-wide-census-run-a.json` (SHA-256
+`87A30791CD564751EBA53F06E930A30BF867052C626FB6F6810A828A23CC2450`).
+It records each draw ordinal, target tuple, execution/root IDs, source frame,
+view and observed flush owner, or an explicit unresolved classification.
+
+Both source frames had eight title view calls and 2,534 total scene-list
+packets. Backend frame 6001 executed 135 roots and 1,654 indirect buffers,
+yielding 5,282 prepared draws. Its roots joined uniquely to title primary
+packets: 1,977 draws under roots published in source frame 6000 and 3,305
+under roots published in 6001. Of those draws, 3,672 joined exact
+scene-list header/target pairs published in source frame 6000; the scene
+lists published in 6001 were not consumed in this backend frame. The primary
+indirect, camera/view, track-bucket and local-player verifiers pass on this
+capture after the camera verifier filters view events by source frame.
+
+| Target group | Draws | View + flush owner | View, no owner | Direct root | Unmatched indirect | Out-of-view scene |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Scene tuple, color `0xC0000` | 1,801 | 1,076 | 24 | 701 | 0 | 0 |
+| Scene tuple, color `0x30000` | 1,398 | 1,078 | 0 | 296 | 24 | 0 |
+| Other target tuples | 2,083 | 1,126 | 12 | 517 | 72 | 356 |
+| **Whole frame** | **5,282** | **3,280** | **36** | **1,514** | **96** | **356** |
+
+All 2,154 candidate-tuple draws with an observed view and flush owner came
+from title view call 8 in source frame 6000. The ledger also joins direct-root
+draw packet addresses to title `direct` or `semantic` packet writes and
+reconstructs their view from same-thread, ordered begin/end records. This
+resolves the **view** of 996 of the 997 candidate direct-root draws to view 8;
+their title paths include 615 `secondary` direct packets, 30
+`indexed2_secondary`, four `primary` direct packets, and 347 semantic packets.
+Across the whole frame, 1,496 of 1,514 direct-root draws have such a title
+write and view classification. The packet join does not yet identify their
+semantic owners.
+
+Thus 3,174 of the 3,199 candidate-tuple draws have proved title view 8:
+2,154 with a flush owner, 24 view-8 scene-list draws without one, and 996
+direct-root title packets. The remaining 25 are 24 unmatched indirect draws
+and one direct-root draw without a matching source write. Their exact draw
+ordinals and root packets are in the ledger. The other target tuples include
+view-1 depth, views-2–7 cube work and out-of-view work, but their unresolved
+direct-root and indirect draws still need owner and pass classification. A
+flush-owner pointer is not yet a mesh/material identity. This is a whole-frame
+accounting of observed lineage, **not** a frozen cut: SNR-00/01 must resolve
+the direct-root semantic owners, the 25 candidate view gaps, retained-pass
+dependencies and actual resource owners before admission or suppression.

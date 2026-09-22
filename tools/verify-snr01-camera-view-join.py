@@ -54,7 +54,10 @@ def verify(path: Path, frame: int):
                     row["frame"] == frame - 1):
                 events[match[2]].append((position, row))
 
-    starts, ends = events["view object400"], events["view end"]
+    starts = [(position, row) for position, row in events["view object400"]
+              if row["frame"] == frame]
+    ends = [(position, row) for position, row in events["view end"]
+            if row["frame"] == frame]
     assert len(starts) == len(ends) == 8
     assert len({row["_thread"] for _, row in starts + ends}) == 1
     assert [row["call"] for _, row in starts] == list(range(1, 9))
@@ -72,7 +75,8 @@ def verify(path: Path, frame: int):
     assert all(ends[i][1]["matrix144_hash"] ==
                starts[i + 1][1]["matrix144_hash"] for i in range(1, 6))
 
-    methods = [row for _, row in events["camera method"]]
+    methods = [row for _, row in events["camera method"]
+               if row["frame"] == frame]
     assert [(row["view_call"], row["camera"]) for row in methods
             if row["slot"] == 44 and row["view_call"]] == [
                 (row["call"], row["object"]) for _, row in starts]
@@ -85,8 +89,12 @@ def verify(path: Path, frame: int):
     assert post[0][1]["_thread"] == ends[-1][1]["_thread"]
     assert post[0][1]["view_call"] == post[0][1]["view"] == 0
     command = post[0][1]["command_physical"]
-    request_begins = events["render thread request begin"]
-    request_ends = events["render thread request end"]
+    request_begins = [(position, row) for position, row in
+                      events["render thread request begin"]
+                      if row["frame"] == frame]
+    request_ends = [(position, row) for position, row in
+                    events["render thread request end"]
+                    if row["frame"] == frame]
     post_request = None
     if request_begins:
         end_by_ordinal = {row["ordinal"]: (position, row)
@@ -233,7 +241,8 @@ def verify(path: Path, frame: int):
                       "indexed2_caller_lr" in row)
     scoped_callers = Counter(row["direct_caller_lr"] for row in direct
                              if row["path"] == "secondary")
-    owner = events["indexed2 owner"]
+    owner = [(position, row) for position, row in events["indexed2 owner"]
+             if row["frame"] == frame]
     if owner:
         assert len(owner) == 1
         owner_position, owner_row = owner[0]

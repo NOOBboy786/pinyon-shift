@@ -27,6 +27,9 @@ REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_clear_producer_trace, false, "Pinyon Shift"
 REXCVAR_DEFINE_INT32(pinyon_shift_snr01_trace_source_frame, 0, "Pinyon Shift",
                      "Trace one source frame's procedural scopes and indexed PM4 headers")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_following_frame, false,
+                    "Pinyon Shift", "Also trace the following source frame")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_resident_packet_writers, false,
                     "Pinyon Shift", "Trace bounded resident PM4 packet writes")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
@@ -274,6 +277,7 @@ thread_local uint64_t snr01_unmatched_track75_exits = 0;
 thread_local uint64_t snr01_track79_count = 0;
 thread_local uint64_t snr01_track_pass_count = 0;
 thread_local uint64_t snr01_view_begin_count = 0;
+thread_local uint64_t snr01_view_frame = 0;
 thread_local uint64_t snr01_view_selected_count = 0;
 thread_local uint64_t snr01_view_track_count = 0;
 thread_local uint64_t snr01_camera_method_count = 0;
@@ -414,9 +418,14 @@ void Snr01ArmPacketPage(uint32_t packet_physical) {
 
 bool Snr01TraceCurrentFrame() {
   static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
-  return target > 0 && uint64_t(target) ==
-                           uint64_t(rex::perf::GetTotalCounter(
-                               rex::perf::CounterId::kSourceFrameCount));
+  if (target <= 0) {
+    return false;
+  }
+  const uint64_t frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  return frame == uint64_t(target) ||
+         (REXCVAR_GET(pinyon_shift_snr01_trace_following_frame) &&
+          frame == uint64_t(target) + 1);
 }
 
 bool Snr01TracePrimaryIndirectFrame() {
@@ -1045,6 +1054,12 @@ void PinyonShiftObservePresentationViewBegin(
     PPCRegister& r6, PPCRegister& r7, PPCRegister& r8) {
   if (!Snr01TraceCurrentFrame()) {
     return;
+  }
+  const uint64_t frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  if (snr01_view_frame != frame && snr01_view_scopes.empty()) {
+    snr01_view_begin_count = 0;
+    snr01_view_frame = frame;
   }
   const uint64_t ordinal = ++snr01_view_begin_count;
   if (ordinal == 8) {
