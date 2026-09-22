@@ -315,9 +315,18 @@ name = "PinyonShiftObserveDirectIndexedEnd"
 # Additional title draw-header writers. This bounded probe classifies packets
 # by exact guest address; owner semantics are still under investigation.
 [[midasm_hook]]
+address = 0x8240DC74
+name = "PinyonShiftObserveIndexed2Begin"
+registers = ["r12"]
+
+[[midasm_hook]]
 address = 0x8240E01C
 name = "PinyonShiftObserveIndexed2PacketPrimary"
 registers = ["r30", "r11", "r31"]
+
+[[midasm_hook]]
+address = 0x8240E128
+name = "PinyonShiftObserveIndexed2End"
 
 # The title's primary-ring indirect packet writer. The packet is about to be
 # stored at ring_base + ring_index * 4; the following words select the buffer.

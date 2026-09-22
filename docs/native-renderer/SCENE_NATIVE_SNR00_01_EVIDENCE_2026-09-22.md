@@ -1613,3 +1613,61 @@ were in view call 8 in source frame 6000. Using source frame 6000 for that
 verifier fails because the observed primary packets in this replay carry
 frame 6001. This timing-dependent frame label must not be hidden by claiming
 the separate post-view command has a cube consumer or camera join.
+
+The exact post-view command is **consumed**, despite having no view scope.
+The extended camera/view verifier joins its single frame-6000 writer at
+`0x130FE12C` (opcode `0x810012CD`, payload `0x13186700`) to three deferred
+reads and three primary packet roots in frame 6001. Each root produces ten
+prepared draw callbacks: 30 callbacks from ten unique draw packet addresses.
+Nine of those ten addresses have a frame-6000 direct-packet record with
+`direct_call=0`, outside the instrumented direct-call scope. Their output
+uses the same observed surface/depth words as other scene draws; 21 callbacks
+have color word `0xC0000` and nine have `0x30000`. Neither target similarity
+nor temporal adjacency assigns those packets to camera `0x2E4B6200`. SNR-01
+must recover the upstream owner of the ten packets or explicitly exclude
+them from the frozen slice with a proved pass/dependency boundary.
+
+### Post-view draw writers and variable downstream work
+
+An entry/exit scope around title function `sub_8240DC70` now attaches its
+immediate caller to its direct-packet writes. In a normal-exit, seven-capture
+replay, executable SHA-256
+`26CD009EC6BF928392D1ABF53251FEC99A61A5F45E693B981420E5F1942954C8`,
+`.local/native-renderer/snr01/indexed2-caller-run-a.log` SHA-256
+`000010C4D4077A715DDEA3CE85C5FB3306CC9AAB69CEE432FCADBD3841BFA153`,
+the post-view command `0x130E912C` again has three deferred reads and three
+primary roots. This time they produce **231** prepared draw callbacks from
+187 unique packet addresses, not the prior run's 30 from ten. Nine of the
+187 addresses have a source-frame-6000 `indexed2_secondary` direct-packet
+record outside the known direct-call scope. Seven record caller `0x82D07200`,
+one records `0x82D0735C`, and one records `0x8244F070`.
+
+The verified base image places `sub_82D06C28`, containing the first two call
+sites, in slot 3 of vtable `0x82236214`. Its complete-object locator
+`0x823586E4` names `CStandardParticleRenderer`. This proves those eight
+packet writes passed through a particle-renderer method; it does not classify
+all 231 callbacks under the same deferred root as particle draws.
+`0x8244F070` is in `sub_8244E938`; its owner remains unidentified.
+
+A second normal-exit, seven-capture replay after adding two read-only
+secondary-object guard bytes used executable SHA-256
+`19B959AD6F8E07D5158C82E2E1C7A9E7A6CF1072B609BB96992E9811DAC8524D`.
+`.local/native-renderer/snr01/secondary-guard-run-a.log` SHA-256 was
+`7246C0747A0185D163D55976F34E90DBA158DD7C1047C811ED1443C57DB3C1CC`.
+Its post-view root produced 228 callbacks from 154 packet addresses, with
+12 indexed2 direct-packet records: ten from caller `0x82D07200` and one
+each from `0x82D0735C` and `0x8244F070`. The generalized camera/view
+verifier passes on all three captures, checking the exact command-write,
+deferred-read, primary-root and prepared-draw relationships without assuming
+a fixed draw count. All observed post-view callbacks still use surface word
+`0x14020500`, depth word `0x10400` and color word `0xC0000` or `0x30000`.
+
+The track-bucket verifier passed on the last replay with 442 entries, 342
+packet headers and zero unmatched in-view submissions. It failed on the
+previous replay because one of 142 secondary entries had no recorded virtual
+dispatch and no packet. Static `sub_8243BD40` checks bytes `+52` and `+55`
+before dispatch. In the later replay all 141 dispatched secondary entries
+had nonzero `+52` and zero `+55`, but the missing entry did not recur, so its
+cause is **unproved**. Do not weaken the verifier to count that earlier gap
+as intentional culling. SNR-01 still needs the remaining post-view packet
+owners and a proven main-view/dependency boundary.

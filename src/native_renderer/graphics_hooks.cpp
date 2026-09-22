@@ -135,6 +135,8 @@ struct Snr01TrackBucketScope {
   int32_t first_guard = -1;
   uint32_t secondary_resolved = 0;
   bool secondary_resolved_seen = false;
+  uint8_t secondary_byte52 = 0;
+  uint8_t secondary_byte55 = 0;
   uint32_t auxiliary_record = 0;
   uint32_t auxiliary_resolved = 0;
   uint32_t auxiliary_flag = 0;
@@ -192,6 +194,7 @@ struct Snr01ItemNodeScope {
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 std::atomic<rex::memory::Memory*> snr01_memory{nullptr};
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
+thread_local std::vector<uint32_t> snr01_indexed2_callers;
 thread_local std::vector<Snr01ViewScope> snr01_view_scopes;
 thread_local std::vector<Snr01TrackCallScope> snr01_track75_scopes;
 thread_local std::vector<Snr01TrackBucketScope> snr01_track_bucket_scopes;
@@ -340,12 +343,13 @@ void RecordSnr01DirectPacket(const char* path, uint32_t previous_word,
       "\"path\":\"{}\",\"header_guest\":{},"
       "\"header_physical\":{},\"header_word\":{},"
       "\"command_owner\":{},\"direct_call\":{},"
-      "\"direct_caller_lr\":{}}}",
+      "\"direct_caller_lr\":{},\"indexed2_caller_lr\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       ordinal, path, guest_address, guest_address & 0x1FFFFFFF,
       header_word, command_owner,
       snr01_direct_scopes.empty() ? 0 : snr01_direct_scopes.back().ordinal,
-      snr01_direct_scopes.empty() ? 0 : snr01_direct_scopes.back().caller_lr);
+      snr01_direct_scopes.empty() ? 0 : snr01_direct_scopes.back().caller_lr,
+      snr01_indexed2_callers.empty() ? 0 : snr01_indexed2_callers.back());
 }
 
 bool ClearProducerTraceEnabled() {
@@ -931,6 +935,12 @@ void PinyonShiftObserveTrackBucketSecondaryResolved(PPCRegister& r3) {
     auto& scope = snr01_track_bucket_scopes.back();
     scope.secondary_resolved = r3.u32;
     scope.secondary_resolved_seen = true;
+    if (r3.u32) {
+      if (auto* memory = snr01_memory.load(std::memory_order_acquire)) {
+        scope.secondary_byte52 = *memory->TranslateVirtual(r3.u32 + 52);
+        scope.secondary_byte55 = *memory->TranslateVirtual(r3.u32 + 55);
+      }
+    }
   }
 }
 
@@ -963,6 +973,7 @@ void PinyonShiftObserveTrackBucketEntryEnd() {
         "\"first_object\":{},\"first_vtable\":{},"
         "\"first_guard\":{},\"secondary_resolved\":{},"
         "\"secondary_resolved_seen\":{},"
+        "\"secondary_byte52\":{},\"secondary_byte55\":{},"
         "\"auxiliary_record\":{},\"auxiliary_resolved\":{},"
         "\"auxiliary_flag\":{},\"auxiliary_seen\":{},"
         "\"first_semantic\":{},\"last_semantic\":{},"
@@ -974,6 +985,7 @@ void PinyonShiftObserveTrackBucketEntryEnd() {
         scope.secondary_seen, scope.remaining,
         scope.first_object, scope.first_vtable, scope.first_guard,
         scope.secondary_resolved, scope.secondary_resolved_seen,
+        scope.secondary_byte52, scope.secondary_byte55,
         scope.auxiliary_record, scope.auxiliary_resolved,
         scope.auxiliary_flag, scope.auxiliary_seen,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
@@ -1545,6 +1557,18 @@ void PinyonShiftObserveIndexed2PacketPrimary(PPCRegister& r30,
                                              PPCRegister& r11,
                                              PPCRegister& r31) {
   RecordSnr01DirectPacket("indexed2_primary", r30.u32, r11.u32, r31.u32);
+}
+
+void PinyonShiftObserveIndexed2Begin(PPCRegister& r12) {
+  if (Snr01TraceCurrentFrame()) {
+    snr01_indexed2_callers.push_back(r12.u32);
+  }
+}
+
+void PinyonShiftObserveIndexed2End() {
+  if (!snr01_indexed2_callers.empty()) {
+    snr01_indexed2_callers.pop_back();
+  }
 }
 
 void PinyonShiftObserveQueuedIndirectBegin(
