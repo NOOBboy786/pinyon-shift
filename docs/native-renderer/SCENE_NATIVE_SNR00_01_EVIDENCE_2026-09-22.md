@@ -2547,3 +2547,34 @@ has none. The earlier clear-producer join identified this kind of candidate
 gap in a separate replay; it was not re-established in this record capture.
 If a future backend draw matches two source-frame writers, the ledger will
 stop instead of choosing one without a buffer-generation proof.
+
+### Existing procedural item and node records close another candidate join
+
+The same capture already contains title `procedural item` and `item node`
+records. The updated frame-wide ledger joins each semantic packet's exact
+`(source frame, procedural call)` to its selected descriptor/runtime record,
+then checks the enclosing node's packet and item-call ranges, receiver and
+view. It also requires that the selected descriptor/runtime record reached
+the original submit call. No new runtime probe was needed. The resulting
+ledger at `.local/native-renderer/snr01/direct-family-record-item-join-run-a.json`
+has SHA-256 `6C70E0DF0ECB5E8B1AE8DE65571D0E8F1919E1E01FAAAB6C8DD01399156E29B4`.
+Its strict item/node and direct-record checks pass, as does the older
+clear-cursor replay without the new strict flags.
+
+Of the 724 attachment-writing candidate direct-root draws in this replay,
+171 callbacks come from 114 unique semantic packets at `0x82415D1C`.
+Each packet maps to one submitted procedural item, selected descriptor,
+runtime record and item node in view call 8. All 171 callbacks share the
+observed node render-owner address `0xAC9D3950`; this is a captured pointer,
+not a resolved semantic type or lifetime. The selected descriptor-kind values
+are raw title enum values (0, 1, 4 and 5), not material labels. Together with
+the 309 character-manager callbacks above, exact title item/record identity
+now covers 480 of 724 candidate direct-root callbacks in this replay.
+
+The remaining 244 callbacks comprise 141 from 71 semantic packets at
+`0x82412E1C` with no active procedural item/node, 102 from other direct
+packet callers, and one packet with no captured title writer. They retain
+view-8 packet attribution where present, but do not yet have the required
+mesh/instance and resource ownership. Nor does this join resolve the 36
+ownerless scene-list callbacks elsewhere in the frame. The candidate slice
+therefore remains provisional.

@@ -18,6 +18,8 @@ PREFIXES = {
     "view_end": "FH1 SNR01 view end ",
     "direct": "FH1 SNR01 direct packet ",
     "semantic": "FH1 SNR01 semantic packet ",
+    "item_node": "FH1 SNR01 item node ",
+    "item": "FH1 SNR01 procedural item ",
     "family_record": "FH1 SNR01 direct family record ",
     "family": "FH1 SNR01 direct family ",
     "clear": "FH1 clear producer ",
@@ -75,6 +77,14 @@ def summarize(records, frames, backend_frame):
     family_records = {(r["frame"], r["next_direct"]): r
                       for r in records["family_record"]}
     assert len(family_records) == len(records["family_record"])
+    items = {(r["frame"], r["call"]): r for r in records["item"]}
+    assert len(items) == len(records["item"])
+    item_nodes = {}
+    for node in records["item_node"]:
+        for ordinal in range(node["first_semantic"], node["last_semantic"] + 1):
+            key = (node["frame"], ordinal)
+            assert key not in item_nodes, f"overlapping item nodes: {key}"
+            item_nodes[key] = node
     assert len(primary) == len(records["primary"])
     assert len(scene) == len(records["scene"])
     assert all(r["view_call"] == 0 or
@@ -157,6 +167,26 @@ def summarize(records, frames, backend_frame):
             direct_views[f'{title_row["frame"]}:{title_row["title_view_call"]}'] += 1
         family = None
         family_record = None
+        item = None
+        item_node = None
+        if title_packet and title_packet[0] == "semantic":
+            title_row = title_packet[1]
+            key = (title_row["frame"], title_row["ordinal"])
+            item_node = item_nodes.get(key)
+            if title_row["procedural_call"]:
+                item = items.get((title_row["frame"], title_row["procedural_call"]))
+                if records["item"]:
+                    assert item, f"missing procedural item: {draw['ordinal']}"
+                if item:
+                    assert item["receiver"] == title_row["procedural_receiver"]
+                    assert item["first_semantic_packet"] <= title_row["ordinal"] <= item["last_semantic_packet"]
+                    assert item["descriptor_seen"] and item["runtime_seen"] and item["submit_seen"]
+            if records["item_node"]:
+                assert bool(item_node) == bool(item), f"item/node gap: {draw['ordinal']}"
+            if item_node:
+                assert item_node["view_call"] == title_row["title_view_call"]
+                assert item_node["first_item"] <= item["call"] <= item_node["last_item"]
+                assert item_node["receiver"] == item["receiver"]
         if title_packet and title_packet[0] == "direct":
             title_row = title_packet[1]
             matches = [row for row in families[title_row["frame"]]
@@ -235,6 +265,17 @@ def summarize(records, frames, backend_frame):
             "title_direct_record_source": family_record["source"] if family_record else None,
             "title_direct_record_arg6": family_record["arg6"] if family_record else None,
             "title_direct_record_arg7": family_record["arg7"] if family_record else None,
+            "title_item_call": item["call"] if item else None,
+            "title_item_receiver": item["receiver"] if item else None,
+            "title_item_descriptor": item["descriptor_address"] if item else None,
+            "title_item_descriptor_index": item["descriptor_index"] if item else None,
+            "title_item_descriptor_kind": item["descriptor_kind"] if item else None,
+            "title_item_runtime": item["runtime_address"] if item else None,
+            "title_item_node": item_node["node"] if item_node else None,
+            "title_item_node_index": item_node["index"] if item_node else None,
+            "title_item_list_head": item_node["list_head"] if item_node else None,
+            "title_item_render_owner": item_node["render_owner"] if item_node else None,
+            "title_item_bucket_entry": item_node["bucket_entry"] if item_node else None,
             "clear_producer_record": clear_producer["record"] if clear_producer else None,
             "clear_producer_flags": clear_producer["flags"] if clear_producer else None,
         })
@@ -271,6 +312,7 @@ def main():
     parser.add_argument("--source-frame", type=int, required=True)
     parser.add_argument("--require-direct-family", action="store_true")
     parser.add_argument("--require-direct-family-record", action="store_true")
+    parser.add_argument("--require-semantic-item-node", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     frames = [args.source_frame, args.source_frame + 1]
@@ -279,6 +321,8 @@ def main():
         assert records["family"], "no bounded direct-family scopes"
     if args.require_direct_family_record:
         assert records["family"] and records["family_record"], "no direct-family records"
+    if args.require_semantic_item_node:
+        assert records["item"] and records["item_node"], "no item-node records"
     result = summarize(records, frames, args.source_frame + 1)
     result["log_sha256"] = hashlib.sha256(args.log.read_bytes()).hexdigest().upper()
     args.output.parent.mkdir(parents=True, exist_ok=True)
