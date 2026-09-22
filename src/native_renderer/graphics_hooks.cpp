@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -38,6 +39,9 @@ REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_watch_packet_pages, false,
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_INT32(pinyon_shift_snr_m02_trace_source_frame, 0, "Pinyon Shift",
                      "Trace the title command-position wait for three frames")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_INT32(pinyon_shift_snr03_probe_frame, 0, "Pinyon Shift",
+                     "Publish one read-only view-8 vegetation scene snapshot")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 namespace {
@@ -219,7 +223,30 @@ struct Snr01SecondDrawScope {
   uint64_t first_semantic_packet;
   uint64_t first_direct_packet;
   uint64_t ordinal;
+  uint32_t packet_physical = 0;
+  uint32_t packet_count = 0;
 };
+struct Snr03VegetationItem {
+  uint32_t owner;
+  uint32_t record;
+  uint32_t vertex_descriptor;
+  uint32_t vertex_address;
+  uint32_t vertex_size;
+  uint32_t packet_physical;
+  uint64_t bucket_entry;
+};
+struct Snr03SceneSnapshot {
+  uint64_t source_frame;
+  uint32_t view;
+  uint32_t camera;
+  std::array<uint32_t, 16> camera80;
+  std::array<uint32_t, 16> camera144;
+  std::vector<Snr03VegetationItem> items;
+};
+thread_local std::vector<Snr03VegetationItem> snr03_vegetation_items;
+thread_local bool snr03_scene_overflow = false;
+std::mutex snr03_scene_mutex;
+std::map<uint64_t, std::shared_ptr<const Snr03SceneSnapshot>> snr03_scenes;
 struct Snr01ItemNodeScope {
   uint32_t node;
   uint32_t list_head;
@@ -381,6 +408,34 @@ uint32_t SnrM02ReadU32(uint32_t address) {
              : 0;
 }
 
+int32_t Snr03TargetFrame() {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr03_probe_frame);
+  return target;
+}
+
+uint64_t Snr03Fingerprint(const Snr03SceneSnapshot& scene) {
+  uint64_t hash = 14695981039346656037ull;
+  const auto add = [&hash](uint64_t value) {
+    hash ^= value;
+    hash *= 1099511628211ull;
+  };
+  add(scene.source_frame);
+  add(scene.view);
+  add(scene.camera);
+  for (const auto word : scene.camera80) add(word);
+  for (const auto word : scene.camera144) add(word);
+  for (const auto& item : scene.items) {
+    add(item.owner);
+    add(item.record);
+    add(item.vertex_descriptor);
+    add(item.vertex_address);
+    add(item.vertex_size);
+    add(item.packet_physical);
+    add(item.bucket_entry);
+  }
+  return hash;
+}
+
 uint32_t SnrM02Physical(uint32_t address) {
   const auto* memory = snr01_memory.load(std::memory_order_acquire);
   return memory && address ? memory->GetPhysicalAddress(address) : UINT32_MAX;
@@ -525,6 +580,14 @@ void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
     return;
   }
   const uint32_t guest_address = previous_word + 4;
+  if (Snr03TargetFrame() > 0 &&
+      uint64_t(Snr03TargetFrame()) == uint64_t(rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount)) &&
+      !snr01_second_draw_scopes.empty()) {
+    auto& draw = snr01_second_draw_scopes.back();
+    draw.packet_physical = guest_address & 0x1FFFFFFF;
+    ++draw.packet_count;
+  }
   REXGPU_INFO(
       "FH1 SNR01 semantic packet {{\"frame\":{},\"ordinal\":{},"
       "\"path\":\"{}\",\"header_guest\":{},\"header_physical\":{},"
@@ -831,6 +894,36 @@ void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
     snr01_watch_pages.clear();
   }
   FlushFh1GpuCorpus();
+  {
+    std::lock_guard lock(snr03_scene_mutex);
+    snr03_scenes.clear();
+  }
+}
+
+bool Snr03ProbeEnabled() { return Snr03TargetFrame() > 0; }
+
+void ObserveSnr03OutputFrame(uint64_t output_frame) {
+  if (!Snr03ProbeEnabled() || output_frame != uint64_t(Snr03TargetFrame()) + 1) {
+    return;
+  }
+  std::shared_ptr<const Snr03SceneSnapshot> scene;
+  {
+    std::lock_guard lock(snr03_scene_mutex);
+    const auto it = snr03_scenes.find(output_frame - 1);
+    if (it != snr03_scenes.end()) {
+      scene = std::move(it->second);
+      snr03_scenes.erase(it);
+    }
+  }
+  if (!scene) {
+    REXGPU_INFO("FH1 SNR03 scene missing output_frame={} source_frame={}",
+                output_frame, output_frame - 1);
+    return;
+  }
+  REXGPU_INFO("FH1 SNR03 scene consumed output_frame={} source_frame={} "
+              "view={} camera={} items={} fingerprint={}",
+              output_frame, scene->source_frame, scene->view, scene->camera,
+              scene->items.size(), Snr03Fingerprint(*scene));
 }
 
 }  // namespace pinyon_shift::native_renderer
@@ -1098,6 +1191,10 @@ void PinyonShiftObservePresentationViewBegin(
   const uint64_t ordinal = ++snr01_view_begin_count;
   if (ordinal == 8) {
     snr01_view8_flush_owners.clear();
+    if (Snr03TargetFrame() > 0 && frame == uint64_t(Snr03TargetFrame())) {
+      snr03_vegetation_items.clear();
+      snr03_scene_overflow = false;
+    }
   }
   snr01_view_scopes.push_back(
       {r3.u32, r4.u32, snr01_semantic_packet_count,
@@ -1120,6 +1217,56 @@ void PinyonShiftObservePresentationViewEnd() {
   }
   const auto scope = snr01_view_scopes.back();
   snr01_view_scopes.pop_back();
+  const uint64_t frame = uint64_t(rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount));
+  if (scope.ordinal == 8 && Snr03TargetFrame() > 0 &&
+      frame == uint64_t(Snr03TargetFrame())) {
+    if (snr03_scene_overflow || snr03_vegetation_items.empty() ||
+        !scope.camera) {
+      REXGPU_INFO("FH1 SNR03 scene rejected frame={} overflow={} items={} camera={}",
+                  frame, snr03_scene_overflow,
+                  snr03_vegetation_items.size(), scope.camera);
+    } else {
+      Snr03SceneSnapshot snapshot{};
+      snapshot.source_frame = frame;
+      snapshot.view = scope.view;
+      snapshot.camera = scope.camera;
+      for (uint32_t i = 0; i < 16; ++i) {
+        snapshot.camera80[i] = SnrM02ReadU32(scope.camera + 80 + i * 4);
+        snapshot.camera144[i] = SnrM02ReadU32(scope.camera + 144 + i * 4);
+      }
+      snapshot.items = std::move(snr03_vegetation_items);
+      std::shared_ptr<const Snr03SceneSnapshot> scene =
+          std::make_shared<Snr03SceneSnapshot>(std::move(snapshot));
+      const auto fingerprint = Snr03Fingerprint(*scene);
+      uint64_t dropped_frame = 0;
+      {
+        std::lock_guard lock(snr03_scene_mutex);
+        if (snr03_scenes.size() == 2) {
+          dropped_frame = snr03_scenes.begin()->first;
+          snr03_scenes.erase(snr03_scenes.begin());
+        }
+        snr03_scenes[frame] = scene;
+      }
+      if (dropped_frame) {
+        REXGPU_INFO("FH1 SNR03 scene dropped frame={}", dropped_frame);
+      }
+      REXGPU_INFO("FH1 SNR03 scene published frame={} view={} camera={} "
+                  "items={} fingerprint={}", frame, scene->view, scene->camera,
+                  scene->items.size(), fingerprint);
+      for (size_t i = 0; i < scene->items.size(); ++i) {
+        const auto& item = scene->items[i];
+        REXGPU_INFO("FH1 SNR03 item {{\"frame\":{},\"ordinal\":{},"
+                    "\"owner\":{},\"record\":{},"
+                    "\"vertex_descriptor\":{},\"vertex_address\":{},"
+                    "\"vertex_size\":{},\"packet_physical\":{},"
+                    "\"bucket_entry\":{}}}",
+                    frame, i + 1, item.owner, item.record,
+                    item.vertex_descriptor, item.vertex_address,
+                    item.vertex_size, item.packet_physical, item.bucket_entry);
+      }
+    }
+  }
   if (scope.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(
         "FH1 SNR01 view end {{\"frame\":{},\"call\":{},"
@@ -1844,6 +1991,23 @@ void PinyonShiftObserveSecondDrawEnd() {
   if (snr01_track_bucket_scopes.empty() ||
       snr01_track_bucket_scopes.back().ordinal != scope.bucket_entry) {
     ++snr01_unmatched_second_draw_exits;
+  }
+  if (Snr03TargetFrame() > 0 && scope.vegetation_owner &&
+      uint64_t(Snr03TargetFrame()) == uint64_t(rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount)) &&
+      !snr01_view_scopes.empty() && snr01_view_scopes.back().ordinal == 8) {
+    if (scope.packet_count != 1 || !scope.packet_physical ||
+        scope.bound_record != scope.vegetation_selected_record ||
+        !scope.bound_vertex_descriptor || !scope.bound_vertex_address ||
+        !scope.bound_vertex_size || snr03_vegetation_items.size() >= 512) {
+      snr03_scene_overflow = true;
+    } else {
+      snr03_vegetation_items.push_back({
+          scope.vegetation_owner, scope.bound_record,
+          scope.bound_vertex_descriptor, scope.bound_vertex_address,
+          scope.bound_vertex_size, scope.packet_physical,
+          scope.bucket_entry});
+    }
   }
   if (scope.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(

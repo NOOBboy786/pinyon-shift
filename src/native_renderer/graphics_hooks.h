@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace rex::system {
 class IGraphicsSystem;
 }
@@ -12,5 +14,7 @@ namespace pinyon_shift::native_renderer {
 void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
                            rex::memory::Memory* memory);
 void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system);
+bool Snr03ProbeEnabled();
+void ObserveSnr03OutputFrame(uint64_t output_frame);
 
 }  // namespace pinyon_shift::native_renderer
