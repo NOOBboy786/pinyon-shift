@@ -1,7 +1,8 @@
 # Scene-native renderer backlog
 
-Status: in progress; SNR-00/01 have pilot controls and a bounded title packet
-probe, but no scene-native implementation or performance result is claimed.
+Status: in progress; SNR-00/01 have pilot controls and exact local-car
+title-to-GPU joins, but the full main-view boundary is not proved. No
+scene-native implementation or performance result is claimed.
 This is the primary execution roadmap for new renderer architecture. The
 [performance backlog](PERFORMANCE_BACKLOG.md) remains the record of previous
 experiments; the [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md)
@@ -142,9 +143,40 @@ completed implementation tickets. Effort is relative scope, not a time estimate.
 | SNR-11 | Qualify images, streaming and net performance | SNR-10 | Large / validation; closes B |
 | SNR-12 | Remove a proven upstream preparation path | B, new critical-path evidence | Large / title; closes C |
 
-Start with SNR-00 and SNR-01, then finish SNR-02–04. Dependency and shader
-feasibility research may expose blockers during A; do not build the production
-material system or expand renderer scope before authoritative capture passes.
+### Immediate priority and stop/go checks
+
+Treat **Gate A (SNR-00–04)** as the active execution phase. SNR-05–12 remain
+the roadmap, not simultaneous implementation work. The first priority is a
+whole-frame ownership and pass-boundary census, not further expansion of the
+already joined local-car path. In the frame-6000/6001 replay, 4,911 prepared
+draws include 2,884 on a candidate scene color/depth tuple split between two
+color words; the local-car join accounts for 268 draws on one of them. Target
+words alone do not prove view identity or separability. See the
+[SNR-00/01 evidence](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#full-backend-target-census-for-the-local-car-replay).
+
+1. **Boundary first (SNR-00/01):** attribute both color groups and the
+   remaining draws to title views, owners and pass order. Record every
+   unmatched draw and every producer/consumer crossing the proposed cut.
+   Freeze the exact slice only after that census; the present slice is a
+   hypothesis.
+2. **Diagnostic vertical slice (SNR-02–04):** recover the minimum authoritative
+   geometry, transform and lifetime fields for one bounded view contribution;
+   publish and render same-frame identity/depth beside untouched compatibility
+   output. Expand to *every* item in the frozen slice before closing Gate A.
+   A car-only or shader-selected diagnostic is useful evidence, not Gate A.
+3. **Cost and dependency check:** use the measured control and a bounded pass
+   work census to estimate removable compatibility work and added capture,
+   upload and bridge cost. Investigate SNR-05 dependencies early enough to
+   reject an inseparable or uneconomic cut. Do not infer a 15% gain from draw
+   counts or busy CPU samples. Defer production materials, broad shader work
+   and suppression until the boundary and diagnostic scene are proved.
+
+**Stop/go after the boundary census:** if view/pass membership or retained-pass
+inputs cannot be established, revise the slice explicitly and rerun the census;
+do not hide unknown draws in admission. **Stop/go after the Gate A diagnostic:**
+if same-frame coverage, resource freshness or the dependency/cost case fails,
+keep compatibility as the default and revise the boundary or renderer approach
+before starting SNR-06–10. Preserve Gate B's equal-quality 15% threshold.
 
 ### [ ] SNR-00 — Freeze the experiment
 
@@ -156,6 +188,9 @@ material system or expand renderer scope before authoritative capture passes.
   foliage alpha edges, vehicle paint/glass boundaries, shadows, HUD and motion.
   Record unsupported views/modes and their expected whole-frame compatibility
   behavior. Existing UI, mirrors and reflections cannot silently disappear.
+- Treat the current full opaque/alpha-tested main-view slice as provisional.
+  Resolve the two candidate scene-color groups and full prepared-draw census
+  with SNR-01 before declaring exact membership frozen.
 - Plan at least two warmed ABBA blocks for retention (A = compatibility control,
   B = native candidate), with controls at both ends of each block. Establish
   control noise now; execute the candidate comparison in SNR-11. Predeclare
@@ -178,6 +213,10 @@ never copy/reset a save to normalize a benchmark. Log actual route divergence.
   whether each transform, palette and material state becomes final before or
   after draw preparation. Correlate every selected entry with actual submitted
   work, including deferred submissions and interleaving.
+- Prioritize a frame-wide view/pass/owner census over additional local-car
+  pointer probes. Join both candidate scene-color groups to title view and
+  pass identities, including direct root-buffer draws, and classify the
+  remainder as selected, retained or outside the slice with evidence.
 - Start from existing research: static SimpleModel ownership, procedural helper
   `0x82417418`, and shared player/traffic pose path `0x82BC5A3C`. These are leads,
   not a complete main-view API. Recover the player render owner explicitly.
@@ -210,6 +249,8 @@ frame unsupported; no stale bytes, guessed roles or fallback white textures.
 - Define a concrete FH1 frame/view structure containing only recovered fields:
   source identity, camera, ordered instances, mesh/material references, final
   transforms and resource generations. Do not create a general scene graph/ECS.
+- Publish one bounded, fully owned contribution first to test the exact-frame
+  contract; expand the same structure to the frozen complete slice for Gate A.
 - Publish immutable owned data or explicitly pinned immutable resources, and
   keep GPU resources alive through their submission fences. Never reread mutable
   guest constants from a later frame. Establish the title/command-thread ordering
@@ -227,6 +268,9 @@ scene copies, unbounded queues or waits that cycle between title and GPU threads
 - Render the selected scene to private native color/identity and depth targets
   using authoritative geometry, camera and dynamic transforms. Keep compatibility
   output intact for a same-frame reference. Label this diagnostic rendering.
+- Use the bounded contribution as an early vertical-slice check. Its result
+  exposes missing transforms, resources and ordering; only complete frozen-slice
+  coverage can close this ticket.
 - Compare coverage/depth and identity overlays across moving frames, foliage,
   traffic/player animation and at least one unload/reload. Account for every
   selected item: rendered correctly or explicitly unsupported before admission.
@@ -244,6 +288,10 @@ or rendering a tiny logical target does not close it.
   generations, access order, format/subresources, temporal history, CPU reads,
   guest-memory writes and required synchronization. Reuse pass census/provenance
   tools, but do not treat their structural signatures as material semantics.
+- Perform a read-only dependency and cost preflight during Gate A using the
+  chosen boundary, existing controls and command-thread measurements. Record
+  likely removable work and unavoidable bridge/retained work as estimates,
+  then replace estimates with paired measurements in SNR-10/11.
 - Identify query consumers starting at `0x82D951E0`/`0x82D95230`/`0x82D95378`,
   and resolve/control paths `0x824587D8`/`0x82458A88`. Preserve observable memory
   exports, event writes, waits and visibility decisions. Retain or replace actual
