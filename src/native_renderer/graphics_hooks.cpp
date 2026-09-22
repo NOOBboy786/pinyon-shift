@@ -285,7 +285,7 @@ void PinyonShiftObserveGraphicsFrame() {
         "\"track75_calls\":{},\"track79_calls\":{},"
         "\"track_pass_calls\":{},"
         "\"direct_calls_swap_thread\":{},"
-        "\"direct_packets_swap_thread\":{},"
+        "\"draw_header_packets_swap_thread\":{},"
         "\"unmatched_direct_exits_swap_thread\":{},"
         "\"unfinished_direct_scopes_swap_thread\":{},"
         "\"unmatched_exits\":{},"
@@ -764,6 +764,35 @@ void PinyonShiftObserveDirectIndexedEnd() {
         scope.arg5, scope.arg6, scope.arg7, scope.first_packet + 1,
         snr01_direct_packet_count);
   }
+}
+
+void PinyonShiftObserveIndexed2PacketPrimary(PPCRegister& r30,
+                                             PPCRegister& r11,
+                                             PPCRegister& r31) {
+  RecordSnr01DirectPacket("indexed2_primary", r30.u32, r11.u32, r31.u32);
+}
+
+void PinyonShiftObserveIndexed2PacketSecondary(PPCRegister& r6,
+                                               PPCRegister& r9,
+                                               PPCRegister& r31) {
+  RecordSnr01DirectPacket("indexed2_secondary", r6.u32, r9.u32, r31.u32);
+}
+
+void PinyonShiftObserveIndexed3PacketPrimary(PPCRegister& r30,
+                                             PPCRegister& r11,
+                                             PPCRegister& r31) {
+  RecordSnr01DirectPacket("indexed3_primary", r30.u32, r11.u32, r31.u32);
+}
+
+void PinyonShiftObserveIndexed3PacketSecondary(PPCRegister& r5,
+                                               PPCRegister& r9,
+                                               PPCRegister& r31) {
+  RecordSnr01DirectPacket("indexed3_secondary", r5.u32, r9.u32, r31.u32);
+}
+
+void PinyonShiftObserveSwapDrawPacket(PPCRegister& r9, PPCRegister& r10,
+                                      PPCRegister& r31) {
+  RecordSnr01DirectPacket("swap", r9.u32, r10.u32, r31.u32);
 }
 
 // Read-only hooks at the checked producer entry/common epilogue. Logging is

@@ -195,9 +195,11 @@ packets cannot be assumed to be one pass. Forty-five generic indexed-wrapper
 headers did **not** match a prepared draw in frame 6001, and 4,285 of that
 frame's 4,878 prepared draws matched neither observed title header class.
 They remain unclassified; some may use other title emitters. The join proves
-packet identity for this source frame, not view, material, resource generation,
-visibility or complete coverage. This capture is diagnostic and must not be
-used as a timing comparison.
+an exact address/packet-position correlation, not a unique producer
+generation: buffers can reuse the same physical address across frames. It
+does not prove view, material, resource generation, visibility or complete
+coverage. This capture is diagnostic and must not be used as a timing
+comparison.
 
 ### Receiver phases and emitter callers
 
@@ -270,8 +272,10 @@ The 45 generic-wrapper headers again had no match; 4,341 of 4,962 prepared
 draws in backend frame 6001 matched neither observed class.
 
 This proves the observed receiver → selected descriptor/runtime record →
-graphics call → PM4 header → prepared-draw lineage for the item path in one
-frame. It does not prove that the 61 non-submitted items were intentionally
+graphics call → PM4 header chain in the title, and an address correlation
+to prepared draws in the backend. Cross-frame address reuse prevents a
+unique producer-generation claim. It does not prove that the 61
+non-submitted items were intentionally
 culled, what the descriptor kind means, which view owns the calls, or how
 addresses behave across unload/reload and reuse. The final graphics call's
 `r5` and `r6` values remain raw arguments until their contract is verified.
@@ -403,12 +407,40 @@ recover how the many other command buffers are produced and pair their
 title owner/view with backend packet identity; adding shader or target
 heuristics would not establish that join.
 
-The generated-code constant scan found two other functions with analogous
-draw-header stores: `sub_8240DC70` at `0x8240E01C`/`0x8240E0B0` and
-`sub_82408B70` at `0x82408F7C`/`0x8240900C`. A separate store at
-`0x829F0A4C` occurs in `sub_829F0928`. They are the next bounded packet
-probe candidates; their runtime activity, backend joins and owner roles
-have not yet been established.
+### Additional draw-header writers
+
+The updated static check verifies stores in `sub_8240DC70` at
+`0x8240E01C`/`0x8240E0B0`, `sub_82408B70` at
+`0x82408F7C`/`0x8240900C`, and `sub_829F0928` at `0x829F0A4C`.
+Its local output SHA-256 is
+`1F42E53D0E5C529FA969BB3ECB2D7A3CF5D3F0B90B554320240EF639DF6F139A`.
+The new default-off hooks preserve the title's original code and record
+only header address, word, raw command context and producer site.
+
+The sustained-route replay exited normally with executable SHA-256
+`8AC5F1386C64021DDB7E7CEEE86CF4FE128261DA652F3FFDDB26050C09EDFCE0`.
+Its combined log is
+`.local/native-renderer/snr01/extra-packet-frame-6000/title-backend-extra.log`
+(SHA-256 `C8164EDE13B5AE520F5224FA7150620F61F4B8F9E9630CEA0175C89CE27356F9`).
+Source frame 6000 published 15 headers in `sub_8240DC70` (four primary,
+11 secondary), 11 primary headers in `sub_82408B70`, and none at
+`0x829F0A4C`. Every one of these 26 header addresses appeared in backend
+frame 6001, accounting for 48 prepared callbacks. The prior direct emitter
+published 449 headers that matched 690 callbacks; 386 procedural headers
+matched 510; 41 generic-wrapper headers matched none. The six address
+classes were disjoint in this replay. Of 4,621 prepared callbacks, 3,373
+still matched no observed header address. These extra sites therefore do
+not close the coverage gap, and their title owner/view roles remain open.
+
+There is direct evidence that physical address alone is not a generation
+key: 166 addresses published by the direct emitter in source frame 6000
+also appear in backend frame 5999, before this frame's publication hooks
+ran. Backend frame 6000 had no address overlap with the source-6000 set;
+frame 6001 did. Future joins must include command-buffer submission and
+reuse generation or ordering evidence. A bounded earlier-frame capture can
+test whether the remaining backend buffers were recorded before source
+frame 6000, but an earlier address match by itself would still be
+insufficient for native admission.
 
 The next runtime capture must carry a bounded title owner/generation, view,
 record and selected LOD through final draw preparation and join the resulting

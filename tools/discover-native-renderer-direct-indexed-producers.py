@@ -119,6 +119,18 @@ def build(functions: dict[int, dict[int, str]], image: bytes) -> dict:
             DRAW_EMITTER_EXIT: "addi r1,r1,208",
         },
     )
+    for function, stores in {
+        0x8240DC70: {
+            0x8240E01C: "stwu r11,4(r30)",
+            0x8240E0B0: "stwu r9,4(r6)",
+        },
+        0x82408B70: {
+            0x82408F7C: "stwu r11,4(r30)",
+            0x8240900C: "stwu r9,4(r5)",
+        },
+        0x829F0928: {0x829F0A4C: "stwu r10,4(r9)"},
+    }.items():
+        require_instructions(functions, function, stores)
 
     if rtti_name(image, TRACK_MESH_VTABLE) != ".?AVCTrackMesh@@":
         raise ValueError("CTrackMesh RTTI evidence drifted")
@@ -181,6 +193,11 @@ def build(functions: dict[int, dict[int, str]], image: bytes) -> dict:
         "classification": "bounded_direct_indexed_draw_producer_inventory",
         "draw_emitter": f"{DRAW_EMITTER:08X}",
         "draw_emitter_common_exit": f"{DRAW_EMITTER_EXIT:08X}",
+        "additional_draw_header_stores": {
+            "8240DC70": ["8240E01C", "8240E0B0"],
+            "82408B70": ["82408F7C", "8240900C"],
+            "829F0928": ["829F0A4C"],
+        },
         "producers": [
             {
                 "function": f"{function:08X}",

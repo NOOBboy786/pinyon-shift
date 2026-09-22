@@ -20,6 +20,15 @@ def fixture():
         0x82416774: "stwu r9,4(r5)",
         MODULE.DRAW_EMITTER_EXIT: "addi r1,r1,208",
     })
+    functions[0x8240DC70] = {
+        0x8240E01C: "stwu r11,4(r30)",
+        0x8240E0B0: "stwu r9,4(r6)",
+    }
+    functions[0x82408B70] = {
+        0x82408F7C: "stwu r11,4(r30)",
+        0x8240900C: "stwu r9,4(r5)",
+    }
+    functions[0x829F0928] = {0x829F0A4C: "stwu r10,4(r9)"}
     functions[MODULE.TRACK_HELPER].update(
         {
             0x82C5ADD8: "mr r26,r6",
@@ -85,6 +94,10 @@ class DirectIndexedProducerTests(unittest.TestCase):
         self.assertEqual("complete", report["status"])
         self.assertEqual(13, len(report["producers"]))
         self.assertEqual("824167EC", report["draw_emitter_common_exit"])
+        self.assertEqual(
+            ["8240E01C", "8240E0B0"],
+            report["additional_draw_header_stores"]["8240DC70"],
+        )
         candidate = report["c2_live_candidate"]
         self.assertEqual("82C5ADC0", candidate["producer"])
         self.assertEqual("CTrackMesh", candidate["mesh_class"])
