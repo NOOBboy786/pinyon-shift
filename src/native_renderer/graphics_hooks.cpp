@@ -56,10 +56,24 @@ struct Snr01ProceduralScope {
   uint64_t first_packet;
   uint64_t first_semantic_packet;
   uint64_t ordinal;
+  uint32_t descriptor_index = 0;
+  uint32_t descriptor_address = 0;
+  uint32_t descriptor_kind = 0;
+  uint32_t render_state = 0;
+  uint32_t runtime_address = 0;
+  uint32_t submit_context = 0;
+  uint32_t submit_primitive = 0;
+  uint32_t submit_arg5 = 0;
+  uint32_t submit_arg6 = 0;
+  bool descriptor_seen = false;
+  bool runtime_seen = false;
+  bool submit_seen = false;
 };
 struct Snr01DispatchScope {
+  uint32_t caller_lr;
   uint32_t receiver;
   uint32_t context;
+  uint32_t arg5;
   uint32_t arg6;
   uint32_t arg7;
   uint32_t arg8;
@@ -88,6 +102,8 @@ thread_local uint64_t snr01_procedural_count = 0;
 thread_local uint64_t snr01_dispatch_count = 0;
 thread_local uint64_t snr01_render_state_count = 0;
 thread_local uint64_t snr01_emitter_count = 0;
+thread_local uint64_t snr01_state_wrapper_count = 0;
+thread_local uint64_t snr01_dispatch_wrapper_count = 0;
 thread_local uint64_t snr01_unmatched_emitter_exits = 0;
 thread_local uint64_t snr01_unmatched_dispatch_exits = 0;
 thread_local uint64_t snr01_unmatched_render_state_exits = 0;
@@ -225,6 +241,7 @@ void PinyonShiftObserveGraphicsFrame() {
         "\"semantic_packets\":{},"
         "\"procedural_calls\":{},\"dispatch_calls\":{},"
         "\"render_state_calls\":{},\"emitter_calls\":{},"
+        "\"state_wrapper_calls\":{},\"dispatch_wrapper_calls\":{},"
         "\"unmatched_exits\":{},"
         "\"unmatched_dispatch_exits\":{},"
         "\"unmatched_render_state_exits\":{},"
@@ -237,6 +254,7 @@ void PinyonShiftObserveGraphicsFrame() {
         snr01_packet_count, snr01_semantic_packet_count,
         snr01_procedural_count, snr01_dispatch_count,
         snr01_render_state_count, snr01_emitter_count,
+        snr01_state_wrapper_count, snr01_dispatch_wrapper_count,
         snr01_unmatched_exits,
         snr01_unmatched_dispatch_exits,
         snr01_unmatched_render_state_exits,
@@ -255,7 +273,8 @@ void PinyonShiftObserveGraphicsFrame() {
       snr01_render_state_count = snr01_unmatched_exits =
       snr01_unmatched_dispatch_exits =
       snr01_unmatched_render_state_exits = snr01_emitter_count =
-      snr01_unmatched_emitter_exits = 0;
+      snr01_unmatched_emitter_exits = snr01_state_wrapper_count =
+      snr01_dispatch_wrapper_count = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
       (title_emitter_calls || title_packet_count)) {
     rex::perf::TraceCriticalPath("title_emitter", int64_t(title_emitter_frame),
@@ -327,15 +346,55 @@ void PinyonShiftObserveTitleDrawPacketPublish(PPCRegister& r3, PPCRegister& r11,
   ++title_packet_count;
 }
 
+void PinyonShiftObserveProceduralStateWrapperCaller(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8, PPCRegister& r9) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_state_wrapper_count;
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 state wrapper {{\"frame\":{},\"call\":{},"
+        "\"caller_lr\":{},\"arg3\":{},\"arg4\":{},\"arg5\":{},"
+        "\"arg6\":{},\"arg7\":{},\"arg8\":{},\"arg9\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r12.u32, r3.u32, r4.u32, r5.u32, r6.u32,
+        r7.u32, r8.u32, r9.u32);
+  }
+}
+
+void PinyonShiftObserveProceduralDispatchWrapperCaller(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8, PPCRegister& r9,
+    PPCRegister& r10) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_dispatch_wrapper_count;
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 dispatch wrapper {{\"frame\":{},\"call\":{},"
+        "\"caller_lr\":{},\"arg3\":{},\"arg4\":{},\"arg5\":{},"
+        "\"arg6\":{},\"arg7\":{},\"arg8\":{},\"arg9\":{},"
+        "\"arg10\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r12.u32, r3.u32, r4.u32, r5.u32, r6.u32,
+        r7.u32, r8.u32, r9.u32, r10.u32);
+  }
+}
+
 void PinyonShiftObserveProceduralDispatchBegin(
-    PPCRegister& r3, PPCRegister& r4, PPCRegister& r6, PPCRegister& r7,
-    PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8, PPCRegister& r9,
+    PPCRegister& r10) {
   if (!Snr01TraceCurrentFrame()) {
     return;
   }
   const uint64_t ordinal = ++snr01_dispatch_count;
   snr01_dispatch_scopes.push_back(
-      {r3.u32, r4.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32,
+      {r12.u32, r3.u32, r4.u32, r5.u32, r6.u32, r7.u32, r8.u32,
+       r9.u32, r10.u32,
        snr01_semantic_packet_count, snr01_procedural_count, ordinal});
 }
 
@@ -352,12 +411,14 @@ void PinyonShiftObserveProceduralDispatchEnd() {
   if (scope.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(
         "FH1 SNR01 procedural dispatch {{\"frame\":{},\"call\":{},"
-        "\"receiver\":{},\"context\":{},\"arg6\":{},\"arg7\":{},"
+        "\"caller_lr\":{},\"receiver\":{},\"context\":{},"
+        "\"arg5\":{},\"arg6\":{},\"arg7\":{},"
         "\"arg8\":{},\"arg9\":{},\"arg10\":{},"
         "\"first_semantic_packet\":{},\"last_semantic_packet\":{},"
         "\"first_item_call\":{},\"last_item_call\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
-        scope.ordinal, scope.receiver, scope.context, scope.arg6, scope.arg7,
+        scope.ordinal, scope.caller_lr, scope.receiver, scope.context,
+        scope.arg5, scope.arg6, scope.arg7,
         scope.arg8, scope.arg9, scope.arg10,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_procedural_call + 1, snr01_procedural_count);
@@ -365,14 +426,16 @@ void PinyonShiftObserveProceduralDispatchEnd() {
 }
 
 void PinyonShiftObserveProceduralRenderStateBegin(
-    PPCRegister& r3, PPCRegister& r4, PPCRegister& r6, PPCRegister& r7,
-    PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8, PPCRegister& r9,
+    PPCRegister& r10) {
   if (!Snr01TraceCurrentFrame()) {
     return;
   }
   const uint64_t ordinal = ++snr01_render_state_count;
   snr01_render_state_scopes.push_back(
-      {r3.u32, r4.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32,
+      {r12.u32, r3.u32, r4.u32, r5.u32, r6.u32, r7.u32, r8.u32,
+       r9.u32, r10.u32,
        snr01_semantic_packet_count, snr01_procedural_count, ordinal});
 }
 
@@ -389,12 +452,14 @@ void PinyonShiftObserveProceduralRenderStateEnd() {
   if (scope.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(
         "FH1 SNR01 render state {{\"frame\":{},\"call\":{},"
-        "\"receiver\":{},\"context\":{},\"arg6\":{},\"arg7\":{},"
+        "\"caller_lr\":{},\"receiver\":{},\"context\":{},"
+        "\"arg5\":{},\"arg6\":{},\"arg7\":{},"
         "\"arg8\":{},\"arg9\":{},\"arg10\":{},"
         "\"first_semantic_packet\":{},\"last_semantic_packet\":{},"
         "\"first_item_call\":{},\"last_item_call\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
-        scope.ordinal, scope.receiver, scope.context, scope.arg6, scope.arg7,
+        scope.ordinal, scope.caller_lr, scope.receiver, scope.context,
+        scope.arg5, scope.arg6, scope.arg7,
         scope.arg8, scope.arg9, scope.arg10,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_procedural_call + 1, snr01_procedural_count);
@@ -425,6 +490,44 @@ void PinyonShiftObserveProceduralItemBegin(
   }
 }
 
+void PinyonShiftObserveProceduralDescriptor(PPCRegister& r9,
+                                            PPCRegister& r28,
+                                            PPCRegister& r8,
+                                            PPCRegister& r25) {
+  if (!Snr01TraceCurrentFrame() || snr01_procedural_scopes.empty()) {
+    return;
+  }
+  auto& scope = snr01_procedural_scopes.back();
+  scope.descriptor_index = r9.u32;
+  scope.descriptor_address = r28.u32;
+  scope.descriptor_kind = r8.u32;
+  scope.render_state = r25.u32;
+  scope.descriptor_seen = true;
+}
+
+void PinyonShiftObserveProceduralRuntimeRecord(PPCRegister& r26) {
+  if (!Snr01TraceCurrentFrame() || snr01_procedural_scopes.empty()) {
+    return;
+  }
+  auto& scope = snr01_procedural_scopes.back();
+  scope.runtime_address = r26.u32;
+  scope.runtime_seen = true;
+}
+
+void PinyonShiftObserveProceduralGeometrySubmit(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6) {
+  if (!Snr01TraceCurrentFrame() || snr01_procedural_scopes.empty()) {
+    return;
+  }
+  auto& scope = snr01_procedural_scopes.back();
+  scope.submit_context = r3.u32;
+  scope.submit_primitive = r4.u32;
+  scope.submit_arg5 = r5.u32;
+  scope.submit_arg6 = r6.u32;
+  scope.submit_seen = true;
+}
+
 void PinyonShiftObserveProceduralItemEnd() {
   if (!Snr01TraceCurrentFrame()) {
     return;
@@ -440,11 +543,22 @@ void PinyonShiftObserveProceduralItemEnd() {
         "FH1 SNR01 procedural item {{\"frame\":{},\"call\":{},"
         "\"receiver\":{},\"first_indexed_packet\":{},"
         "\"last_indexed_packet\":{},\"first_semantic_packet\":{},"
-        "\"last_semantic_packet\":{},\"nested_depth\":{}}}",
+        "\"last_semantic_packet\":{},\"nested_depth\":{},"
+        "\"descriptor_seen\":{},\"descriptor_index\":{},"
+        "\"descriptor_address\":{},\"descriptor_kind\":{},"
+        "\"render_state\":{},\"runtime_seen\":{},"
+        "\"runtime_address\":{},\"submit_seen\":{},"
+        "\"submit_context\":{},\"submit_primitive\":{},"
+        "\"submit_arg5\":{},\"submit_arg6\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         scope.ordinal, scope.receiver, scope.first_packet + 1,
         snr01_packet_count, scope.first_semantic_packet + 1,
-        snr01_semantic_packet_count, snr01_procedural_scopes.size());
+        snr01_semantic_packet_count, snr01_procedural_scopes.size(),
+        scope.descriptor_seen, scope.descriptor_index,
+        scope.descriptor_address, scope.descriptor_kind, scope.render_state,
+        scope.runtime_seen, scope.runtime_address, scope.submit_seen,
+        scope.submit_context, scope.submit_primitive,
+        scope.submit_arg5, scope.submit_arg6);
   }
 }
 

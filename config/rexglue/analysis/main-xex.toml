@@ -37,9 +37,19 @@ name = "PinyonShiftObserveTitleDrawEmitterEnd"
 # the verified CProceduralModels per-record helper; the second sees its common
 # return after the original draw preparation and indirect submission.
 [[midasm_hook]]
+address = 0x8243D2A4
+name = "PinyonShiftObserveProceduralStateWrapperCaller"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9"]
+
+[[midasm_hook]]
+address = 0x8243BD44
+name = "PinyonShiftObserveProceduralDispatchWrapperCaller"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
 address = 0x82417BC4
 name = "PinyonShiftObserveProceduralDispatchBegin"
-registers = ["r3", "r4", "r6", "r7", "r8", "r9", "r10"]
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 
 [[midasm_hook]]
 address = 0x82418F38
@@ -48,7 +58,7 @@ name = "PinyonShiftObserveProceduralDispatchEnd"
 [[midasm_hook]]
 address = 0x824170DC
 name = "PinyonShiftObserveProceduralRenderStateBegin"
-registers = ["r3", "r4", "r6", "r7", "r8", "r9", "r10"]
+registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 
 [[midasm_hook]]
 address = 0x82417410
@@ -58,6 +68,21 @@ name = "PinyonShiftObserveProceduralRenderStateEnd"
 address = 0x8241741C
 name = "PinyonShiftObserveProceduralItemBegin"
 registers = ["r3", "r4", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
+address = 0x82417684
+name = "PinyonShiftObserveProceduralDescriptor"
+registers = ["r9", "r28", "r8", "r25"]
+
+[[midasm_hook]]
+address = 0x824176BC
+name = "PinyonShiftObserveProceduralRuntimeRecord"
+registers = ["r26"]
+
+[[midasm_hook]]
+address = 0x82417B7C
+name = "PinyonShiftObserveProceduralGeometrySubmit"
+registers = ["r3", "r4", "r5", "r6"]
 
 [[midasm_hook]]
 address = 0x82417B80

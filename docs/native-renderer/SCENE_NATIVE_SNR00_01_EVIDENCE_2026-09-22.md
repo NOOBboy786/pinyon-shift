@@ -241,6 +241,79 @@ caller functions are proven by the generated title code, but their scene
 role, view, material and resource lifetimes remain unproved. A render-target
 bit or shader family cannot substitute for those relationships.
 
+### Item record and final submission join
+
+The next saved-route capture exited normally with executable SHA-256
+`036EAC24EA4183D1C7DD39A41F1135A757D37F89C8F5FCF16A878D7840397153`.
+The local combined log is
+`.local/native-renderer/snr01/record-submission-frame-6000/title-backend-records.log`
+(SHA-256
+`E9C3A6C903B235F303A5FA07FD3ACD1C27D6E76F047F89EB192F1B87ADBA3E34`);
+both rotated runtime log files were needed. Read-only hooks observe the
+title-selected descriptor at `0x82417684`, runtime record at `0x824176BC`
+and final graphics call arguments at `0x82417B7C`. These instructions are
+verified in the generated item helper; the trace captures values after the
+title computes them and changes no guest state.
+
+For source frame 6000, all 353 item calls observed both records. Across 47
+distinct item receiver objects, `descriptor_address - 92 × descriptor_index`
+and `runtime_address - 68 × descriptor_index` each yielded one stable base
+per receiver. No observed base was shared by two receivers in this frame.
+The descriptor kind values were 0 (292 records), 4 (9) and 5 (52). These
+are title enum values, **not** proven material roles. The final graphics
+call occurred for 292 items and did not occur for 61; every submitted item
+emitted exactly one procedural packet, and no non-submitted item did. All
+292 packet addresses matched 353 prepared-draw callbacks in backend frame
+6001 after repeated packet execution. The other 163 procedural packets came
+from the two non-item emitter callers and matched 268 backend callbacks.
+The 45 generic-wrapper headers again had no match; 4,341 of 4,962 prepared
+draws in backend frame 6001 matched neither observed class.
+
+This proves the observed receiver → selected descriptor/runtime record →
+graphics call → PM4 header → prepared-draw lineage for the item path in one
+frame. It does not prove that the 61 non-submitted items were intentionally
+culled, what the descriptor kind means, which view owns the calls, or how
+addresses behave across unload/reload and reuse. The final graphics call's
+`r5` and `r6` values remain raw arguments until their contract is verified.
+
+### Active higher-level caller paths
+
+The wrapper-caller capture exited normally with executable SHA-256
+`4AA263EB5B608EF98EDE091586B2B06E89E0A9343881612EC7AD3C6EDEFBB94F`.
+Its combined rotated log is
+`.local/native-renderer/snr01/wrapper-caller-frame-6000/title-backend-wrapper.log`
+(SHA-256
+`D653055235DD21659A5342E04EA4250F4C0754C35AA615022B6417E6BBFC933C`).
+Hooks just after the opening `mflr` in `sub_8243D2A0` and `sub_8243BD40`
+record their original caller return addresses. Static generated code shows
+these wrappers invoke vtable slots 40 and 41, respectively. They can also
+invoke other implementations; a wrapper call alone is not a procedural draw.
+
+In source frame 6000, argument equality and immediate call nesting joined
+all nine actual `CProceduralModels` slot-40 calls to their wrapper invocation:
+eight came from `sub_82439B70` at return `0x8243ABC8`, one from
+`sub_8240E7B0` at `0x8240EC80`. The 108 actual slot-41 calls split 94
+from `sub_82439B70` at `0x8243AD70` and 14 from `sub_8240E7B0` at
+`0x8240ED14`. The third static wrapper caller, `sub_82DEF2B0`, was observed
+at wrapper entry but did not invoke these procedural receiver methods in
+this frame. The trace reports balanced procedural scopes and 416 emitter
+packets. This identifies the live parent functions for the saved route, but
+their camera/view and pass semantics still need to be recovered from their
+own inputs and title relationships.
+
+The existing `discover-native-renderer-track-ingress.py` static check passes
+against the generated title and extracted image. RTTI identifies
+`Presentation_Unified::CTrackPresentation` at vtable `0x82243774`; its
+derived slots 75 and 79 point to `sub_82439B70` and `sub_8240E7B0`.
+`discover-native-renderer-direct-indexed-producers.py` also verifies that
+both functions call the unified track presentation helper `0x82436468`.
+The local check outputs are
+`.local/native-renderer/snr01/track-ingress-static.json` and
+`.local/native-renderer/snr01/direct-indexed-static.json`. This makes the
+two live parent functions track-presentation paths, but does not establish
+which camera/view invoked each slot or that every procedural receiver is a
+track mesh.
+
 The next runtime capture must carry a bounded title owner/generation, view,
 record and selected LOD through final draw preparation and join the resulting
 submissions to RenderDoc phase and resource identity.
