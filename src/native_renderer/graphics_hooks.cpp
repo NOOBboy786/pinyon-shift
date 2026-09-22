@@ -233,6 +233,12 @@ thread_local std::vector<Snr01RenderThreadRequest> snr01_render_thread_requests;
 thread_local uint64_t snr01_render_thread_request_count = 0;
 thread_local uint64_t snr01_scene_indirect_count = 0;
 thread_local std::vector<uint32_t> snr01_scene_indirect_callers;
+struct Snr01SceneListFlush {
+  uint32_t caller;
+  uint32_t owner;
+  uint32_t owner_first_word;
+};
+thread_local std::vector<Snr01SceneListFlush> snr01_scene_list_flushes;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -2261,6 +2267,26 @@ void PinyonShiftObserveClearProducerEnd(PPCRegister& r31, PPCRegister& r1) {
       sample.first_shader_destination, sample.refills, sample.nested);
 }
 
+void PinyonShiftObserveSceneListFlushBegin(
+    PPCRegister& r12, PPCRegister& r31, PPCRegister& r30) {
+  if (Snr01TraceCurrentFrame()) {
+    const uint32_t owner = r12.u32 == 0x8241A2A4 ? r30.u32 :
+                           r12.u32 == 0x824399F0 ||
+                                   r12.u32 == 0x8243CE0C ||
+                                   r12.u32 == 0x824170BC
+                               ? r31.u32
+                               : 0;
+    snr01_scene_list_flushes.push_back(
+        {r12.u32, owner, owner ? SnrM02ReadU32(owner) : 0});
+  }
+}
+
+void PinyonShiftObserveSceneListFlushEnd() {
+  if (!snr01_scene_list_flushes.empty()) {
+    snr01_scene_list_flushes.pop_back();
+  }
+}
+
 void PinyonShiftObserveSceneCommandBufferBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
   if (Snr01TraceCurrentFrame()) {
@@ -2289,6 +2315,8 @@ void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
         "FH1 SNR01 scene indirect packet {{\"frame\":{},\"ordinal\":{},"
         "\"header_physical\":{},\"target_physical\":{},"
         "\"words\":{},\"list_object\":{},\"caller_lr\":{},"
+        "\"flush_caller_lr\":{},\"flush_owner\":{},"
+        "\"flush_owner_first_word\":{},"
         "\"view_call\":{},"
         "\"view\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
@@ -2297,6 +2325,15 @@ void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
         snr01_scene_indirect_callers.empty()
             ? 0
             : snr01_scene_indirect_callers.back(),
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().caller,
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner,
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_first_word,
         snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
         snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
   }

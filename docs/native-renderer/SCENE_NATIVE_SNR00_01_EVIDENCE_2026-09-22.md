@@ -1949,3 +1949,50 @@ material or view owner of each draw, and it does not classify the direct
 root-buffer draws or the 15 other child executions. Follow the callers of
 `sub_824167F8` back to the scene object and map each list entry to its
 resource generation before SNR-01/02 or Gate A can close.
+
+### Car owner above the scene-list flush
+
+`sub_824167F8` is the immediate caller of most `sub_82416A00` list
+emissions. A read-only scope at its entry and common return now carries its
+own caller onto the exact scene-indirect packet record. In a normal-exit
+seven-capture replay (executable SHA-256
+`173D824022FE2DACFDC98E6B4702816555DF69E8CCF46D4D30FEC99061439CBF`;
+`.local/native-renderer/snr01/flush-caller-run-a.log` SHA-256
+`BB56A6EC986E9E80CA4B56754BB10A14C4D6153114FB0B2980B7F569CE80172F`),
+the post-view command had 180 prepared draws: all 156
+draws in child buffers matched view-8 scene-list packets; 24 drew directly
+in the later root buffer. The 156 nested draws split by flush caller into
+`0x8243CE0C` (113), `0x8241A2A4` (28), `0x824399F0` (12), and
+`0x824170BC` (3). These return sites belong to `sub_8243CDC0`,
+`sub_82419A30`, `sub_82439960`, and `sub_82417060`, respectively.
+
+The next replay captured the object retained by each of those four caller
+functions. Static generated code retains entry `r3` in `r31` for the
+`0x8243CE0C`, `0x824399F0` and `0x824170BC` paths, and in `r30` for
+`0x8241A2A4`; those are the registers observed at the flush call. This
+normal-exit replay used executable SHA-256
+`79C5FEE10B510B98C8941D3ACE26A14D4CEACD9ADB97AB6A02026A7A14DF052E`;
+`.local/native-renderer/snr01/flush-owner-run-a.log` SHA-256 was
+`78628A0D0E57F8B2110093C49CB4EDE239BCD4157C42F67D77FE7D918C258B32`.
+It produced seven captures. All 132 nested post-view draws joined exactly
+to scene-list packets from view call 8; 27 draws were direct in the root
+buffer. The nested draws used 54 list objects under nine retained owners.
+
+The first word of the retained owner is `0x82003A54` for 97 draws through
+`sub_8243CDC0`, and `0x82001618` for 32 draws through `sub_82439960`
+and `sub_82419A30`. The verified base image
+(SHA-256 `6014727FA7B0B79727FD5F32A2E2377533DC8E29679E8D2462BD764D331FA305`)
+resolves these vtables through RTTI locators `0x823631DC` and
+`0x8235E204` to `CCarPresentation` (inside a thread-safe ref-counted
+wrapper) and `CCarModel`, respectively. The remaining three draws came
+through `sub_82417060`; their owner's first word is `0xBF283F61`, not a
+vtable, so that state pointer remains untyped.
+
+The camera/view verifier reports exact scene-list joins, flush callers and
+owner first words when these fields are present. It passes this replay;
+the track-bucket verifier reports zero unmatched in-view submitted items,
+and the cube-consumer verifier passes for 728 draws. These results prove
+car-related title owners for the nested post-view packets in this window.
+They do not distinguish player from traffic cars, classify the 27 direct
+root-buffer draws, map car materials/geometry or prove resource freshness.
+Those remaining joins are required before SNR-01/02 and Gate A can close.

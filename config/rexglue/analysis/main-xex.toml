@@ -798,6 +798,15 @@ after_instruction = true
 # Observe the exact indirect target/count before its store. r24 is the command
 # List object retained from 82416A00 entry r4. No guest state is modified.
 [[midasm_hook]]
+address = 0x824167FC
+name = "PinyonShiftObserveSceneListFlushBegin"
+registers = ["r12", "r31", "r30"]
+
+[[midasm_hook]]
+address = 0x82416898
+name = "PinyonShiftObserveSceneListFlushEnd"
+
+[[midasm_hook]]
 address = 0x82416A08
 name = "PinyonShiftObserveSceneCommandBufferBegin"
 registers = ["r12", "r3", "r4", "r5"]

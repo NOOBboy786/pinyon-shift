@@ -152,6 +152,17 @@ def verify(path: Path, frame: int):
         assert len(joined_draws) == len(nested_draws)
         assert all(row["view_call"] == 8 and row["caller_lr"] for row in
                    joined_draws)
+        assert all(row["flush_owner"] for row in joined_draws
+                   if "flush_owner" in row and row.get("flush_caller_lr") in
+                   (0x824399F0, 0x8243CE0C, 0x8241A2A4, 0x824170BC))
+        car_owner_vtables = {0x8243CE0C: 0x82003A54,
+                             0x824399F0: 0x82001618,
+                             0x8241A2A4: 0x82001618}
+        assert all(row["flush_owner_first_word"] ==
+                   car_owner_vtables[row["flush_caller_lr"]]
+                   for row in joined_draws
+                   if "flush_owner_first_word" in row and
+                   row.get("flush_caller_lr") in car_owner_vtables)
     draws_by_root = Counter(header for header, _ in draws)
     assert packets and all(draws_by_root[root] for root in roots)
     targets = Counter((draw["surface_info"], draw["color_info"][0],
@@ -252,6 +263,12 @@ def verify(path: Path, frame: int):
             "post_view_scene_list_objects": (
                 len({row["list_object"] for row in joined_draws})
                 if scene_packets else None),
+            "post_view_scene_flush_callers": dict(Counter(
+                hex(row["flush_caller_lr"]) for row in joined_draws
+                if "flush_caller_lr" in row)),
+            "post_view_scene_owner_first_words": dict(Counter(
+                hex(row["flush_owner_first_word"]) for row in joined_draws
+                if "flush_owner_first_word" in row)),
             "post_view_unique_draw_packets": len(packets),
             "post_view_packet_addresses_seen_in_prior_frames": len(
                 packets & prior_packets),
