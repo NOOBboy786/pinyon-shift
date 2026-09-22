@@ -2410,3 +2410,16 @@ semantics. It is an image-writing draw with no captured title packet writer
 or view, and it still blocks freezing the candidate slice. All 24
 attachment-write-free draws and this image-writing draw remain separately
 identified in the ledger; attachment words alone must not decide admission.
+
+The SDK already recognizes this vertex/pixel shader pair as an FH1 native
+position-color pipeline. Its rectangle-clear replacement additionally checks
+the complete pipeline, no query or memory export, CPU-readable vertices,
+constant rectangle color and target bounds before `ClearFh1Rectangles`.
+The observed shader pair, rectangle primitive and write mask make the direct
+draw a **clear candidate**, not an identified clear: this replay did not log
+those further checks or the replacement result for draw 1635. The title's
+existing read-only `sub_8240E130` clear-producer hook likewise has not been
+joined to this packet. A bounded packet-to-producer/clear-result join is the
+next useful check. If it proves a retained scene-target clear, classify its
+image write as a prerequisite to the view-8 object slice and carry its
+resource dependency into SNR-05; otherwise keep it in the unresolved set.
