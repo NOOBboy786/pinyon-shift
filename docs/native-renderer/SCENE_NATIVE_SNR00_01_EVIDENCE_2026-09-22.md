@@ -2321,7 +2321,7 @@ The ordered diagnostic log at
 `81195506136F8624B23E6D21755342F3A426130C90FD322FA7DB038678641EED`.
 `tools/summarize-snr01-frame-wide-census.py` generated the per-draw ledger
 `.local/native-renderer/snr01/frame-wide-census-run-a.json` (SHA-256
-`87A30791CD564751EBA53F06E930A30BF867052C626FB6F6810A828A23CC2450`).
+`8A1609CE42BB560409E12A383A9011D773B2CC3F3BA43D4D05D6E943A28BAF49`).
 It records each draw ordinal, target tuple, execution/root IDs, source frame,
 view and observed flush owner, or an explicit unresolved classification.
 
@@ -2364,3 +2364,10 @@ flush-owner pointer is not yet a mesh/material identity. This is a whole-frame
 accounting of observed lineage, **not** a frozen cut: SNR-00/01 must resolve
 the direct-root semantic owners, the 25 candidate view gaps, retained-pass
 dependencies and actual resource owners before admission or suppression.
+The 24 indirect gaps are consecutive draw ordinals 5152–5175 under one child
+execution (ID 3396208, header `0x12F756D8`, target `0x132C5F00`) whose
+root header `0x12EB876C` was published in source frame 6001. The other gap
+is direct-root draw ordinal 1977 at packet `0x12EB8620`. These are
+capture-specific addresses, not persistent identities. The next probe can
+focus on the missing child-packet producer and the direct-root writer rather
+than expanding the already verified local-car pointer chain.
