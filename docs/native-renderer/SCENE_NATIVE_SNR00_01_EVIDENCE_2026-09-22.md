@@ -1204,3 +1204,39 @@ records each appeared twice in this frame. This proves the selected
 vegetation owner-to-record-to-fetch route, but not the vertex allocation's
 ownership or lifetime, material semantics, final transform, or whether the
 three stream offsets are LODs rather than another title grouping.
+
+### View call to track bucket and backend draw
+
+The title's slot-75 function `0x82439B70` has one common return at
+`0x8243BC74`. A default-off scope around those addresses now records the
+active `CPresentationView` call and the exact bucket range produced by each
+track-presentation call. The saved-race replay exited normally with seven
+captures and executable SHA-256
+`DCAF5223429357FBE21CFEB898B9220DCDD34ADC97B25359E002E6D79E79B7CC`.
+Its combined log is
+`.local/native-renderer/snr01/track-call-frame-6000/title-backend-track-call.log`
+(SHA-256 `3BD68F330D0355753EF2712056B7CC8D1A7DEA5FF88FA2A1A32F1F3B0FC5A410`).
+
+In source frame 6000, 19 slot-75 calls returned with no unfinished or
+unmatched scope. Every one of 392 bucket entries fell within exactly its
+recorded parent call. The resulting 324 selected packet headers joined
+488 backend-frame-6001 prepared-draw callbacks; both ownership verifiers
+passed. The expanded track-bucket verifier checks the view-call existence,
+presenter and view identity, bucket range, packet join and target bits.
+
+| View call / title caller return | Track calls | Buckets | Packets | Backend callbacks | Bound targets |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1 / `0x823FA398` | 1 | 132 | 74 | 74 | Depth only, bit 0 |
+| 2–7 / `0x8240A154` | 12 | 55 | 36 | 36 | Depth + color, bits 0–1 |
+| 8 / `0x8245032C` | 6 | 205 | 214 | 378 | Depth + color, bits 0–1 |
+
+The six middle view calls came from one title caller with distinct raw
+view arguments 0, 4, 2, 1, 3 and 5, consistent with six face selections;
+their camera and target identities are not yet proved. The eighth call
+produced the dominant selected color/depth work and is the main-view
+candidate, while the first call produced depth-only work. These are
+**candidate roles** based on title scheduling and actual bound targets,
+not permission to exclude the other views or suppress draws. Fifteen
+eighth-view buckets in later track calls had no packet in this frame;
+the reason remains to be classified. SNR-00's exact slice and SNR-01's
+camera/pass proof remain open.

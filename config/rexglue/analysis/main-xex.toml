@@ -61,6 +61,10 @@ name = "PinyonShiftObserveTrackPresentation75"
 registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 
 [[midasm_hook]]
+address = 0x8243BC74
+name = "PinyonShiftObserveTrackPresentation75End"
+
+[[midasm_hook]]
 address = 0x8243AB64
 name = "PinyonShiftObserveTrackBucketEntryBegin"
 registers = ["r31", "r24", "r20", "r11", "r27", "r28", "r22"]

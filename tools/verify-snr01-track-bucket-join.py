@@ -58,6 +58,31 @@ def verify(path: Path, source_frame: int, backend_frame: int,
              if row["frame"] == source_frame and row["slot"] == 75]
     assert slots and all(row["receiver"] == presenter and row["arg9"] == view
                          for row in slots), "slot-75 relationship differs"
+    scoped_calls = {(thread, row["call"]): row for thread, row in
+                    events["track presentation"]
+                    if row["frame"] == source_frame and row["slot"] == 75}
+    call_ends = {(thread, row["call"]): row for thread, row in
+                 events["track presentation end"]
+                 if row["frame"] == source_frame}
+    view_calls = {(thread, row["call"]): row for thread, row in
+                  events["view begin"] if row["frame"] == source_frame}
+    track_call_counts = collections.defaultdict(collections.Counter)
+    if call_ends:
+        assert len(scoped_calls) == len(call_ends) == summary["track75_calls"]
+        assert not summary["unfinished_track75_scopes"]
+        assert not summary["unmatched_track75_exits"]
+        for key, call in scoped_calls.items():
+            assert key in call_ends
+            assert call["view_call"] == call_ends[key]["view_call"]
+            assert (key[0], call["view_call"]) in view_calls
+        for thread, row in entries:
+            key = (thread, row["track_call"])
+            assert key in scoped_calls
+            assert scoped_calls[key]["receiver"] == row["presenter"]
+            assert scoped_calls[key]["arg9"] == row["view"]
+            assert (call_ends[key]["first_bucket"] <= row["ordinal"] <=
+                    call_ends[key]["last_bucket"])
+            track_call_counts[key]["buckets"] += 1
     bucket_indices = {5 * row["arg5"] + row["arg6"] for row in slots}
 
     packets = {}
@@ -148,6 +173,13 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 physical_headers.add(packet["header_physical"])
                 callbacks = draws[packet["header_physical"]]
                 assert callbacks, "record packet has no backend draw"
+                if call_ends:
+                    key = (thread, row["track_call"])
+                    track_call_counts[key]["packets"] += 1
+                    track_call_counts[key]["draw_callbacks"] += callbacks
+                    for _, backend in prepared_by_header[packet["header_physical"]]:
+                        track_call_counts[key][
+                            "render_target_bits_" + str(backend["render_target_bits"])] += 1
                 if first and fetch_signature_by_draw:
                     backend_draws = prepared_by_header[packet["header_physical"]]
                     signatures = {fetch_signature_by_draw[draw_thread, draw["ordinal"]]
@@ -486,6 +518,13 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                              in sorted(descriptor_kinds.items())},
         "second_targets": {name: dict(values) for name, values
                            in sorted(second_targets.items())},
+        **({"track_calls": {
+            str(call_id): {"view_call": call["view_call"],
+                           "arg5": call["arg5"], "arg6": call["arg6"],
+                           "arg7": call["arg7"],
+                           **dict(sorted(track_call_counts[thread, call_id].items()))}
+            for (thread, call_id), call in sorted(scoped_calls.items())}}
+            if call_ends else {}),
         **dict(sorted(counts.items())),
     }
 
