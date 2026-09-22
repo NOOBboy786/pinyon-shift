@@ -2293,3 +2293,16 @@ resource generations. Repeated executions must not be counted as additional
 title instances, and shared buffer addresses need allocation/payload lifetime
 proof before native admission. Shader pairs remain diagnostics rather than
 paint, glass, decal or other role labels.
+
+### Full backend target census for the local-car replay
+
+The later normal-exit SNR-02 table-owner replay (log and executable hashes in
+[its evidence](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md#presentation-table-owner))
+contains 4,911 prepared draws in backend frame 6001. Of these, 2,884 share
+surface word `0x14020500`, depth word `0x10400` and both color/depth binding
+bits: 1,577 use color word `0xC0000` and 1,307 use `0x30000`. The local-car
+join accounts for 268 draws on the former color word, but the target tuple
+alone does not identify the main camera, pass membership or material class.
+This bounded census quantifies why the proved local-car chain cannot freeze
+the full main-view slice: other title owners and the relationship between
+these two color words must be resolved before SNR-00/01 can close.

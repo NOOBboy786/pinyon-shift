@@ -189,3 +189,25 @@ arguments (with the third clamped to 0..5) and returns a list pointer or null;
 selector can have no packet, but it does not establish who creates the list
 or its geometry payload. The next trace must follow that producer and join
 its resource lifetime to the prepared draw.
+
+## Static car asset and material binding lead
+
+`tools/discover-native-renderer-vehicle-asset-material.py` passed against
+`.local/derived-source/generated/default` and the verified base image. Its
+local output at `.local/native-renderer/snr02/vehicle-asset-material-static.json`
+has SHA-256
+`199FE0E219BBED156DF7B8FE4A6E7F2C1C520DF7EA130B0488EA383F1326B426`.
+The image RTTI distinguishes `CCarMaterialSettingsResourceType`,
+`CCarModelResourceType`, `CCarMaterialSettingsResource` and
+`CCarModelResource`; the audit checks their vtables against generated functions.
+
+The title's path builder `sub_82543558` uses the `Tire` shader-settings paths,
+including UI, normal and SLOD variants, and a `Wheels` asset path. Car resource
+construction in `sub_824D11B0` calls material binding `sub_82549670` twice
+with its embedded binding object at offset 1056. This proves a title-owned
+tire/wheel material *family* and supplies a precise runtime probe boundary:
+record the root, binding object, load-UI/SLOD flags and asset-key identity at
+`0x82549670`, then join the resulting resource to a selected title draw and
+its backend geometry. The static audit alone does not prove which selected
+local-car draw uses that binding, any other material role, geometry ownership
+or resource freshness. No native admission follows from it.
