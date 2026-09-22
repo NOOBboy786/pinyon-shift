@@ -29,6 +29,9 @@ REXCVAR_DEFINE_INT32(pinyon_shift_snr01_trace_source_frame, 0, "Pinyon Shift",
 REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_resident_packet_writers, false,
                     "Pinyon Shift", "Trace bounded resident PM4 packet writes")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_INT32(pinyon_shift_snr_m02_trace_source_frame, 0, "Pinyon Shift",
+                     "Trace the title command-position wait for three frames")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 namespace {
 
@@ -254,6 +257,53 @@ thread_local uint64_t snr01_unmatched_render_state_exits = 0;
 thread_local uint64_t snr01_unmatched_exits = 0;
 constexpr uint64_t kSnr01PacketLimit = 8192;
 constexpr uint64_t kSnr01ProceduralLimit = 4096;
+constexpr uint64_t kSnrM02WaitLimit = 512;
+constexpr uint64_t kSnrM02WriterLimit = 2048;
+
+struct SnrM02WaitScope {
+  uint64_t ordinal;
+  uint32_t device;
+  uint32_t requested;
+  uint32_t caller;
+  uint32_t published_before;
+  uint32_t produced_before;
+  uint32_t snapshot_published = 0;
+  uint32_t snapshot_counter = 0;
+  uint32_t snapshot_timebase = 0;
+  uint32_t recovery_counter = 0;
+  uint32_t recoveries = 0;
+  bool entered_loop = false;
+  int64_t begin_ns;
+};
+thread_local std::vector<SnrM02WaitScope> snr_m02_wait_scopes;
+thread_local uint64_t snr_m02_wait_count = 0;
+thread_local uint64_t snr_m02_writer_count = 0;
+
+bool SnrM02TraceCurrentFrame() {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr_m02_trace_source_frame);
+  const auto frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  return target > 0 && frame + 1 >= uint64_t(target) &&
+         frame <= uint64_t(target) + 1;
+}
+
+int64_t SnrM02NowNs() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             ClearClock::now().time_since_epoch())
+      .count();
+}
+
+uint32_t SnrM02ReadU32(uint32_t address) {
+  const auto* memory = snr01_memory.load(std::memory_order_acquire);
+  return memory && address
+             ? rex::memory::load_and_swap<uint32_t>(memory->TranslateVirtual(address))
+             : 0;
+}
+
+uint32_t SnrM02Physical(uint32_t address) {
+  const auto* memory = snr01_memory.load(std::memory_order_acquire);
+  return memory && address ? memory->GetPhysicalAddress(address) : UINT32_MAX;
+}
 
 bool Snr01TraceCurrentFrame() {
   static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
@@ -732,6 +782,99 @@ void PinyonShiftObserveTitleDrawEmitterEnd() {
       std::chrono::duration_cast<std::chrono::nanoseconds>(ClearClock::now() -
                                                            sample.begin)
           .count());
+}
+
+void PinyonShiftObserveTitleCounterWaitBegin(PPCRegister& r12,
+                                            PPCRegister& r3, PPCRegister& r4) {
+  if (!SnrM02TraceCurrentFrame() && snr_m02_wait_scopes.empty()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr_m02_wait_count;
+  const uint32_t device = r3.u32;
+  const uint32_t published_ptr = SnrM02ReadU32(device + 11024);
+  snr_m02_wait_scopes.push_back(
+      {ordinal, device, r4.u32, r12.u32, SnrM02ReadU32(published_ptr),
+       SnrM02ReadU32(device + 11036), 0, 0, 0, 0, 0, false, SnrM02NowNs()});
+  if (ordinal == kSnrM02WaitLimit + 1) {
+    REXGPU_INFO("FH1 SNRM02 wait trace limit reached on this title thread");
+  }
+}
+
+void PinyonShiftObserveTitleCounterWaitSnapshot(PPCRegister& r1) {
+  if (snr_m02_wait_scopes.empty()) {
+    return;
+  }
+  auto& scope = snr_m02_wait_scopes.back();
+  scope.entered_loop = true;
+  scope.snapshot_published = SnrM02ReadU32(r1.u32 + 88);
+  scope.snapshot_counter = SnrM02ReadU32(r1.u32 + 92);
+  scope.snapshot_timebase = SnrM02ReadU32(r1.u32 + 100);
+}
+
+void PinyonShiftObserveTitleCounterRecovery(PPCRegister& r30) {
+  if (!snr_m02_wait_scopes.empty()) {
+    ++snr_m02_wait_scopes.back().recoveries;
+    snr_m02_wait_scopes.back().recovery_counter = r30.u32;
+  }
+}
+
+void PinyonShiftObserveTitleCounterWaitEnd() {
+  if (snr_m02_wait_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr_m02_wait_scopes.back();
+  snr_m02_wait_scopes.pop_back();
+  if (scope.ordinal > kSnrM02WaitLimit) {
+    return;
+  }
+  const uint32_t published_ptr = SnrM02ReadU32(scope.device + 11024);
+  const int64_t end_ns = SnrM02NowNs();
+  REXGPU_INFO(
+      "FH1 SNRM02 wait {{\"frame\":{},\"ordinal\":{},"
+      "\"caller_lr\":{},\"device\":{},\"requested\":{},"
+      "\"published_ptr\":{},\"published_physical\":{},"
+      "\"published_before\":{},"
+      "\"published_after\":{},\"produced_before\":{},"
+      "\"produced_after\":{},\"entered_loop\":{},"
+      "\"snapshot_published\":{},\"snapshot_counter\":{},"
+      "\"snapshot_timebase\":{},\"recovery_counter\":{},"
+      "\"recoveries\":{},"
+      "\"begin_ns\":{},\"end_ns\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      scope.ordinal, scope.caller, scope.device, scope.requested,
+      published_ptr, SnrM02Physical(published_ptr), scope.published_before,
+      SnrM02ReadU32(published_ptr),
+      scope.produced_before, SnrM02ReadU32(scope.device + 11036),
+      scope.entered_loop, scope.snapshot_published, scope.snapshot_counter,
+      scope.snapshot_timebase, scope.recovery_counter, scope.recoveries,
+      scope.begin_ns, end_ns);
+}
+
+void PinyonShiftObserveTitleCounterPublish(PPCRegister& r11,
+                                           PPCRegister& r6) {
+  if (!SnrM02TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr_m02_writer_count;
+  if (ordinal > kSnrM02WriterLimit) {
+    if (ordinal == kSnrM02WriterLimit + 1) {
+      REXGPU_INFO("FH1 SNRM02 writer trace limit reached on this title thread");
+    }
+    return;
+  }
+  const uint32_t device = r11.u32;
+  const uint32_t published_ptr = SnrM02ReadU32(device + 11024);
+  const uint32_t flag = SnrM02ReadU32(device + 11068) >> 16 & 0xFF;
+  const uint32_t disable_word = SnrM02ReadU32(device + 21940);
+  REXGPU_INFO(
+      "FH1 SNRM02 writer {{\"frame\":{},\"ordinal\":{},"
+      "\"device\":{},\"published_ptr\":{},\"published\":{},"
+      "\"produced_before\":{},\"disable_word\":{},"
+      "\"publish_flag\":{},\"expected_title_store\":{},"
+      "\"time_ns\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      ordinal, device, published_ptr, SnrM02ReadU32(published_ptr), r6.u32,
+      disable_word, flag, disable_word == 0 && (flag & 2), SnrM02NowNs());
 }
 
 void PinyonShiftObserveTitleDrawPacketPublish(PPCRegister& r3, PPCRegister& r11,

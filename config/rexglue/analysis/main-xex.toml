@@ -1019,6 +1019,32 @@ address = 0x82C6DFA8
 name = "PinyonShiftTraceRetainSourceSlot"
 registers = ["r3", "r4", "r26", "r27", "r29", "r31"]
 
+# SNR-M02 read-only join of the title's requested/published command position,
+# its snapshot and recovery branch, and the conditional title-side publisher.
+[[midasm_hook]]
+address = 0x823E91F8
+name = "PinyonShiftObserveTitleCounterWaitBegin"
+registers = ["r12", "r3", "r4"]
+
+[[midasm_hook]]
+address = 0x823E927C
+name = "PinyonShiftObserveTitleCounterWaitSnapshot"
+registers = ["r1"]
+
+[[midasm_hook]]
+address = 0x829F0564
+name = "PinyonShiftObserveTitleCounterRecovery"
+registers = ["r30"]
+
+[[midasm_hook]]
+address = 0x823E92B4
+name = "PinyonShiftObserveTitleCounterWaitEnd"
+
+[[midasm_hook]]
+address = 0x82457E80
+name = "PinyonShiftObserveTitleCounterPublish"
+registers = ["r11", "r6"]
+
 # Six adjacent compiler-generated adjustment/thunk functions. ReXGlue's gap
 # fill initially coalesces most of this range into one function.
 [functions."82B1ABD0"]

@@ -266,11 +266,11 @@ stores do **not** by themselves prove whether the command processor or GPU
 also writes the memory, nor when that write becomes visible relative to
 submission and fences.
 
-SNR-M02 therefore remains open. The next bounded trace must log the
-published and requested positions, the writer path taken, system-counter
-snapshot/expiry, and the corresponding command submission/fence sequence.
-Any sleep/yield trial must preserve that ordering and compare consumed-swap
-latency, tail behavior and route position against controls, not only CPU use.
+SNR-M02 therefore remained open at this static stage. A later runtime join is
+recorded in [SNR-M02 counter evidence](SCENE_NATIVE_SNRM02_EVIDENCE_2026-09-22.md).
+Any sleep/yield trial must preserve the observed ordering and compare
+consumed-swap latency, tail behavior and route position against controls,
+not only CPU use.
 
 The moving route also sent the scripted car into barriers, invalidating its
 late clear-road window as a traffic-only comparison. The new

@@ -403,9 +403,10 @@ experiment, not a graduation requirement.
   installed legacy cache. Existing saved-state repair is evidence, not completion.
   This is a release gate and a prerequisite wherever SNR-06 needs that source; it
   need not block read-only scene research on the qualified local installation.
-- [ ] **SNR-M02 — Explain the title counter wait.** Map `sub_829F04A8`'s counter
-  writer/reader and synchronization guarantees against the submission timeline.
-  Run a bounded pacing-safe experiment only after that contract is known. Keep
+- [ ] **SNR-M02 — Explain the title counter wait.** The bounded
+  [runtime join](SCENE_NATIVE_SNRM02_EVIDENCE_2026-09-22.md) maps the polling
+  word to `EVENT_WRITE_SHD` command-processor stores. Establish any remaining
+  submission/fence guarantee and run a bounded pacing-safe experiment. Keep
   the result independent of scene-renderer claims and retain no unconditional
   sleep/yield patch based solely on high CPU samples.
 
