@@ -12,8 +12,9 @@ older binary hashes in individual experiment reports describe those experiments.
 | --- | --- |
 | Build or recover an installation | [Building](BUILDING.md), [troubleshooting](TROUBLESHOOTING.md) |
 | Configure experimental graphics | [Graphics recovery/settings](TROUBLESHOOTING.md) |
-| Current findings and remaining work | This document and the [resource migration checklist](native-renderer/NATIVE_RESOURCE_MIGRATION_CHECKLIST.md) |
-| Prioritized performance experiments | [Performance backlog](native-renderer/PERFORMANCE_BACKLOG.md): current baselines, ten candidates, dependencies, and acceptance gates |
+| Primary renderer roadmap | [Scene-native renderer backlog](native-renderer/SCENE_NATIVE_RENDERER_BACKLOG.md): authoritative FH1 scene capture, complete rendering slices, qualification and upstream bypass |
+| Current findings and ownership acceptance | This document and the [resource migration checklist](native-renderer/NATIVE_RESOURCE_MIGRATION_CHECKLIST.md) |
+| Previous performance experiments | [Performance backlog](native-renderer/PERFORMANCE_BACKLOG.md): PERF-00–15 outcomes and evidence gates; [latest CPU findings](native-renderer/CPU_HOTSPOT_RESULTS_2026-09-21.md) |
 | Extend the original game UI | [UI API research and implementation tasks](UI_API_PLAN.md) |
 | Reproduce retained renderer changes | [Owned depth](native-renderer/A6_OWNED_DEPTH_RETENTION.md), [reflection mips](native-renderer/REFLECTION_MIPMAP_REPLACEMENT.md), [Carson cache fix](native-renderer/CARSON_GEOMETRY_CACHE_FIX.md) |
 | Produce and validate artifacts | [Artifact production](native-renderer/P1_ARTIFACT_PRODUCTION.md), [shader pack contract](native-renderer/SHADER_PACK_FORMAT.md), [render tests](native-renderer/FH1_RENDER_TEST_AUTOMATION.md) |
@@ -38,6 +39,13 @@ contents/history, consumers, conflicting writes, reuse and destruction. Reuse
 translated shaders where suitable; measure both removed work and whole-frame
 cost. Independent native draws or a correct screenshot do not prove a complete
 native scene. Full Xenos retirement and lower hardware requirements remain open.
+
+The new implementation direction is an FH1 scene-native D3D12 renderer, informed
+by Skate 3 Recomp's title-level capture and broad draw/resolve replacement. Follow
+the [scene-native backlog](native-renderer/SCENE_NATIVE_RENDERER_BACKLOG.md) for
+execution. Compatibility remains the reference and default until an authoritative,
+faithful rendering slice passes its performance and fallback gates; creating the
+plan does not implement that renderer or revive rejected experiments.
 
 ### Retained changes
 

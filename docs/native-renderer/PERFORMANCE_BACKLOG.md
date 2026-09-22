@@ -1,8 +1,15 @@
 # Performance optimization backlog
 
-Status: PERF-00 through PERF-15 were executed or dispositioned on 2026-09-21
-for the recorded hardware, AppData state and bounded routes. PERF-14 was
-retained; PERF-12 was rejected; PERF-13 and PERF-15 remain evidence-gated.
+Status: **closed as an experiment program**. PERF-00 through PERF-15 were
+executed or dispositioned on 2026-09-21 for the recorded hardware, AppData
+state and bounded routes. PERF-14 was retained; PERF-12 was rejected;
+PERF-13 and PERF-15 were deferred by their entry gates. Deferred items are
+not active tasks in this program; they need fresh evidence before reopening.
+
+The [scene-native renderer backlog](SCENE_NATIVE_RENDERER_BACKLOG.md) now owns
+new architectural work. This document preserves experiment outcomes and
+conditional maintenance leads; its original execution order is historical.
+Use the [post-fix CPU findings](CPU_HOTSPOT_RESULTS_2026-09-21.md) for newer evidence.
 
 Source: the user-supplied ten-optimization audit of `dev` at
 `8049daa12d3dd1eb1e9e71fe96366c47b8007fbb`, reconciled with local source at
@@ -16,13 +23,13 @@ speed, especially in sustained difficult scenes. Recompiled CPU code and
 offline shaders already exist. The remaining opportunities concern resource
 preparation, transfers, command processing, and synchronization.
 
-This is the task breakdown for performance experiments under the existing
+This records the task breakdown for performance experiments under the existing
 [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md).
 That checklist still owns B/C milestone completion and full Xenos retirement.
 Creating this backlog does not resume previously deferred experiments or change
 renderer defaults. The [UI API plan](../UI_API_PLAN.md) remains separate.
 
-## Execution order and dependencies
+## Original execution order and dependencies
 
 IDs preserve the research ranking; execution starts with the smaller experiments.
 Effort describes scope, not a delivery estimate. P0 establishes evidence; P1 is

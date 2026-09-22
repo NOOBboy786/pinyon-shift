@@ -1,8 +1,11 @@
 # Native resource migration checklist
 
-Current status: 2026-09-10. Start with the [development findings](../DEVELOPMENT.md)
+Original milestone status: 2026-09-10. Start with the [development findings](../DEVELOPMENT.md)
 for retained behavior, rejected experiments, installation work and user reports.
-This is the single execution checklist for renderer resource migration.
+This remains the acceptance ledger for resource migration and full Xenos retirement.
+The [scene-native renderer backlog](SCENE_NATIVE_RENDERER_BACKLOG.md) now owns
+implementation order. Its new architecture does not mark any B/C item complete
+or reopen previously deferred experiments unchanged.
 
 ## A — First complete resource chain
 
@@ -31,8 +34,9 @@ The [Carson cache fix](CARSON_GEOMETRY_CACHE_FIX.md) reduces allocation churn
 without raising the 32 MiB/512-entry budget. Its short race comparison and 1x/2x
 smoke pass; sustained town/race acceptance and green-glass reproduction remain open.
 
-**Other B work remains deferred at the user's request.** Neither focused change
-completes B1–B4. Keep containment, recycling, tile-clear and HUD admission
+**Previous incremental B experiments remain deferred.** New work proceeds under
+the scene-native backlog above. Neither focused change completes B1–B4.
+Keep containment, recycling, tile-clear and HUD admission
 experiments unretained; stopped comparisons require new attribution and a revised
 protocol before resuming. See [rejected paths](../DEVELOPMENT.md#rejected-and-unqualified-paths).
 

@@ -1,7 +1,11 @@
 # CPU critical-path performance follow-up
 
-Status: active on 2026-09-21. This plan follows the completed PERF-00–10
-measurements at root `0c274cd` and ShiftGlue `35d0b99`.
+Status: **closed historical follow-up**; architectural priority is superseded
+by the [scene-native renderer backlog](SCENE_NATIVE_RENDERER_BACKLOG.md).
+This plan followed the completed PERF-00–10 measurements at root `0c274cd` and
+ShiftGlue `35d0b99`. Instrumentation and conditional experiment gates remain
+useful; consult the [post-fix CPU findings](CPU_HOTSPOT_RESULTS_2026-09-21.md)
+for the newer sustained capture and hotspot attribution.
 
 ## Decision change
 
@@ -12,7 +16,7 @@ The values use different statistics and asynchronous domains, so their
 difference is not CPU time. They do establish that small GPU copy, clear, and
 resolve savings should not be the next default investment.
 
-The next capture must identify what delays consecutive source frames among
+The capture requested by this plan was intended to identify delays among
 title execution, command publication, SDK preparation/recording, vblank and
 interrupt delivery, GPU submission/completion, and presentation.
 
@@ -56,5 +60,7 @@ separate serialization/dispatch from driver work and to inspect VMX lowering.
    only `simde_mm_vslo`/`simde_mm_vsro` with bit-exact register operations for
    the existing minimum CPU target.
 
-If none qualifies, follow the dominant sampled stack. Do not substitute a
-semantic renderer rewrite or revive a rejected PERF-00–10 candidate.
+These are conditional maintenance experiments, not prerequisites for the new
+scene-native renderer. Follow current sampled evidence when considering one;
+do not revive a rejected PERF-00–10 candidate unchanged. The new backlog replaces
+this plan's earlier restriction against a semantic renderer direction.
