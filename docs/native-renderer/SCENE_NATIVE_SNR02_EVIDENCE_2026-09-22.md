@@ -60,3 +60,30 @@ share shader pairs while using disjoint index ranges; shader identity cannot
 replace the title record. Next, join each record to the geometry, material and
 resource objects it passes into `sub_824399F8`, then prove lifetimes and the
 separate list path before SNR-02 can close.
+
+## Submodel to prepared-draw partition
+
+The same replay's full timestamp-ordered diagnostic log is at
+`.local/native-renderer/snr02/local-car-model-tags-run-a-full.log` (SHA-256
+`ECE23DC261192D72BD55CE768A2B112B61AD2AC907205CD730A75586C072EFCB`).
+Run the verifier with both `--require-model-records` and
+`--require-backend-join` to check the selected record, scene packet, backend
+execution and prepared-draw chain in one capture.
+
+| Title path | Scene buffers | Backend executions | Prepared draws | Distinct index tuples |
+| --- | ---: | ---: | ---: | ---: |
+| `winga` | 2 | 4 | 4 | 2 |
+| `exhaustRa` | 2 | 4 | 4 | 2 |
+| `bumperRa` | 7 | 14 | 14 | 7 |
+| `mirrorR` | 3 | 6 | 6 | 3 |
+| `mirrorL` | 3 | 6 | 6 | 3 |
+| `headlightL` | 6 | 17 | 19 | 6 |
+| `headlightR` | 6 | 17 | 19 | 6 |
+| Separate `sub_82419A30` list path | 8 | 16 | 40 | 5 |
+
+These 112 model draws partition by exact caller and selector: 72 arise from
+the seven named `CCarSubModel` records and 40 from the separate list path.
+The latter reuses selector value 0, so grouping by selector alone would
+incorrectly label those 40 draws as `winga`. The local presentation accounts
+for the other 156 draws in the 268-draw car census. This is draw provenance,
+not proof that each backend execution is a distinct visible car part.

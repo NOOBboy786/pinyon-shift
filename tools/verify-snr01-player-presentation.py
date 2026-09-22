@@ -350,6 +350,35 @@ def main() -> int:
             "local_scene_texture_fetches": len(texture_fetches),
             "local_scene_textures": len(textures),
         }
+        if args.require_model_records:
+            direct_callers = {0x8243786C, 0x82437900, 0x8245AB44}
+            per_submodel = {}
+            for selector, name in expected_names.items():
+                selected_draws = [
+                    r for r in draws
+                    if (scene := scene_by_execution[r["indirect_execution"]])
+                    ["owner_caller_lr"] in direct_callers
+                    and scene["owner_args"][2] == selector
+                ]
+                per_submodel[name] = len(selected_draws)
+            assert per_submodel == {
+                "winga": 4,
+                "exhaustRa": 4,
+                "bumperRa": 14,
+                "mirrorR": 6,
+                "mirrorL": 6,
+                "headlightL": 19,
+                "headlightR": 19,
+            }
+            list_draws = [
+                r for r in draws
+                if scene_by_execution[r["indirect_execution"]]
+                ["owner_caller_lr"] in (0x824380AC, 0x824385C0)
+            ]
+            assert len(list_draws) == 40
+            assert sum(per_submodel.values()) + len(list_draws) == 112
+            backend_summary["local_model_draws_by_submodel"] = per_submodel
+            backend_summary["local_model_draws_by_list_path"] = len(list_draws)
 
     text = args.log.read_text(encoding="utf-8", errors="replace")
     direct_links = text.count("FH1 SNR01 local car owner link ")
