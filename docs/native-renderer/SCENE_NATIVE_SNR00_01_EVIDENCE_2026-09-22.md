@@ -752,3 +752,57 @@ an observed packet inside that iteration. The next ownership join must
 follow the selected model/auxiliary records into their concrete geometry,
 LOD and material submissions, and separately account for deferred or other
 packet producers before assigning an intentional-cull reason.
+
+### Procedural item node to descriptor and packet
+
+The generated `sub_824170D8` loop traverses six linked-list heads. At
+`0x824171AC`, it reads node word 1 as an index, word 2 as an argument, and
+word 0 as the item receiver. It stores the index at caller stack offset 84,
+calls `sub_82417418` at `0x824171D4`, and advances through node word 3 after
+the return at `0x824171D8`. The callee uses that index to address 92-byte
+descriptor and 68-byte runtime-record arrays. This proves what the index
+selects; it does **not** establish that the index means LOD.
+
+Read-only hooks around that call captured node identity, list head,
+receiver, index, view and track-bucket scope, and the procedural-item and
+semantic-packet ranges. The saved sustained race exited normally with
+executable SHA-256
+`90695F45ECCB2D9D1F4D4EF90DF9520E6ACA6C9DED5C151D5A7E396C7F75E9C3`.
+The combined log is
+`.local/native-renderer/snr01/item-node-frame-6000/title-backend-item-node.log`
+(SHA-256 `90920A6E4DDA44DA24756995BADAFB7AE1C5A6CEE3911A246F89DE45B3756D95`).
+
+Source frame 6000 had 350 balanced item-node scopes and 350 item calls,
+with one-to-one receiver/index matches. Of these, 269 nodes occurred inside
+one of eight observed presentation views and a first-path track bucket.
+Exactly 208 submitted one semantic packet each; all 208 packets have exact
+backend-frame-6001 prepared-draw packet-address matches. The other 61
+resolved both descriptor and runtime record but submitted no observed
+semantic packet. Their descriptor kind was 0; no culling reason is yet
+proven. The remaining 81 nodes submitted packets outside those view scopes.
+Three of six static list heads were active in this frame. Per item receiver,
+the descriptor and runtime array bases calculated from the index stayed
+stable. The second track-bucket path did not produce a procedural-item call
+in this capture; its 117 packets need a separate ownership join.
+
+The track-bucket verifier now checks node/item balance, receiver/index and
+packet-range equality, bucket and view ancestry, descriptor/runtime base
+stability, and exact backend draw joins. The indirect-join verifier also
+passed for 133 backend roots, 1,616 indirect executions and 5,242 prepared
+draws. Both verifiers are runnable on the log above:
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/item-node-frame-6000/title-backend-item-node.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/item-node-frame-6000/title-backend-item-node.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+This closes a bounded linked node → descriptor/runtime record → PM4 header
+→ backend draw path for the first track-bucket path. The next probe must
+identify geometry payload, material, transform and pass at the submit call,
+and trace the second bucket path. The 61 non-submitting nodes and other
+packet producers remain unclassified; SNR-01 and Gate A stay open.

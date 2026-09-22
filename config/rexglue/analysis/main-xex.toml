@@ -129,6 +129,15 @@ name = "PinyonShiftObserveProceduralRenderStateBegin"
 registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 
 [[midasm_hook]]
+address = 0x824171D4
+name = "PinyonShiftObserveProceduralItemNodeBegin"
+registers = ["r30", "r24", "r3", "r11", "r25"]
+
+[[midasm_hook]]
+address = 0x824171D8
+name = "PinyonShiftObserveProceduralItemNodeEnd"
+
+[[midasm_hook]]
 address = 0x82417410
 name = "PinyonShiftObserveProceduralRenderStateEnd"
 

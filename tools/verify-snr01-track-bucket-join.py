@@ -29,6 +29,8 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                         assert active_views[thread].pop() == row["view"]
                     elif kind == "track bucket entry":
                         assert active_views[thread][-1] == row["view"]
+                    elif kind == "procedural item":
+                        row["_inside_view"] = bool(active_views[thread])
     assert all(not stack for stack in active_views.values()), "view scope is unfinished"
 
     entries = [(thread, row) for thread, row in events["track bucket entry"]
@@ -64,6 +66,7 @@ def verify(path: Path, source_frame: int, backend_frame: int,
 
     claimed = set()
     physical_headers = set()
+    bucket_by_semantic = {}
     counts = collections.Counter()
     for thread, row in entries:
         assert row["bucket"] == presenter + 56808 + 16 * (
@@ -94,6 +97,8 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 claimed.add(key)
                 packet = packets[kind].get((thread, ordinal))
                 assert packet is not None, "packet ordinal is missing"
+                if kind == "semantic packet":
+                    bucket_by_semantic[(thread, ordinal)] = row
                 physical_headers.add(packet["header_physical"])
                 callbacks = draws[packet["header_physical"]]
                 assert callbacks, "record packet has no backend draw"
@@ -103,6 +108,84 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         counts[path_name + "_producing_entries"] += bool(produced)
     assert len(physical_headers) == len(claimed), "packet header address reused"
 
+    descriptor_bases = {}
+    descriptor_kinds = collections.Counter()
+    first_models_with_items = set()
+    for thread, item in events["procedural item"]:
+        if item["frame"] != source_frame or not item["submit_seen"]:
+            continue
+        assert item["first_semantic_packet"] == item["last_semantic_packet"]
+        bucket = bucket_by_semantic.get((thread, item["first_semantic_packet"]))
+        if bucket is None:
+            counts["submitted_items_outside_buckets"] += 1
+            counts["submitted_items_inside_view_unmatched"] += item["_inside_view"]
+            continue
+        assert item["descriptor_seen"] and item["runtime_seen"]
+        path_name = "first" if bucket["record"] else "second"
+        counts[path_name + "_submitted_items"] += 1
+        descriptor_kinds[(path_name, item["descriptor_kind"])] += 1
+        bases = (item["descriptor_address"] - 92 * item["descriptor_index"],
+                 item["runtime_address"] - 68 * item["descriptor_index"])
+        receiver = item["receiver"]
+        assert receiver not in descriptor_bases or descriptor_bases[receiver] == bases
+        descriptor_bases[receiver] = bases
+        if path_name == "first" and "first_object" in bucket:
+            first_models_with_items.add(bucket["first_object"])
+    if first_model_vtable is not None:
+        assert counts["first_submitted_items"] == counts["first_packets"]
+        assert not counts["second_submitted_items"]
+        assert not counts["submitted_items_inside_view_unmatched"]
+
+    nodes = [(thread, row) for thread, row in events["item node"]
+             if row["frame"] == source_frame]
+    if nodes:
+        assert summary["item_nodes"] == len(nodes) < summary["scope_limit"]
+        assert not summary["unfinished_item_node_scopes"]
+        assert not summary["unmatched_item_node_exits"]
+        assert [row["ordinal"] for _, row in nodes] == list(range(1, len(nodes) + 1))
+        items = {(thread, row["call"]): row
+                 for thread, row in events["procedural item"]
+                 if row["frame"] == source_frame}
+        assert len(items) == len(nodes), "item call has no linked node"
+        buckets = {(thread, row["ordinal"]): row for thread, row in entries}
+        view_calls = {(thread, row["call"]): row
+                      for thread, row in events["view begin"]
+                      if row["frame"] == source_frame}
+        claimed_items = set()
+        for thread, node in nodes:
+            assert node["node"] and node["list_head"]
+            assert node["first_item"] == node["last_item"]
+            key = (thread, node["first_item"])
+            assert key not in claimed_items and key in items
+            claimed_items.add(key)
+            item = items[key]
+            assert item["receiver"] == node["receiver"]
+            assert item["descriptor_seen"] and item["runtime_seen"]
+            assert item["descriptor_index"] == node["index"]
+            bases = (item["descriptor_address"] - 92 * node["index"],
+                     item["runtime_address"] - 68 * node["index"])
+            receiver = item["receiver"]
+            assert receiver not in descriptor_bases or descriptor_bases[receiver] == bases
+            descriptor_bases[receiver] = bases
+            assert (item["first_semantic_packet"], item["last_semantic_packet"]) == (
+                node["first_semantic"], node["last_semantic"])
+            if node["bucket_entry"]:
+                bucket = buckets[(thread, node["bucket_entry"])]
+                assert node["view_call"] and bucket["record"]
+                assert view_calls[(thread, node["view_call"])]["view"] == bucket["view"]
+                assert bucket["first_semantic"] <= node["first_semantic"]
+                assert node["last_semantic"] <= bucket["last_semantic"]
+                if item["submit_seen"]:
+                    assert bucket_by_semantic[(thread, node["first_semantic"])] is bucket
+                counts["first_item_nodes"] += 1
+                counts["first_item_nodes_without_packet"] += not item["submit_seen"]
+            else:
+                assert not node["view_call"]
+                counts["item_nodes_outside_view"] += 1
+            assert item["submit_seen"] == (
+                node["first_semantic"] == node["last_semantic"])
+        assert claimed_items == set(items)
+
     return {
         "source_frame": source_frame,
         "backend_frame": backend_frame,
@@ -110,6 +193,10 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         "presenter": hex(presenter),
         "entries": len(entries),
         "packet_headers": len(physical_headers),
+        "descriptor_receivers": len(descriptor_bases),
+        "first_models_with_items": len(first_models_with_items),
+        "descriptor_kinds": {f"{path}:{kind}": count for (path, kind), count
+                             in sorted(descriptor_kinds.items())},
         **dict(sorted(counts.items())),
     }
 

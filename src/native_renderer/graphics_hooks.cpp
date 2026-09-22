@@ -132,10 +132,23 @@ struct Snr01TrackBucketScope {
   uint32_t auxiliary_flag = 0;
   bool auxiliary_seen = false;
 };
+struct Snr01ItemNodeScope {
+  uint32_t node;
+  uint32_t list_head;
+  uint32_t receiver;
+  uint32_t index;
+  uint32_t render_owner;
+  uint64_t view_call;
+  uint64_t bucket_entry;
+  uint64_t first_item_call;
+  uint64_t first_semantic_packet;
+  uint64_t ordinal;
+};
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
 thread_local std::vector<Snr01ViewScope> snr01_view_scopes;
 thread_local std::vector<Snr01TrackBucketScope> snr01_track_bucket_scopes;
+thread_local std::vector<Snr01ItemNodeScope> snr01_item_node_scopes;
 thread_local std::vector<uint32_t> snr01_primary_indirect_callers;
 thread_local std::vector<uint32_t> snr01_queued_indirect_callers;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
@@ -156,11 +169,13 @@ thread_local uint64_t snr01_view_begin_count = 0;
 thread_local uint64_t snr01_view_selected_count = 0;
 thread_local uint64_t snr01_view_track_count = 0;
 thread_local uint64_t snr01_track_bucket_count = 0;
+thread_local uint64_t snr01_item_node_count = 0;
 thread_local uint64_t snr01_direct_call_count = 0;
 thread_local uint64_t snr01_direct_packet_count = 0;
 thread_local uint64_t snr01_primary_indirect_packet_count = 0;
 thread_local uint64_t snr01_unmatched_direct_exits = 0;
 thread_local uint64_t snr01_unmatched_track_bucket_exits = 0;
+thread_local uint64_t snr01_unmatched_item_node_exits = 0;
 thread_local uint64_t snr01_unmatched_emitter_exits = 0;
 thread_local uint64_t snr01_unmatched_dispatch_exits = 0;
 thread_local uint64_t snr01_unmatched_render_state_exits = 0;
@@ -372,6 +387,8 @@ void PinyonShiftObserveGraphicsFrame() {
         "\"track_bucket_entries\":{},"
         "\"unfinished_track_bucket_scopes\":{},"
         "\"unmatched_track_bucket_exits\":{},"
+        "\"item_nodes\":{},\"unfinished_item_node_scopes\":{},"
+        "\"unmatched_item_node_exits\":{},"
         "\"direct_calls_swap_thread\":{},"
         "\"draw_header_packets_swap_thread\":{},"
         "\"unmatched_direct_exits_swap_thread\":{},"
@@ -393,6 +410,8 @@ void PinyonShiftObserveGraphicsFrame() {
         snr01_track_pass_count,
         snr01_track_bucket_count, snr01_track_bucket_scopes.size(),
         snr01_unmatched_track_bucket_exits,
+        snr01_item_node_count, snr01_item_node_scopes.size(),
+        snr01_unmatched_item_node_exits,
         snr01_direct_call_count, snr01_direct_packet_count,
         snr01_unmatched_direct_exits, snr01_direct_scopes.size(),
         snr01_unmatched_exits,
@@ -406,6 +425,7 @@ void PinyonShiftObserveGraphicsFrame() {
   }
   snr01_emitter_scopes.clear();
   snr01_track_bucket_scopes.clear();
+  snr01_item_node_scopes.clear();
   snr01_direct_scopes.clear();
   snr01_dispatch_scopes.clear();
   snr01_render_state_scopes.clear();
@@ -419,6 +439,7 @@ void PinyonShiftObserveGraphicsFrame() {
       snr01_dispatch_wrapper_count = snr01_track75_count =
       snr01_track79_count = snr01_track_pass_count =
       snr01_track_bucket_count = snr01_unmatched_track_bucket_exits =
+      snr01_item_node_count = snr01_unmatched_item_node_exits =
       snr01_direct_call_count = snr01_direct_packet_count =
       snr01_unmatched_direct_exits = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
@@ -835,6 +856,46 @@ void PinyonShiftObserveProceduralRenderStateEnd() {
         scope.arg8, scope.arg9, scope.arg10,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_procedural_call + 1, snr01_procedural_count);
+  }
+}
+
+void PinyonShiftObserveProceduralItemNodeBegin(
+    PPCRegister& r30, PPCRegister& r24, PPCRegister& r3,
+    PPCRegister& r11, PPCRegister& r25) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  snr01_item_node_scopes.push_back(
+      {r30.u32, r24.u32, r3.u32, r11.u32, r25.u32,
+       snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+       snr01_track_bucket_scopes.empty()
+           ? 0 : snr01_track_bucket_scopes.back().ordinal,
+       snr01_procedural_count, snr01_semantic_packet_count,
+       ++snr01_item_node_count});
+}
+
+void PinyonShiftObserveProceduralItemNodeEnd() {
+  if (snr01_item_node_scopes.empty()) {
+    if (Snr01TraceCurrentFrame()) {
+      ++snr01_unmatched_item_node_exits;
+    }
+    return;
+  }
+  const auto scope = snr01_item_node_scopes.back();
+  snr01_item_node_scopes.pop_back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 item node {{\"frame\":{},\"ordinal\":{},"
+        "\"node\":{},\"list_head\":{},\"receiver\":{},"
+        "\"index\":{},\"render_owner\":{},\"view_call\":{},"
+        "\"bucket_entry\":{},\"first_item\":{},\"last_item\":{},"
+        "\"first_semantic\":{},\"last_semantic\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.node, scope.list_head, scope.receiver,
+        scope.index, scope.render_owner, scope.view_call,
+        scope.bucket_entry, scope.first_item_call + 1,
+        snr01_procedural_count, scope.first_semantic_packet + 1,
+        snr01_semantic_packet_count);
   }
 }
 
