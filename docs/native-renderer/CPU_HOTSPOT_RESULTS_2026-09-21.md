@@ -211,3 +211,18 @@ command thread is still busy, so the title wait-loop experiment should be
 compared with a GPU submission timeline before treating reduced title CPU as
 a frame-time win. Do not add another logging or shader-cache optimization
 based on the pre-fix trace.
+
+## Follow-up: visible race traffic
+
+After the shader repair, the player reports roughly 10 FPS more in open world,
+but the race remains difficult to play. With other cars visible, race FPS is
+about 40% below open world; in first place with no cars visible, it is about
+10% below open world. These are observations, not matched measurements, and
+race position also changes scene and simulation state.
+
+Capture repeated traffic-heavy and clear-road windows at the same resolution,
+route, weather, and vehicle state. Record visible car count, per-frame draw and
+geometry/texture upload counts, source/present intervals, and title/GPU thread
+stacks. Compare equivalent windows before deciding whether car rendering,
+simulation, submission, or GPU execution causes the gap. Keep the current game
+session available for manual testing; collect traces in a later run.
