@@ -27,7 +27,8 @@ def verify(path: Path, frame: int):
         if match:
             row = json.loads(match[3])
             row["_thread"] = int(match[1])
-            if row["frame"] in (frame, frame + 1):
+            if row["frame"] in (frame, frame + 1) or (
+                    match[2] == "prepared draw" and row["frame"] == frame - 1):
                 events[match[2]].append((position, row))
 
     starts, ends = events["view object400"], events["view end"]
@@ -100,6 +101,22 @@ def verify(path: Path, frame: int):
                for surface, color, depth, bits in targets)
     direct = [row for _, row in events["direct packet"]
               if row["frame"] == frame and row["header_physical"] in packets]
+    prior_packets = {row["packet_physical"] for _, row in
+                     events["prepared draw"] if row["frame"] in (frame - 1, frame)}
+    if prior_packets:
+        assert packets - prior_packets == {row["header_physical"] for row in direct}
+    fields = ("vertex_shader", "pixel_shader", "index_count",
+              "index_buffer_type", "index_buffer_guest_base",
+              "index_buffer_length", "guest_primitive_type",
+              "vertex_fetch_count", "texture_fetch_count")
+    metadata = {}
+    for _, row in events["prepared draw"]:
+        if row["packet_physical"] in packets:
+            key = (row["packet_physical"], row["frame"] == frame + 1)
+            metadata.setdefault(key, set()).add(tuple(row[field] for field in fields))
+    matching_prior_metadata = sum(
+        metadata.get((packet, False)) == metadata.get((packet, True))
+        for packet in packets & prior_packets)
     assert direct and all(row["direct_call"] == 0 and
                           row["path"] == "indexed2_secondary" for row in direct)
     callers = Counter(row.get("indexed2_caller_lr", 0) for row in direct)
@@ -121,6 +138,7 @@ def verify(path: Path, frame: int):
         assert len(title_direct) == 1
         assert owner_position < title_direct[0][0] < ends[-1][0]
         assert title_direct[0][1]["header_physical"] in packets
+        assert matching_prior_metadata == len(packets & prior_packets)
     return {"frame": frame, "main_camera": hex(main),
             "reflection_camera": hex(reflection),
             "view_calls": len(starts), "slot44_in_view": 8,
@@ -129,6 +147,10 @@ def verify(path: Path, frame: int):
             "post_view_primary_packets": len(roots),
             "post_view_prepared_draws": len(draws),
             "post_view_unique_draw_packets": len(packets),
+            "post_view_packet_addresses_seen_in_prior_frames": len(
+                packets & prior_packets),
+            "post_view_packet_addresses_with_matching_prior_metadata":
+                matching_prior_metadata,
             "post_view_draws_by_root": {hex(root): count for root, count
                                         in sorted(draws_by_root.items())},
             "post_view_color_words": {hex(color): count for

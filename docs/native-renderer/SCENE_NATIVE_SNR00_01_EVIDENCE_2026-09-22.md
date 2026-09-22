@@ -1708,3 +1708,29 @@ packet writes still pass `CStandardParticleRenderer`; most of the 185 packet
 addresses under the deferred roots lack an indexed2 direct-packet record.
 The selected scene slice and any main-view dependency boundary remain
 unproved, so SNR-00, SNR-01 and Gate A remain open.
+
+### Deferred packet address recurrence
+
+The camera/view verifier now compares the post-view root's distinct prepared
+draw packet addresses in backend frame 6001 with prepared draws in backend
+frames 5999 and 6000. It asserts that addresses not seen in those prior
+frames exactly equal the source-frame-6000 direct-packet records. Four saved
+captures pass:
+
+| Replay | Post-view addresses | Seen in prior frames | New direct records |
+| --- | ---: | ---: | ---: |
+| `camera-method-run-b` | 10 | 1 | 9 |
+| `indexed2-caller-run-a` | 187 | 178 | 9 |
+| `secondary-guard-run-a` | 154 | 142 | 12 |
+| `indexed2-owner-run-a` | 185 | 176 | 9 |
+
+In the last replay, all 176 recurring addresses occur in **each** of backend
+frames 5999 and 6000. Their captured draw metadata matches frame 6001 at each
+address: vertex/pixel shader IDs, index count/type/base/length, primitive type,
+and vertex/texture fetch counts. These are recurrent prepared packet addresses,
+not 176 source-frame-6000 writes missing from the direct-packet hook. The
+addresses are absent from other frame-6001 command roots. Their earlier title
+owners and allocation generations remain unknown; stable addresses and draw
+metadata do not prove stable buffer contents or a main-view pass boundary.
+The next ownership probe should follow the title references to these resident
+command buffers, then check their resource generations before any suppression.
