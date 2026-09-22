@@ -977,6 +977,26 @@ void PinyonShiftObserveProceduralResourceResolution(PPCRegister& r3) {
   }
 }
 
+void PinyonShiftObserveSecondTrackDispatch(
+    PPCRegister& r31, PPCRegister& r11, PPCRegister& r4,
+    PPCRegister& r5, PPCRegister& r6, PPCRegister& r7,
+    PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
+  if (!Snr01TraceCurrentFrame() || snr01_track_bucket_scopes.empty()) {
+    return;
+  }
+  const auto& bucket = snr01_track_bucket_scopes.back();
+  if (bucket.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 second track dispatch {{\"frame\":{},"
+        "\"bucket_entry\":{},\"object\":{},\"target\":{},"
+        "\"arg4\":{},\"arg5\":{},\"arg6\":{},\"arg7\":{},"
+        "\"arg8\":{},\"arg9\":{},\"arg10\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        bucket.ordinal, r31.u32, r11.u32, r4.u32, r5.u32,
+        r6.u32, r7.u32, r8.u32, r9.u32, r10.u32);
+  }
+}
+
 void PinyonShiftObserveProceduralGeometrySubmit(
     PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
     PPCRegister& r6) {

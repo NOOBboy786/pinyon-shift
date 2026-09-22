@@ -861,3 +861,62 @@ python tools/verify-snr01-indirect-join.py `
 The next relationship to recover is the concrete resource type and the
 geometry/index source behind the final draw. Key-to-object stability must
 also be retested across unload/reload and address reuse before SNR-02.
+
+### Second bucket path: live virtual targets
+
+The second path calls `sub_8243BD40` with its resolved object, then invokes
+that object's vtable slot 41 at `0x8243BEB4`. RTTI in the extracted image
+identifies four 42-slot vtables. The static verifier now checks their
+decorated names, deleting destructors and slot-40/41 targets; its local
+output is `.local/native-renderer/snr01/second-dispatch-static.json`.
+
+| Slot-41 target | RTTI class in `proceduralGeometry` | Vtable |
+| --- | --- | --- |
+| `0x82417BC0` | `CProceduralModels` | `0x82002B5C` |
+| `0x823FDE50` | `CProceduralAnimatedScene` | `0x820029FC` |
+| `0x8245AB88` | `CProceduralCharacters` | `0x8200289C` |
+| `0x824136F0` | `CProceduralVegetation` | `0x82002AAC` |
+
+A read-only call-site hook captured the object and actual target in a
+saved-race replay. It exited normally with executable SHA-256
+`4E189BB5ED6C5C29E61F07B15A365BFD7158B023B5543582779CE0EFE735D632`.
+The combined log is
+`.local/native-renderer/snr01/second-dispatch-frame-6000/title-backend-second-dispatch.log`
+(SHA-256 `0EE907D3F79F840BC9FE49CC070DECB26793C6020E3D25E95EC619A26D17EC68`).
+All 145 second-path bucket entries invoked exactly one slot-41 target on
+the same object returned by their secondary resolver. Their source-frame
+6000 packet and backend-frame-6001 draw joins break down as follows:
+
+| Class | Entries | Entries with packets | Distinct packets | Prepared-draw callbacks |
+| --- | ---: | ---: | ---: | ---: |
+| Procedural models | 97 | 0 | 0 | 0 |
+| Animated scene | 12 | 6 | 10 | 17 |
+| Characters | 24 | 24 | 24 | 28 |
+| Vegetation | 12 | 10 | 88 | 140 |
+| Total | 145 | 40 | 122 | 185 |
+
+The 97 model calls with no scoped packet are not proven culled. The
+character, vegetation and animated-scene virtual functions are the next
+concrete owners to trace into mesh, instance and material submissions.
+The expanded track-bucket verifier checks target membership, exact
+object equality, one dispatch per second entry, and each target's packet
+and backend-draw counts. The indirect verifier passed for 132 backend
+roots, 1,578 executions and 4,863 prepared draws:
+
+```powershell
+python tools/discover-native-renderer-track-ingress.py `
+  .local/generated/default `
+  --image .local/ui-verify/default-image.bin `
+  --output .local/native-renderer/snr01/second-dispatch-static.json
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/second-dispatch-frame-6000/title-backend-second-dispatch.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/second-dispatch-frame-6000/title-backend-second-dispatch.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+SNR-01 remains open: target class identity is stronger than an anonymous
+secondary record, but no selected second-path packet has a verified
+mesh/instance, transform or material owner yet.

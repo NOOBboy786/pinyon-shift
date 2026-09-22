@@ -120,6 +120,34 @@ CLASSES = {
         "destructor": 0x82C22A78,
         "role": "world_section_procedural_geometry_object",
     },
+    "procedural_models": {
+        "decorated_name": ".?AVCProceduralModels@proceduralGeometry@@",
+        "vtable": 0x82002B5C,
+        "slots": 42,
+        "destructor": 0x82E1D9B0,
+        "role": "second_track_bucket_procedural_models",
+    },
+    "procedural_animated_scene": {
+        "decorated_name": ".?AVCProceduralAnimatedScene@proceduralGeometry@@",
+        "vtable": 0x820029FC,
+        "slots": 42,
+        "destructor": 0x82E22518,
+        "role": "second_track_bucket_animated_scene",
+    },
+    "procedural_characters": {
+        "decorated_name": ".?AVCProceduralCharacters@proceduralGeometry@@",
+        "vtable": 0x8200289C,
+        "slots": 42,
+        "destructor": 0x82E20E30,
+        "role": "second_track_bucket_characters",
+    },
+    "procedural_vegetation": {
+        "decorated_name": ".?AVCProceduralVegetation@proceduralGeometry@@",
+        "vtable": 0x82002AAC,
+        "slots": 42,
+        "destructor": 0x82E1D960,
+        "role": "second_track_bucket_vegetation",
+    },
     "track_procedural_geometry_resource": {
         "decorated_name": ".?AVCTrackProceduralGeometryResource@@",
         "vtable": 0x82144D7C,
@@ -158,6 +186,10 @@ RELATIONSHIPS = (
 )
 
 KEY_SLOTS = {
+    "procedural_models": {40: 0x824170D8, 41: 0x82417BC0},
+    "procedural_animated_scene": {40: 0x82449AC0, 41: 0x823FDE50},
+    "procedural_characters": {40: 0x82463350, 41: 0x8245AB88},
+    "procedural_vegetation": {40: 0x823F9618, 41: 0x824136F0},
     "presentation_view": {13: 0x82444E60},
     "presentation_view_refcounted": {13: 0x82444E60},
     "track_presentation_refcounted_unified": {

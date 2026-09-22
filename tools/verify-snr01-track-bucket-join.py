@@ -9,6 +9,12 @@ from pathlib import Path
 
 
 EVENT = re.compile(r"\[t(\d+)\] FH1 SNR01 (.*?) (\{.*\})")
+SECOND_TARGETS = {
+    0x82417BC0: "procedural_models",
+    0x823FDE50: "procedural_animated_scene",
+    0x8245AB88: "procedural_characters",
+    0x824136F0: "procedural_vegetation",
+}
 
 
 def verify(path: Path, source_frame: int, backend_frame: int,
@@ -246,6 +252,34 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             counts["resolved_resource_objects"] = len({
                 obj for objects in objects_by_key.values() for obj in objects})
 
+    second_targets = collections.defaultdict(collections.Counter)
+    dispatches = [(thread, row) for thread, row in events["second track dispatch"]
+                  if row["frame"] == source_frame]
+    if dispatches:
+        buckets = {(thread, row["ordinal"]): row for thread, row in entries}
+        expected = {key for key, row in buckets.items() if not row["record"]}
+        dispatched = set()
+        for thread, dispatch in dispatches:
+            key = (thread, dispatch["bucket_entry"])
+            assert key in expected and key not in dispatched
+            dispatched.add(key)
+            bucket = buckets[key]
+            assert dispatch["object"] == bucket["secondary_resolved"]
+            target = SECOND_TARGETS[dispatch["target"]]
+            second_targets[target]["entries"] += 1
+            produced = 0
+            for kind, label in (("semantic packet", "semantic"),
+                                ("direct packet", "direct")):
+                for ordinal in range(bucket["first_" + label],
+                                     bucket["last_" + label] + 1):
+                    packet = packets[kind][(thread, ordinal)]
+                    second_targets[target]["packets"] += 1
+                    second_targets[target]["draw_callbacks"] += draws[
+                        packet["header_physical"]]
+                    produced += 1
+            second_targets[target]["producing_entries"] += bool(produced)
+        assert dispatched == expected
+
     return {
         "source_frame": source_frame,
         "backend_frame": backend_frame,
@@ -257,6 +291,8 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         "first_models_with_items": len(first_models_with_items),
         "descriptor_kinds": {f"{path}:{kind}": count for (path, kind), count
                              in sorted(descriptor_kinds.items())},
+        "second_targets": {name: dict(values) for name, values
+                           in sorted(second_targets.items())},
         **dict(sorted(counts.items())),
     }
 
