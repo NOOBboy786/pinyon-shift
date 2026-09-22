@@ -2047,3 +2047,30 @@ from the AI/traffic map-entity types, and a vehicle ID getter at
 as required. The next probe must carry that map-entity identity into the
 car presentation/model instance before any post-view draw can be called
 the player's.
+
+### Shared vehicle-ID getter call is a track/procedural path
+
+The apparent nearby bridge at `sub_8243DF70` calls `sub_82BBA010` at
+return site `0x8243E548`. A bounded read-only probe recorded the getter
+receiver, returned word and enclosing `r31` object from the start of the
+saved sustained-race route through source frame 6000. The normal-exit,
+seven-capture run used executable SHA-256
+`C3E66697DD5C9B50A3345FBCE16BE14FDA3AEAAA7942F1A1C75D5D06E578C609`;
+the isolated session log at
+`.local/native-renderer/snr01/entity-id-run-b.log` has SHA-256
+`02D4AE79C5AF62A2E565DA87FBA6A993B83943CCA1EC8E855812FC975EE8B605`.
+The camera/view verifier passes, with all 228 nested post-view draws
+joining exactly to view-8 scene lists.
+
+All 25 observed getter receivers, spanning source frames 1588–4086,
+had vtable `0x820029FC`, which resolves through base-image RTTI to
+`proceduralGeometry::CProceduralAnimatedScene`. Every enclosing object
+was the same pointer with vtable `0x82003CCC`, resolved as
+`CTrackPresentation`. No receiver had the `CMapEntityVehiclePlayerLocal`
+vtable `0x8201D380`, and neither receiver nor enclosing pointer matched
+any of the 17 nonzero view-8 car flush owners in frame 6000. The
+returned `+12` words were pointer-shaped, not demonstrated vehicle IDs.
+`sub_82BBA010` is reused outside the map-entity vtable: a call to it
+alone cannot label a car. The temporary probe was removed after this
+negative result; the direct map-entity pool path remains the next
+semantic ingress to trace.
