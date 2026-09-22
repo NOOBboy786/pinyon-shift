@@ -2143,3 +2143,32 @@ and view-8 owner membership. SNR-01 now has a verified local-player-to-`CCar`
 edge and verified car-presentation draw owners, but still needs the title
 method or registration boundary that associates that `CCar` with one of the
 eight presentations/models before Gate A can close.
+
+### The local `CCar` and its draw-owning presentation share livery identity
+
+A follow-up normal-exit sustained-race replay at source frame 6000 produced
+seven captures with executable SHA-256
+`1692FAFAAF184DBBA8EC0325864EDDF5EE2409E443B1B9C8DA542FBB93DA9A49`.
+The isolated session log at
+`.local/native-renderer/snr01/local-car-shared-pointer-run-d.log` has SHA-256
+`40A8449ABD295AA74D526823E12A92A2215325398C07C67DA8077F440E5EA289`.
+`tools/verify-snr01-player-presentation.py --require-local-presentation`
+passes on that log.
+
+The profile-bearing `Forza2::CPlayer` again selected one live `CCar`. A bounded
+read-only comparison of aligned fields found that car's offset-12292 pointer in
+exactly one of the eight surviving `CCarPresentation` objects, at offset 2800.
+The shared object's exact vtable is `0x8222F4A4`; RTTI in the verified base image
+identifies it as `CCarLiveryResource`. No approximate address, pose or spatial
+catalogue match participates in this association. The durable trace now checks
+only these two proved fields and logs the unique match.
+
+The associated presentation had exact vtable `0x82003A54`, was a view-8 flush
+owner, and emitted 12 distinct view-8 scene indirect buffers through the same
+`0x8243CE0C` presentation flush return site. Those buffers contained 17,070 PM4
+words in total and retained the previously proved scene-list-to-prepared-draw
+lineage. This closes the missing semantic local-player `CCar` →
+`CCarLiveryResource` → `CCarPresentation` → view-8 submission-owner edge. SNR-01
+still requires complete selected-slice accounting, mesh/instance ownership and
+explicit culling classification before its acceptance condition can be marked
+complete.

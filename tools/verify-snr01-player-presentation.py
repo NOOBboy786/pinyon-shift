@@ -10,6 +10,9 @@ from pathlib import Path
 
 PLAYER_PREFIX = "FH1 SNR01 Forza player "
 PRESENTATION_PREFIX = "FH1 SNR01 car presentation "
+LOCAL_PRESENTATION_PREFIX = "FH1 SNR01 local car presentation link "
+DISCOVERY_PREFIX = "FH1 SNR01 local car presentation shared pointer "
+SCENE_PACKET_PREFIX = "FH1 SNR01 scene indirect packet "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -25,6 +28,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("log", type=Path)
     parser.add_argument("--frame", type=int, default=6000)
+    parser.add_argument("--require-local-presentation", action="store_true")
     args = parser.parse_args()
 
     players = [r for r in records(args.log, PLAYER_PREFIX) if r["frame"] == args.frame]
@@ -50,6 +54,44 @@ def main() -> int:
     }
     assert all(r["view8_owner"] for r in presentations)
 
+    local_presentations = [
+        r for r in records(args.log, LOCAL_PRESENTATION_PREFIX)
+        if r["frame"] == args.frame
+    ]
+    if not local_presentations:
+        local_presentations = [
+            {
+                "frame": r["frame"],
+                "car": r["car"],
+                "presentation": r["presentation"],
+                "livery": r["shared"],
+                "livery_vtable": r["shared_vtable"],
+                "view8_owner": True,
+            }
+            for r in records(args.log, DISCOVERY_PREFIX)
+            if r["frame"] == args.frame
+            and r["car_offset"] == 12292
+            and r["presentation_offset"] == 2800
+        ]
+    scene_packets = records(args.log, SCENE_PACKET_PREFIX)
+    if args.require_local_presentation:
+        assert len(local_presentations) == 1
+        local = local_presentations[0]
+        assert local["car"] == local_players[0]["link160"]
+        assert local["livery_vtable"] == 0x8222F4A4
+        assert local["view8_owner"]
+        assert local["presentation"] in {r["presentation"] for r in presentations}
+        local_packets = [
+            r for r in scene_packets
+            if r["frame"] == args.frame
+            and r["view_call"] == 8
+            and r["flush_owner"] == local["presentation"]
+        ]
+        assert len(local_packets) == 12
+        assert {r["flush_caller_lr"] for r in local_packets} == {0x8243CE0C}
+        assert {r["flush_owner_first_word"] for r in local_packets} == {0x82003A54}
+        assert len({r["target_physical"] for r in local_packets}) == 12
+
     text = args.log.read_text(encoding="utf-8", errors="replace")
     direct_links = text.count("FH1 SNR01 local car owner link ")
     reverse_links = text.count("FH1 SNR01 local presentation car link ")
@@ -61,6 +103,8 @@ def main() -> int:
         "local_players": len(local_players),
         "presentations": len(presentations),
         "view8_presentations": sum(r["view8_owner"] for r in presentations),
+        "local_presentations": len(local_presentations),
+        "local_view8_scene_packets": len(local_packets) if args.require_local_presentation else 0,
         "direct_links": direct_links,
         "reverse_links": reverse_links,
     }, indent=2))

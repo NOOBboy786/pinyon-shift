@@ -1097,6 +1097,7 @@ void PinyonShiftObservePresentationViewEnd() {
                   SnrM02ReadU32(SnrM02ReadU32(root + 116)));
     }
     std::lock_guard lock(snr01_player_mutex);
+    uint32_t local_car = 0;
     for (uint32_t player : snr01_forza_players) {
       if (SnrM02ReadU32(player) != 0x8201EB4C) {
         continue;
@@ -1116,7 +1117,11 @@ void PinyonShiftObservePresentationViewEnd() {
                   SnrM02ReadU32(player + 168), SnrM02ReadU32(player + 172),
                   SnrM02ReadU32(player + 176), SnrM02ReadU32(player + 180),
                   SnrM02ReadU32(SnrM02ReadU32(player + 180)));
+      if (SnrM02ReadU32(SnrM02ReadU32(player + 164)) == 0x82014510) {
+        local_car = SnrM02ReadU32(player + 160);
+      }
     }
+    const uint32_t local_livery = local_car ? SnrM02ReadU32(local_car + 12292) : 0;
     for (const auto& [presentation, constructor_arg] :
          snr01_car_presentations) {
       if (SnrM02ReadU32(presentation) != 0x82003A54) {
@@ -1130,6 +1135,16 @@ void PinyonShiftObservePresentationViewEnd() {
               rex::perf::CounterId::kSourceFrameCount),
           presentation, constructor_arg, SnrM02ReadU32(constructor_arg),
           snr01_view8_flush_owners.contains(presentation));
+      if (local_livery && SnrM02ReadU32(presentation + 2800) == local_livery) {
+        REXGPU_INFO(
+            "FH1 SNR01 local car presentation link "
+            "{{\"frame\":{},\"car\":{},\"presentation\":{},"
+            "\"livery\":{},\"livery_vtable\":{},\"view8_owner\":{}}}",
+            rex::perf::GetTotalCounter(
+                rex::perf::CounterId::kSourceFrameCount),
+            local_car, presentation, local_livery, SnrM02ReadU32(local_livery),
+            snr01_view8_flush_owners.contains(presentation));
+      }
     }
   }
 }
