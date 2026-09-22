@@ -1671,3 +1671,40 @@ had nonzero `+52` and zero `+55`, but the missing entry did not recur, so its
 cause is **unproved**. Do not weaken the verifier to count that earlier gap
 as intentional culling. SNR-01 still needs the remaining post-view packet
 owners and a proven main-view/dependency boundary.
+
+### Title owner of one packet consumed after the view
+
+The title's `sub_82444E60` calls `sub_823E2DE0` at `0x82446160`
+(return address `0x82446164`). That wrapper derives subobject and array
+pointers from its input and tail-calls `sub_8244E938`, which writes an
+`indexed2_secondary` packet at `0x8244F070`. This static path prompted a
+default-off, read-only entry probe at `0x8244E93C`; the probe records its
+caller, receiver, arguments and active presentation-view call. It does not
+interpret the receiver's first word as a vtable or identify a mesh.
+
+The rebuilt executable SHA-256 was
+`F2CE5C3D1B2E5CB27EB61113F1D0F3149C0A753DB7442FFBEF528A8F871EE22A`.
+The normal-exit sustained race produced seven PPM captures; log
+`.local/native-renderer/snr01/indexed2-owner-run-a.log` SHA-256 was
+`0533E4AE29C4115E72A523A84FC9387D6DDD76EEEB13B88CD5CCAD34AE2CEAD3`.
+At source frame 6000, the probe recorded exactly one matching call:
+caller LR `0x82446164`, receiver `0x43061870`, argument 5/view
+`0x4248F600`, and active view call 8. The `0x8244F070` direct packet at
+physical `0x12ED7F1C` followed on the same thread before view call 8 ended.
+The later command at `0x13244F2C` was written **after** that view ended and
+read in frame 6001. Its three roots produced 229 prepared draw callbacks
+from 185 unique packet addresses; one of those addresses was the title
+packet just identified. Thus command publication outside a view does not
+imply every packet it consumes was produced outside that view.
+
+`tools/verify-snr01-camera-view-join.py` now asserts this ordered
+view → title call → packet → deferred-command consumer join when the new
+probe is present, while retaining compatibility with older captures. It
+passes this replay and the earlier secondary-guard replay. The track-bucket
+verifier passes on this replay (360 entries, 266 packet headers, zero
+unmatched in-view submissions), as does the cube-consumer verifier (728
+draws, four command writers). The other eight directly observed post-view
+packet writes still pass `CStandardParticleRenderer`; most of the 185 packet
+addresses under the deferred roots lack an indexed2 direct-packet record.
+The selected scene slice and any main-view dependency boundary remain
+unproved, so SNR-00, SNR-01 and Gate A remain open.

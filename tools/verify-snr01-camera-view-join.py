@@ -11,7 +11,7 @@ from pathlib import Path
 EVENT = re.compile(r"\[t(\d+)\] FH1 SNR01 (camera method|view object400|view end|"
                    r"inline indirect write|deferred indirect command|"
                    r"primary indirect packet|indirect buffer|prepared draw|"
-                   r"direct packet) (\{.*\})")
+                   r"direct packet|indexed2 owner) (\{.*\})")
 
 
 def verify(path: Path, frame: int):
@@ -19,7 +19,8 @@ def verify(path: Path, frame: int):
                                     "view end", "inline indirect write",
                                     "deferred indirect command",
                                     "primary indirect packet", "indirect buffer",
-                                    "prepared draw", "direct packet")}
+                                    "prepared draw", "direct packet",
+                                    "indexed2 owner")}
     for position, line in enumerate(path.open(encoding="utf-8-sig",
                                               errors="replace")):
         match = EVENT.search(line)
@@ -104,6 +105,22 @@ def verify(path: Path, frame: int):
     callers = Counter(row.get("indexed2_caller_lr", 0) for row in direct)
     if any("indexed2_caller_lr" in row for row in direct):
         assert 0 not in callers
+    owner = events["indexed2 owner"]
+    if owner:
+        assert len(owner) == 1
+        owner_position, owner_row = owner[0]
+        assert starts[-1][0] < owner_position < ends[-1][0]
+        assert owner_row["_thread"] == ends[-1][1]["_thread"]
+        assert owner_row["view_call"] == 8
+        assert owner_row["caller_lr"] == 0x82446164
+        assert owner_row["arg5"] == starts[-1][1]["view"]
+        title_direct = [(position, row) for position, row in
+                        events["direct packet"]
+                        if row["frame"] == frame and
+                        row.get("indexed2_caller_lr") == 0x8244F070]
+        assert len(title_direct) == 1
+        assert owner_position < title_direct[0][0] < ends[-1][0]
+        assert title_direct[0][1]["header_physical"] in packets
     return {"frame": frame, "main_camera": hex(main),
             "reflection_camera": hex(reflection),
             "view_calls": len(starts), "slot44_in_view": 8,
@@ -117,6 +134,7 @@ def verify(path: Path, frame: int):
             "post_view_color_words": {hex(color): count for
                                       (_, color, _, _), count in targets.items()},
             "post_view_direct_packets_outside_scope": len(direct),
+            "title_owner_probe_matched": bool(owner),
             "post_view_indexed2_callers": {hex(caller): count for caller, count
                                            in sorted(callers.items())}}
 

@@ -231,6 +231,7 @@ thread_local uint64_t snr01_view_begin_count = 0;
 thread_local uint64_t snr01_view_selected_count = 0;
 thread_local uint64_t snr01_view_track_count = 0;
 thread_local uint64_t snr01_camera_method_count = 0;
+thread_local uint64_t snr01_indexed2_owner_count = 0;
 thread_local uint64_t snr01_track_bucket_count = 0;
 thread_local uint64_t snr01_second_draw_count = 0;
 thread_local uint64_t snr01_second_draw_skips = 0;
@@ -1569,6 +1570,31 @@ void PinyonShiftObserveIndexed2End() {
   if (!snr01_indexed2_callers.empty()) {
     snr01_indexed2_callers.pop_back();
   }
+}
+
+void PinyonShiftObserveIndexed2Owner(PPCRegister& r12, PPCRegister& r3,
+                                     PPCRegister& r4, PPCRegister& r5,
+                                     PPCRegister& r7, PPCRegister& r8) {
+  if (!Snr01TraceCurrentFrame() || r7.u32 != 4 ||
+      ++snr01_indexed2_owner_count > 256) {
+    return;
+  }
+  uint32_t receiver_word0 = 0;
+  if (auto* memory = snr01_memory.load(std::memory_order_acquire)) {
+    if (r3.u32) {
+      receiver_word0 = rex::memory::load_and_swap<uint32_t>(
+          memory->TranslateVirtual(r3.u32));
+    }
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 indexed2 owner {{\"frame\":{},\"ordinal\":{},"
+      "\"caller_lr\":{},\"receiver\":{},\"receiver_word0\":{},"
+      "\"arg4\":{},\"arg5\":{},\"arg7\":{},\"arg8\":{},"
+      "\"view_call\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      snr01_indexed2_owner_count, r12.u32, r3.u32, receiver_word0, r4.u32,
+      r5.u32, r7.u32, r8.u32,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
 }
 
 void PinyonShiftObserveQueuedIndirectBegin(

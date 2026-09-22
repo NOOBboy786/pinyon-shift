@@ -328,6 +328,11 @@ registers = ["r30", "r11", "r31"]
 address = 0x8240E128
 name = "PinyonShiftObserveIndexed2End"
 
+[[midasm_hook]]
+address = 0x8244E93C
+name = "PinyonShiftObserveIndexed2Owner"
+registers = ["r12", "r3", "r4", "r5", "r7", "r8"]
+
 # The title's primary-ring indirect packet writer. The packet is about to be
 # stored at ring_base + ring_index * 4; the following words select the buffer.
 [[midasm_hook]]
