@@ -9,6 +9,8 @@ remains the acceptance ledger for resource ownership and eventual Xenos retireme
 The [SNR-00/01 evidence log](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md)
 records the first clean controls, the procedural packet probe and the current
 title-to-GPU join gaps.
+The [SNR-02 evidence log](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md) records
+the local-car resource census and seven selected title submodels.
 
 ## Decision and scope
 

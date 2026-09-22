@@ -818,6 +818,11 @@ name = "PinyonShiftObserveSnr01CarOwnerCall"
 registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 
 [[midasm_hook]]
+address = 0x82439990
+name = "PinyonShiftObserveSnr02CarModelRecord"
+registers = ["r3"]
+
+[[midasm_hook]]
 address = 0x82419A34
 name = "PinyonShiftObserveSnr01CarOwnerCall"
 registers = ["r12", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]

@@ -20,6 +20,7 @@ INDIRECT_BUFFER_PREFIX = "FH1 SNR01 indirect buffer "
 PREPARED_DRAW_PREFIX = "FH1 SNR01 prepared draw "
 VERTEX_FETCH_PREFIX = "FH1 SNR01 prepared vertex fetch "
 TEXTURE_FETCH_PREFIX = "FH1 SNR01 prepared texture fetch "
+MODEL_RECORD_PREFIX = "FH1 SNR02 car model record "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -39,6 +40,7 @@ def main() -> int:
     parser.add_argument("--require-local-model", action="store_true")
     parser.add_argument("--require-owner-calls", action="store_true")
     parser.add_argument("--require-backend-join", action="store_true")
+    parser.add_argument("--require-model-records", action="store_true")
     args = parser.parse_args()
 
     players = [r for r in records(args.log, PLAYER_PREFIX) if r["frame"] == args.frame]
@@ -89,6 +91,7 @@ def main() -> int:
         or args.require_local_model
         or args.require_owner_calls
         or args.require_backend_join
+        or args.require_model_records
     )
     if require_local:
         assert len(local_presentations) == 1
@@ -108,7 +111,8 @@ def main() -> int:
         assert {r["flush_owner_first_word"] for r in local_packets} == {0x82003A54}
         assert len({r["target_physical"] for r in local_packets}) == 12
     model_packets = []
-    if args.require_local_model or args.require_owner_calls or args.require_backend_join:
+    if (args.require_local_model or args.require_owner_calls
+            or args.require_backend_join or args.require_model_records):
         assert local["model_vtable"] == 0x82001618
         model_packets = [
             r for r in scene_packets
@@ -123,7 +127,7 @@ def main() -> int:
         assert len({r["target_physical"] for r in model_packets}) == 37
 
     owner_call_summary = {}
-    if args.require_owner_calls:
+    if args.require_owner_calls or args.require_model_records:
         owner_calls = [
             r for r in records(args.log, CAR_OWNER_CALL_PREFIX)
             if r["frame"] == args.frame
@@ -206,6 +210,49 @@ def main() -> int:
             "local_model_callers": {
                 hex(k): v for k, v in sorted(model_callers.items())
             },
+        }
+
+    model_record_summary = {}
+    if args.require_model_records:
+        model_records = [
+            r for r in records(args.log, MODEL_RECORD_PREFIX)
+            if r["frame"] == args.frame
+            and r["view_call"] == 8
+            and r["owner"] == local["model"]
+        ]
+        direct_calls = {
+            r["call"]: r for r in model_calls
+            if r["caller_lr"] in (0x8243786C, 0x82437900, 0x8245AB44)
+        }
+        assert len(model_records) == len(direct_calls) == 29
+        assert {r["call"] for r in model_records} == set(direct_calls)
+        expected_names = {
+            0: "winga",
+            7: "exhaustRa",
+            10: "bumperRa",
+            17: "mirrorR",
+            18: "mirrorL",
+            33: "headlightL",
+            34: "headlightR",
+        }
+        selected = {}
+        for row in model_records:
+            assert row["record_first_word"] == 0x8223FDD0
+            assert row["record"] and row["binding"]
+            assert len(row["binding_words"]) == 8
+            assert row["binding_words"][0] == row["binding_first_word"]
+            raw = b"".join(word.to_bytes(4, "big") for word in row["binding_words"])
+            assert b"\0" in raw
+            name = raw.split(b"\0", 1)[0].decode("ascii")
+            selector = direct_calls[row["call"]]["owner_args"][2]
+            assert name == expected_names[selector]
+            selected.setdefault(selector, set()).add((row["record"], row["binding"]))
+        assert set(selected) == set(expected_names)
+        assert all(len(records) == 1 for records in selected.values())
+        assert len({next(iter(records))[0] for records in selected.values()}) == 7
+        model_record_summary = {
+            "local_model_direct_records": len(model_records),
+            "local_model_submodels": expected_names,
         }
 
     backend_summary = {}
@@ -322,6 +369,7 @@ def main() -> int:
         "reverse_links": reverse_links,
     }
     summary.update(owner_call_summary)
+    summary.update(model_record_summary)
     summary.update(backend_summary)
     print(json.dumps(summary, indent=2))
     return 0
