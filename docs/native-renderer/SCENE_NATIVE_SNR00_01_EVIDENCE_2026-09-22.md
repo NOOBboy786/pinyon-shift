@@ -785,6 +785,16 @@ the descriptor and runtime array bases calculated from the index stayed
 stable. The second track-bucket path did not produce a procedural-item call
 in this capture; its 117 packets need a separate ownership join.
 
+At the helper's final indirect call (`0x82417B7C`), vtable offset 160
+receives literal `13` in `r4`, four times runtime-record word 7 in `r5`, and
+either runtime-record word 6 or word 8 in `r6` (depending on an earlier
+branch). For every submitted first-path item in this capture, the exact
+backend draw's `index_count` was `4 × r6`, including packets expanded to
+multiple prepared-draw callbacks. The same invariant passed the two earlier
+race captures (196 and 209 first-path items). This identifies a bounded
+count relationship, not yet the mesh payload, topology or semantic meaning
+of literal `13`.
+
 The track-bucket verifier now checks node/item balance, receiver/index and
 packet-range equality, bucket and view ancestry, descriptor/runtime base
 stability, and exact backend draw joins. The indirect-join verifier also

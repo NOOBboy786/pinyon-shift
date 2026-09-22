@@ -62,6 +62,10 @@ def verify(path: Path, source_frame: int, backend_frame: int,
     draws = collections.Counter(row["packet_physical"]
                                 for _, row in events["prepared draw"]
                                 if row["frame"] == backend_frame)
+    draw_index_counts = collections.defaultdict(set)
+    for _, row in events["prepared draw"]:
+        if row["frame"] == backend_frame:
+            draw_index_counts[row["packet_physical"]].add(row["index_count"])
     assert draws, "backend draw capture is missing"
 
     claimed = set()
@@ -124,6 +128,9 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         path_name = "first" if bucket["record"] else "second"
         counts[path_name + "_submitted_items"] += 1
         descriptor_kinds[(path_name, item["descriptor_kind"])] += 1
+        packet = packets["semantic packet"][(thread, item["first_semantic_packet"])]
+        assert draw_index_counts[packet["header_physical"]] == {
+            4 * item["submit_arg6"]}, "item count differs from backend draw"
         bases = (item["descriptor_address"] - 92 * item["descriptor_index"],
                  item["runtime_address"] - 68 * item["descriptor_index"])
         receiver = item["receiver"]
