@@ -2106,3 +2106,40 @@ object exists in the route, but it is a dormant map-entity slot rather
 than the live player render identity. A different player-state boundary
 must supply the `CCarPresentation`/`CCarModel` relationship; SNR-01 and
 Gate A remain open.
+
+### Live player state identifies the local `CCar`
+
+The `Forza2::CPlayer` constructor at `0x8256D770` was observed while the
+existing SNR-01 trace option was enabled. A normal-exit sustained-race replay
+at source frame 6000 produced seven captures with executable SHA-256
+`876E6F63604ACA4261916EEBEB6FBA76AB992B77C51F0CB4DD3E627D0012845D`.
+The isolated session log at
+`.local/native-renderer/snr01/local-player-presentation-run-a.log` has
+SHA-256
+`367D287BF529025752314336EFD5EE9681991B299FADE3D8F74C90E11D41F236`.
+`tools/verify-snr01-player-presentation.py` passes on that log.
+
+Eight surviving objects had exact `Forza2::CPlayer` vtable `0x8201EB4C`.
+Every player held a `CCar` (`0x8200C29C`) at offset 160. Exactly one player
+also held a `Forza2::CForzaProfile` (`0x82014510`) at offset 164. In this
+single-player saved route, the profile-bearing player supplies the first
+verified semantic local-player identity and its offset-160 field supplies the
+corresponding live `CCar`. This corrects the earlier provisional reading of
+those two fields; RTTI from the verified base image is authoritative.
+
+The `CCarPresentation` constructor at `0x82DE7638` was observed in the same
+run. Eight surviving instances had exact vtable `0x82003A54`, and every one
+was also a nonzero view-8 scene-list flush owner. All eight were constructed
+from the same argument object with vtable `0x82001BF4`, which RTTI identifies
+as the thread-safe `CPresentationType` wrapper. The constructor argument is a
+shared type descriptor rather than a vehicle identity.
+
+A bounded diagnostic checked all aligned words in the proven 17,828-byte
+local `CCar` layout for exact view-8 flush-owner pointers and all aligned
+words in each 6,640-byte `CCarPresentation` for the exact local-car pointer.
+Both directions produced zero matches and the temporary scans were removed.
+The durable probes retain only player construction, presentation construction
+and view-8 owner membership. SNR-01 now has a verified local-player-to-`CCar`
+edge and verified car-presentation draw owners, but still needs the title
+method or registration boundary that associates that `CCar` with one of the
+eight presentations/models before Gate A can close.

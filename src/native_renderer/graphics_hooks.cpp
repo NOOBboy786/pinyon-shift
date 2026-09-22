@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <map>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -240,6 +241,10 @@ struct Snr01SceneListFlush {
 };
 thread_local std::vector<Snr01SceneListFlush> snr01_scene_list_flushes;
 std::atomic<uint32_t> snr01_vehicle_map_pool_root{0};
+std::mutex snr01_player_mutex;
+std::set<uint32_t> snr01_forza_players;
+std::map<uint32_t, uint32_t> snr01_car_presentations;
+thread_local std::set<uint32_t> snr01_view8_flush_owners;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -1029,6 +1034,9 @@ void PinyonShiftObservePresentationViewBegin(
     return;
   }
   const uint64_t ordinal = ++snr01_view_begin_count;
+  if (ordinal == 8) {
+    snr01_view8_flush_owners.clear();
+  }
   snr01_view_scopes.push_back(
       {r3.u32, r4.u32, snr01_semantic_packet_count,
        snr01_direct_packet_count, snr01_primary_indirect_packet_count,
@@ -1077,7 +1085,8 @@ void PinyonShiftObservePresentationViewEnd() {
                   "\"link72\":{},\"link72_first_word\":{},"
                   "\"link76\":{},\"link76_first_word\":{},"
                   "\"link84\":{},\"link84_first_word\":{}}}",
-                  rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+                  rex::perf::GetTotalCounter(
+                      rex::perf::CounterId::kSourceFrameCount),
                   root, root + 32, SnrM02ReadU32(root + 32),
                   SnrM02ReadU32(root + 44), SnrM02ReadU32(root + 16),
                   SnrM02ReadU32(root + 104),
@@ -1086,6 +1095,41 @@ void PinyonShiftObservePresentationViewEnd() {
                   SnrM02ReadU32(SnrM02ReadU32(root + 108)),
                   SnrM02ReadU32(root + 116),
                   SnrM02ReadU32(SnrM02ReadU32(root + 116)));
+    }
+    std::lock_guard lock(snr01_player_mutex);
+    for (uint32_t player : snr01_forza_players) {
+      if (SnrM02ReadU32(player) != 0x8201EB4C) {
+        continue;
+      }
+      REXGPU_INFO("FH1 SNR01 Forza player {{\"frame\":{},\"player\":{},"
+                  "\"vtable\":{},"
+                  "\"link160\":{},\"link160_first_word\":{},"
+                  "\"link164\":{},\"link164_first_word\":{},"
+                  "\"link168\":{},\"link172\":{},\"link176\":{},"
+                  "\"link180\":{},\"link180_first_word\":{}}}",
+                  rex::perf::GetTotalCounter(
+                      rex::perf::CounterId::kSourceFrameCount),
+                  player, SnrM02ReadU32(player), SnrM02ReadU32(player + 160),
+                  SnrM02ReadU32(SnrM02ReadU32(player + 160)),
+                  SnrM02ReadU32(player + 164),
+                  SnrM02ReadU32(SnrM02ReadU32(player + 164)),
+                  SnrM02ReadU32(player + 168), SnrM02ReadU32(player + 172),
+                  SnrM02ReadU32(player + 176), SnrM02ReadU32(player + 180),
+                  SnrM02ReadU32(SnrM02ReadU32(player + 180)));
+    }
+    for (const auto& [presentation, constructor_arg] :
+         snr01_car_presentations) {
+      if (SnrM02ReadU32(presentation) != 0x82003A54) {
+        continue;
+      }
+      REXGPU_INFO(
+          "FH1 SNR01 car presentation {{\"frame\":{},"
+          "\"presentation\":{},\"constructor_arg\":{},"
+          "\"constructor_arg_first_word\":{},\"view8_owner\":{}}}",
+          rex::perf::GetTotalCounter(
+              rex::perf::CounterId::kSourceFrameCount),
+          presentation, constructor_arg, SnrM02ReadU32(constructor_arg),
+          snr01_view8_flush_owners.contains(presentation));
     }
   }
 }
@@ -2346,6 +2390,25 @@ void PinyonShiftObserveSnr01VehicleIdAssigned(PPCRegister& r3,
   }
 }
 
+void PinyonShiftObserveSnr01ForzaPlayerConstructed(PPCRegister& r3) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0) {
+    std::lock_guard lock(snr01_player_mutex);
+    if (snr01_forza_players.size() < 32) {
+      snr01_forza_players.insert(r3.u32);
+    }
+  }
+}
+
+void PinyonShiftObserveSnr01CarPresentationConstructed(PPCRegister& r3,
+                                                       PPCRegister& r4) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0) {
+    std::lock_guard lock(snr01_player_mutex);
+    if (snr01_car_presentations.size() < 64) {
+      snr01_car_presentations.emplace(r3.u32, r4.u32);
+    }
+  }
+}
+
 void PinyonShiftObserveSceneCommandBufferBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
   if (Snr01TraceCurrentFrame()) {
@@ -2370,6 +2433,12 @@ void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
                                          PPCRegister& r11, PPCRegister& r30) {
   if (Snr01TraceCurrentFrame() &&
       ++snr01_scene_indirect_count <= kSnr01PacketLimit) {
+    if (!snr01_view_scopes.empty() &&
+        snr01_view_scopes.back().ordinal == 8 &&
+        !snr01_scene_list_flushes.empty() &&
+        snr01_scene_list_flushes.back().owner) {
+      snr01_view8_flush_owners.insert(snr01_scene_list_flushes.back().owner);
+    }
     REXGPU_INFO(
         "FH1 SNR01 scene indirect packet {{\"frame\":{},\"ordinal\":{},"
         "\"header_physical\":{},\"target_physical\":{},"

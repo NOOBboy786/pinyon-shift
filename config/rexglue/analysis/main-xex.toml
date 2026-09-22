@@ -817,6 +817,16 @@ name = "PinyonShiftObserveSnr01VehicleIdAssigned"
 registers = ["r3", "r4"]
 
 [[midasm_hook]]
+address = 0x8256D770
+name = "PinyonShiftObserveSnr01ForzaPlayerConstructed"
+registers = ["r3"]
+
+[[midasm_hook]]
+address = 0x82DE7638
+name = "PinyonShiftObserveSnr01CarPresentationConstructed"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
 address = 0x82416A08
 name = "PinyonShiftObserveSceneCommandBufferBegin"
 registers = ["r12", "r3", "r4", "r5"]
