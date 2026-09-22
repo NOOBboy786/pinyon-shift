@@ -701,3 +701,54 @@ allocation lifetime also remain unproven. This closes a bounded
 view → presenter → raw bucket entry → PM4 header → backend draw chain for
 325 packets, but it does not yet name mesh/instance, material, final
 transform, LOD or pass, nor account for all draws in the selected view.
+
+### Track bucket model identity and early guards
+
+Static code following the 20-byte entry resolves the first pointer's `+4`
+object and calls its vtable slot 13 through `sub_82413240`. The second path
+calls `sub_8243F328` on entry word 1, then reads entry word 3 and byte 16
+before `sub_8243BD40`. The first path passes its record to `sub_82436468`;
+the second passes the resolved object and auxiliary fields to
+`sub_8243BD40`. These are two different dispatch paths, not equivalent
+fallbacks. The existing RTTI image verifier identifies vtable `0x82001D74`
+as `Presentation_Unified::CTrackRenderModel_Unified`, with slot 13 at
+`sub_82413228`. The verifier output is local at
+`.local/native-renderer/snr01/track-ingress-identity-static.json`.
+
+Read-only hooks at `0x8241325C`, `0x8243AB74`, `0x8243AC9C` and
+`0x8243AD40` captured the live model vtable, first-path guard result,
+second-path resolved pointer and auxiliary fields within each record scope.
+The saved race exited normally with executable SHA-256
+`04EE7F4C07A7CD3BC531A87D34984BB3B77D6EAAECA0D12D78447B14261F0932`.
+The combined log is
+`.local/native-renderer/snr01/track-bucket-identity-frame-6000/title-backend-track-bucket-identity.log`
+(SHA-256 `82E21D046BB77926AD641892B1BC241509F9F9FC1BF5A34245EE501D6338F22C`).
+
+This replay had 403 balanced bucket iterations. All 264 first-path entries
+had a nonzero model object with vtable `0x82001D74`; all 264 early virtual
+guards returned true, but only eight entries emitted observed packets.
+All 139 second-path entries resolved a nonzero object and reached the
+auxiliary-field read, but only 40 emitted observed packets. Entry word 3
+was nonzero for 54 second-path entries. The captured byte-16 values were
+`1` (82), `2` (45), `7` (6), `4` (4) and `6` (2); their meanings are not
+established. The 48 packet-producing entries emitted 338 distinct headers,
+all exactly joined to 509 backend-frame-6001 prepared-draw callbacks. The
+indirect-join verifier also passed for all 131 backend roots, 1,581
+executions and 4,767 prepared draws in that frame.
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/track-bucket-identity-frame-6000/title-backend-track-bucket-identity.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/track-bucket-identity-frame-6000/title-backend-track-bucket-identity.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+The two early checks cannot classify the remaining 355 entries as culled:
+256 first-path guards passed and 99 second-path objects resolved without
+an observed packet inside that iteration. The next ownership join must
+follow the selected model/auxiliary records into their concrete geometry,
+LOD and material submissions, and separately account for deferred or other
+packet producers before assigning an intentional-cull reason.

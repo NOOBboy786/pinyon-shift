@@ -71,6 +71,26 @@ name = "PinyonShiftObserveTrackBucketSecondaryRecord"
 registers = ["r11", "r28"]
 
 [[midasm_hook]]
+address = 0x8241325C
+name = "PinyonShiftObserveTrackBucketFirstObject"
+registers = ["r3", "r11"]
+
+[[midasm_hook]]
+address = 0x8243AB74
+name = "PinyonShiftObserveTrackBucketFirstGuard"
+registers = ["r3"]
+
+[[midasm_hook]]
+address = 0x8243AC9C
+name = "PinyonShiftObserveTrackBucketSecondaryResolved"
+registers = ["r3"]
+
+[[midasm_hook]]
+address = 0x8243AD40
+name = "PinyonShiftObserveTrackBucketAuxiliaryResolved"
+registers = ["r3", "r28", "r14"]
+
+[[midasm_hook]]
 address = 0x8243AD74
 name = "PinyonShiftObserveTrackBucketEntryEnd"
 

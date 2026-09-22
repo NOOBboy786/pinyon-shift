@@ -122,6 +122,15 @@ struct Snr01TrackBucketScope {
   uint64_t first_direct_packet;
   uint64_t ordinal;
   bool secondary_seen = false;
+  uint32_t first_object = 0;
+  uint32_t first_vtable = 0;
+  int32_t first_guard = -1;
+  uint32_t secondary_resolved = 0;
+  bool secondary_resolved_seen = false;
+  uint32_t auxiliary_record = 0;
+  uint32_t auxiliary_resolved = 0;
+  uint32_t auxiliary_flag = 0;
+  bool auxiliary_seen = false;
 };
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
@@ -602,6 +611,40 @@ void PinyonShiftObserveTrackBucketSecondaryRecord(PPCRegister& r11,
   }
 }
 
+void PinyonShiftObserveTrackBucketFirstObject(PPCRegister& r3,
+                                              PPCRegister& r11) {
+  if (!snr01_track_bucket_scopes.empty()) {
+    auto& scope = snr01_track_bucket_scopes.back();
+    scope.first_object = r3.u32;
+    scope.first_vtable = r11.u32;
+  }
+}
+
+void PinyonShiftObserveTrackBucketFirstGuard(PPCRegister& r3) {
+  if (!snr01_track_bucket_scopes.empty()) {
+    snr01_track_bucket_scopes.back().first_guard = r3.u32 & 0xFF;
+  }
+}
+
+void PinyonShiftObserveTrackBucketSecondaryResolved(PPCRegister& r3) {
+  if (!snr01_track_bucket_scopes.empty()) {
+    auto& scope = snr01_track_bucket_scopes.back();
+    scope.secondary_resolved = r3.u32;
+    scope.secondary_resolved_seen = true;
+  }
+}
+
+void PinyonShiftObserveTrackBucketAuxiliaryResolved(
+    PPCRegister& r3, PPCRegister& r28, PPCRegister& r14) {
+  if (!snr01_track_bucket_scopes.empty()) {
+    auto& scope = snr01_track_bucket_scopes.back();
+    scope.auxiliary_record = r28.u32;
+    scope.auxiliary_resolved = r3.u32;
+    scope.auxiliary_flag = r14.u32;
+    scope.auxiliary_seen = true;
+  }
+}
+
 void PinyonShiftObserveTrackBucketEntryEnd() {
   if (snr01_track_bucket_scopes.empty()) {
     if (Snr01TraceCurrentFrame()) {
@@ -617,12 +660,21 @@ void PinyonShiftObserveTrackBucketEntryEnd() {
         "\"presenter\":{},\"view\":{},\"bucket\":{},"
         "\"entry\":{},\"record\":{},\"secondary_record\":{},"
         "\"secondary_seen\":{},\"remaining\":{},"
+        "\"first_object\":{},\"first_vtable\":{},"
+        "\"first_guard\":{},\"secondary_resolved\":{},"
+        "\"secondary_resolved_seen\":{},"
+        "\"auxiliary_record\":{},\"auxiliary_resolved\":{},"
+        "\"auxiliary_flag\":{},\"auxiliary_seen\":{},"
         "\"first_semantic\":{},\"last_semantic\":{},"
         "\"first_direct\":{},\"last_direct\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         scope.ordinal, scope.presenter, scope.view, scope.bucket,
         scope.entry, scope.record, scope.secondary_record,
         scope.secondary_seen, scope.remaining,
+        scope.first_object, scope.first_vtable, scope.first_guard,
+        scope.secondary_resolved, scope.secondary_resolved_seen,
+        scope.auxiliary_record, scope.auxiliary_resolved,
+        scope.auxiliary_flag, scope.auxiliary_seen,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_direct_packet + 1, snr01_direct_packet_count);
   }

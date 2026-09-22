@@ -11,7 +11,8 @@ from pathlib import Path
 EVENT = re.compile(r"\[t(\d+)\] FH1 SNR01 (.*?) (\{.*\})")
 
 
-def verify(path: Path, source_frame: int, backend_frame: int) -> dict:
+def verify(path: Path, source_frame: int, backend_frame: int,
+           first_model_vtable: int | None = None) -> dict:
     events = collections.defaultdict(list)
     active_views = collections.defaultdict(list)
     for line in path.open(encoding="utf-8-sig", errors="replace"):
@@ -73,6 +74,15 @@ def verify(path: Path, source_frame: int, backend_frame: int) -> dict:
         assert first or row["secondary_record"], "selected record is null"
         path_name = "first" if first else "second"
         counts[path_name + "_entries"] += 1
+        if first_model_vtable is not None:
+            if first:
+                assert row["first_object"] and row["first_vtable"] == first_model_vtable
+                assert row["first_guard"] in (0, 1)
+                counts["first_guard_passed"] += row["first_guard"] == 1
+            else:
+                assert row["secondary_resolved_seen"] and row["auxiliary_seen"]
+                counts["second_resolved"] += bool(row["secondary_resolved"])
+                counts["second_auxiliary_records"] += bool(row["auxiliary_record"])
         produced = 0
         for kind, label in (("semantic packet", "semantic"),
                             ("direct packet", "direct")):
@@ -109,8 +119,10 @@ def main() -> None:
     parser.add_argument("log", type=Path)
     parser.add_argument("--source-frame", type=int, required=True)
     parser.add_argument("--backend-frame", type=int, required=True)
+    parser.add_argument("--first-model-vtable", type=lambda value: int(value, 0))
     args = parser.parse_args()
-    print(json.dumps(verify(args.log, args.source_frame, args.backend_frame), indent=2))
+    print(json.dumps(verify(args.log, args.source_frame, args.backend_frame,
+                            args.first_model_vtable), indent=2))
 
 
 if __name__ == "__main__":
