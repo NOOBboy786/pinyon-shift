@@ -2467,3 +2467,44 @@ capture. This resolves the two candidate view gaps at the image/pass boundary,
 but does not freeze the complete object slice: semantic owners for the 934
 direct-root packets and 24 ownerless scene-list draws, material/geometry
 identity, resource freshness, and retained-pass consumers remain open.
+
+### Direct character-manager pass family
+
+The preceding ledger's largest candidate direct-root call site was
+`0x8243C8FC`, inside `sub_8243C050`. That function is called directly from
+`CPresentationView` slot 13 (`sub_82444E60`) and receives a context, graphics
+device, presentation view and track-presentation object. A default-off
+read-only scope at function entry/exit records these arguments and the exact
+direct-packet ordinal range. The sustained saved-race replay exited normally
+with seven captures. Executable SHA-256 was
+`276E881D703D5C8C1DBCE485F8C6A565260B277033DC4ABEEB256E192D926BB5`;
+the isolated ordered log at
+`.local/native-renderer/snr01/direct-family-run-a-session.log` has SHA-256
+`159FE244E1018B60EC1B6B047C7BAD9DB2A295A160AB047472A68D62DA549F0A`.
+The per-draw ledger at `.local/native-renderer/snr01/direct-family-run-a.json`
+has SHA-256
+`C2BF2FF808D7380D35B91E14864AE1972065E8DED5AA8509119CFFA144B7B4C6`.
+The frame-wide summarizer with `--require-direct-family`, exact primary-ring
+join, and camera/view join all pass for source frame 6000/backend frame 6001.
+
+The two observed `sub_8243C050` calls in source frame 6000 each enclosed
+105 direct packet writes. View call 1's packet range yields 105 backend
+depth-pass draws; view call 8's range yields 315 draws on candidate scene
+color word `0xC0000`. Every backend draw from the title direct caller
+`0x8243C8FC` maps to exactly one of those two scopes. The view-8 group
+accounts for 315 of 723 attachment-writing candidate direct-root draws in
+this replay. Counts differ from the earlier 934-draw candidate sample as
+traffic and visibility varied; they are not interchangeable.
+
+The sampled context's first word `0x82243B58` resolves through base-image
+RTTI locator `0x82363AD8` and type descriptor `0x832B9D88` to
+`proceduralGeometry::CProceduralCharacterManager`. The other first words
+resolve to refcounted `CPresentationView` (`0x8200255C`), unified
+`CTrackPresentation` (`0x82003CCC`) and `CD3D9GraphicsDevice`
+(`0x8200306C`). The verified base image at
+`.local/ui-verify/default-image.bin` has SHA-256
+`6014727FA7B0B79727FD5F32A2E2377533DC8E29679E8D2462BD764D331FA305`.
+This establishes the manager and title pass boundary for this direct family,
+not the identity or lifetime of each character mesh/material. The other
+candidate direct-root families, ownerless scene-list draws and resource
+relationships still block a frozen object slice.

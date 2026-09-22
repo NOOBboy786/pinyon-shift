@@ -122,6 +122,18 @@ struct Snr01DirectScope {
   uint64_t first_packet;
   uint64_t ordinal;
 };
+struct Snr01DirectFamilyScope {
+  uint64_t frame;
+  uint64_t ordinal;
+  uint64_t view_call;
+  uint64_t first_direct;
+  uint32_t context;
+  uint32_t device;
+  uint32_t object;
+  uint32_t list;
+  uint32_t arg7;
+  uint32_t arg8;
+};
 struct Snr01ViewScope {
   uint32_t view;
   uint32_t argument;
@@ -212,6 +224,8 @@ struct Snr01ItemNodeScope {
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 std::atomic<rex::memory::Memory*> snr01_memory{nullptr};
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
+thread_local std::vector<Snr01DirectFamilyScope> snr01_direct_family_scopes;
+thread_local uint64_t snr01_direct_family_count = 0;
 thread_local std::vector<uint32_t> snr01_indexed2_callers;
 thread_local std::vector<Snr01ViewScope> snr01_view_scopes;
 thread_local std::vector<Snr01TrackCallScope> snr01_track75_scopes;
@@ -2506,6 +2520,47 @@ void PinyonShiftObserveSnr02CarMatrixInput(PPCRegister& r3, PPCRegister& r4,
       SnrM02ReadU32(matrix + 48), SnrM02ReadU32(matrix + 52),
       SnrM02ReadU32(matrix + 56), SnrM02ReadU32(matrix + 60),
       snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
+}
+
+void PinyonShiftObserveSnr01DirectFamilyBegin(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCRegister& r6,
+    PPCRegister& r7, PPCRegister& r8) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  snr01_direct_family_scopes.push_back({
+      static_cast<uint64_t>(rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount)),
+      ++snr01_direct_family_count,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      snr01_direct_packet_count,
+      r3.u32, r4.u32, r5.u32, r6.u32, r7.u32, r8.u32});
+}
+
+void PinyonShiftObserveSnr01DirectFamilyEnd() {
+  if (snr01_direct_family_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr01_direct_family_scopes.back();
+  snr01_direct_family_scopes.pop_back();
+  if (scope.ordinal > 512) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 direct family {{\"frame\":{},\"call\":{},"
+      "\"view_call\":{},\"context\":{},\"context_word\":{},"
+      "\"device\":{},\"device_word\":{},\"object\":{},"
+      "\"object_word\":{},\"list\":{},\"list_word\":{},"
+      "\"arg7\":{},\"arg8\":{},\"mode\":{},"
+      "\"first_direct\":{},\"last_direct\":{}}}",
+      scope.frame, scope.ordinal, scope.view_call,
+      scope.context, SnrM02ReadU32(scope.context),
+      scope.device, SnrM02ReadU32(scope.device),
+      scope.object, SnrM02ReadU32(scope.object),
+      scope.list, SnrM02ReadU32(scope.list),
+      scope.arg7, scope.arg8,
+      scope.object ? SnrM02ReadU32(scope.object + 448) : 0,
+      scope.first_direct + 1, snr01_direct_packet_count);
 }
 
 void PinyonShiftObserveSnr02CarDescriptor(
