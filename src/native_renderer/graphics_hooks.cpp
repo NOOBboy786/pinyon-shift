@@ -239,6 +239,7 @@ struct Snr01SceneListFlush {
   uint32_t owner_first_word;
 };
 thread_local std::vector<Snr01SceneListFlush> snr01_scene_list_flushes;
+std::atomic<uint32_t> snr01_vehicle_map_pool_root{0};
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -1065,6 +1066,27 @@ void PinyonShiftObservePresentationViewEnd() {
         scope.first_direct_packet + 1, snr01_direct_packet_count,
         scope.first_primary_packet + 1,
         snr01_primary_indirect_packet_count);
+  }
+  if (scope.ordinal == 8) {
+    const uint32_t root = snr01_vehicle_map_pool_root.load(
+        std::memory_order_acquire);
+    if (root) {
+      REXGPU_INFO("FH1 SNR01 player map entity {{\"frame\":{},"
+                  "\"pool\":{},\"entity\":{},\"vtable\":{},"
+                  "\"vehicle_id\":{},\"context\":{},"
+                  "\"link72\":{},\"link72_first_word\":{},"
+                  "\"link76\":{},\"link76_first_word\":{},"
+                  "\"link84\":{},\"link84_first_word\":{}}}",
+                  rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+                  root, root + 32, SnrM02ReadU32(root + 32),
+                  SnrM02ReadU32(root + 44), SnrM02ReadU32(root + 16),
+                  SnrM02ReadU32(root + 104),
+                  SnrM02ReadU32(SnrM02ReadU32(root + 104)),
+                  SnrM02ReadU32(root + 108),
+                  SnrM02ReadU32(SnrM02ReadU32(root + 108)),
+                  SnrM02ReadU32(root + 116),
+                  SnrM02ReadU32(SnrM02ReadU32(root + 116)));
+    }
   }
 }
 
@@ -2294,6 +2316,33 @@ void PinyonShiftObserveSnr01VehiclePoseOwner(PPCRegister& r30,
                 "\"owner\":{},\"owner_first_word\":{}}}",
                 rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
                 r30.u32, r31.u32, SnrM02ReadU32(r31.u32));
+  }
+}
+
+void PinyonShiftObserveSnr01VehicleMapPoolInstalled(PPCRegister& r3,
+                                                     PPCRegister& r31) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0) {
+    return;
+  }
+  snr01_vehicle_map_pool_root.store(r3.u32, std::memory_order_release);
+  REXGPU_INFO("FH1 SNR01 vehicle map pool {{\"frame\":{},"
+              "\"installer\":{},\"pool\":{},\"player_entity\":{},"
+              "\"player_vtable\":{},\"player_vehicle_id\":{}}}",
+              rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+              r31.u32, r3.u32, r3.u32 ? r3.u32 + 32 : 0,
+              r3.u32 ? SnrM02ReadU32(r3.u32 + 32) : 0,
+              r3.u32 ? SnrM02ReadU32(r3.u32 + 44) : 0);
+}
+
+void PinyonShiftObserveSnr01VehicleIdAssigned(PPCRegister& r3,
+                                               PPCRegister& r4) {
+  const uint32_t root = snr01_vehicle_map_pool_root.load(
+      std::memory_order_acquire);
+  if (root && r3.u32 == root + 32) {
+    REXGPU_INFO("FH1 SNR01 player vehicle ID assigned {{\"frame\":{},"
+                "\"entity\":{},\"vehicle_id\":{}}}",
+                rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+                r3.u32, r4.u32);
   }
 }
 

@@ -807,6 +807,16 @@ address = 0x82416898
 name = "PinyonShiftObserveSceneListFlushEnd"
 
 [[midasm_hook]]
+address = 0x826291AC
+name = "PinyonShiftObserveSnr01VehicleMapPoolInstalled"
+registers = ["r3", "r31"]
+
+[[midasm_hook]]
+address = 0x82CCF230
+name = "PinyonShiftObserveSnr01VehicleIdAssigned"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
 address = 0x82416A08
 name = "PinyonShiftObserveSceneCommandBufferBegin"
 registers = ["r12", "r3", "r4", "r5"]

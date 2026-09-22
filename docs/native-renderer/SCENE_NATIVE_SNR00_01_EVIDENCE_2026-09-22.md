@@ -2074,3 +2074,35 @@ returned `+12` words were pointer-shaped, not demonstrated vehicle IDs.
 alone cannot label a car. The temporary probe was removed after this
 negative result; the direct map-entity pool path remains the next
 semantic ingress to trace.
+
+### Player-local pool remains unassigned in the race
+
+The verified installer store at `0x826291A8` was observed read-only and
+its pool pointer retained by the host only while the SNR-01 trace option
+is enabled. The pool constructor embeds the sole
+`CMapEntityVehiclePlayerLocal` at pool offset 32. Two pools were installed
+during the saved route, at source frames 1420 and 3981. Both construction
+records had player vtable `0x8201D380` and vehicle ID `0xFFFFFFFF`.
+
+At the end of view call 8 in source frame 6000, the current pool was
+`0x41E4FFF0` and the player-local entity was `0x41E50010`, still with
+vehicle ID `0xFFFFFFFF`. No call to the verified ID setter `0x82CCF228`
+targeted that entity during the run. Its pointer-like fields at offsets
+72, 76 and 84 were all null. Neither the pool, player entity nor pool
+context `0x2E026A10` equalled any of the 17 nonzero view-8 scene-list
+flush owners. The normal-exit run produced seven captures with executable
+SHA-256
+`1DE67D621A3BD2E99885246DCBF61D75D6F63ACE1B6BC1A0FD21BAF8BE593A0B`;
+`.local/native-renderer/snr01/player-links-run-a.log` has SHA-256
+`82C4B010BD2A1CBABDAB7DCC6A39148EF5584E89597A138A104B090DCDB677F8`.
+
+`tools/verify-snr01-player-pool.py` locks the two installer observations,
+the exact player-local vtable, unassigned ID, absence of setter calls and
+null direct links. The cube-consumer verifier passes for 728 draws. The
+camera/view verifier reached its direct-packet classification assertion
+in this replay, so this run is not used as fresh proof of the already
+established full camera join. This proves an authoritative player semantic
+object exists in the route, but it is a dormant map-entity slot rather
+than the live player render identity. A different player-state boundary
+must supply the `CCarPresentation`/`CCarModel` relationship; SNR-01 and
+Gate A remain open.
