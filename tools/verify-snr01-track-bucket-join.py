@@ -75,6 +75,7 @@ def verify(path: Path, source_frame: int, backend_frame: int,
     vertex_fetches = [(thread, row) for thread, row in events["prepared vertex fetch"]
                       if row["frame"] == backend_frame]
     fetch_signature_by_draw = {}
+    fetch_origin_counts = collections.Counter()
     if vertex_fetches:
         fetches_by_draw = collections.defaultdict(list)
         for thread, row in vertex_fetches:
@@ -86,6 +87,18 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             assert [fetch["slot"] for fetch in fetches] == list(range(len(fetches)))
             assert all(fetch["packet_physical"] == row["packet_physical"]
                        for fetch in fetches)
+            for fetch in fetches:
+                if "source_packet_0" not in fetch:
+                    continue
+                assert fetch["source_packet_0"] == fetch["source_packet_1"] != 0
+                assert fetch["source_execution_0"] == fetch["source_execution_1"] != 0
+                fetch_origin_counts["observed"] += 1
+                if fetch["source_execution_0"] == row["indirect_execution"]:
+                    assert (row["command_buffer"] <= fetch["source_packet_0"] <
+                            row["packet_physical"])
+                    fetch_origin_counts["same_execution"] += 1
+                else:
+                    fetch_origin_counts["carried_from_prior_execution"] += 1
             fetch_signature_by_draw[thread, row["ordinal"]] = tuple(
                 (fetch["fetch_constant"], fetch["guest_base"], fetch["length"],
                  fetch["stride_words"], fetch["type"]) for fetch in fetches)
@@ -434,6 +447,8 @@ def verify(path: Path, source_frame: int, backend_frame: int,
 
     if vertex_fetches:
         counts["prepared_vertex_fetches"] = len(vertex_fetches)
+        counts.update({"fetch_origins_" + key: value for key, value in
+                       fetch_origin_counts.items()})
 
     return {
         "source_frame": source_frame,

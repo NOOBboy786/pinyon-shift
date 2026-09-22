@@ -348,11 +348,15 @@ void ObservePreparedDraw(
           "FH1 SNR01 prepared vertex fetch {{\"frame\":{},"
           "\"draw\":{},\"packet_physical\":{},\"slot\":{},"
           "\"fetch_constant\":{},\"stride_words\":{},"
-          "\"guest_base\":{},\"length\":{},\"type\":{}}}",
+          "\"guest_base\":{},\"length\":{},\"type\":{},"
+          "\"source_packet_0\":{},\"source_packet_1\":{},"
+          "\"source_execution_0\":{},\"source_execution_1\":{}}}",
           observation.frame_sequence, logged_draws,
           observation.draw_packet_physical_address, i,
           fetch.fetch_constant, fetch.stride_words, fetch.guest_base,
-          fetch.length, fetch.type);
+          fetch.length, fetch.type, fetch.source_packet_physical_0,
+          fetch.source_packet_physical_1, fetch.source_execution_0,
+          fetch.source_execution_1);
     }
   }
 }

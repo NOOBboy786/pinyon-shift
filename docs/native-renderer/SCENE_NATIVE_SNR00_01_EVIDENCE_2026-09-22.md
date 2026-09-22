@@ -1127,3 +1127,29 @@ The next SNR-01 join must trace these fetch bases back to title-owned
 vertex allocations and selected instances, then identify final transforms
 and the view role. SNR-02 must prove payload freshness before any native
 scene uses these addresses.
+
+### Fetch-register packet provenance
+
+The next bounded replay recorded the last GPU packet to write each word of
+the prepared vertex-fetch constants. D3D12 bulk register writes bypass the
+single-register setter; the first probe therefore produced zero origins and
+was not used as evidence. The corrected probe covers both paths. The
+successful replay exited normally with 7 valid captures. Its build used root
+`f5321c3`, SDK `cf1b680` plus this probe, executable SHA-256
+`918DCEE1A611A062C4D13917E29F8BC0933D484605A38609252C09B604F95752`,
+and D3D12 DLL SHA-256
+`EDC60D88D34CA37E539F9FF39F7B80E7769B333CF227D64DAA96FA899E400659`.
+The combined log is
+`.local/native-renderer/snr01/fetch-origin-fixed-frame-6000/title-backend-fetch-origin.log`
+(SHA-256 `CD59DBC0E8F2327CDFF85D787C38A664CCF61AA72091DDACF9AABA13C00AD592`).
+
+Both SNR-01 verifiers passed for source frame 6000 and backend frame 6001.
+Of 7,780 prepared fetch records, all had nonzero origins and both fetch words
+pointed to the same setter packet and execution. In 7,620 records the setter
+preceded the draw within its indirect-buffer execution; 160 reused fetch
+state from a prior execution. Seven fetch records attached to source-frame
+packet headers were in that carry-over group. The verifier now checks these
+conditions when provenance fields exist, while accepting older captures.
+This establishes the GPU register setter's packet, **not** the title object
+or allocation that supplied the vertex bytes. Repeated command-buffer
+execution and state carry-over remain part of SNR-01's ownership map.
