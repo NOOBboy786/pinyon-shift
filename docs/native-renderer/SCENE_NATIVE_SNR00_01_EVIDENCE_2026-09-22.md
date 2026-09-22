@@ -1799,3 +1799,33 @@ draw metadata still do not establish byte freshness or owner identity.
 SNR-01/02 need a write/freshness observation on these known pages and a
 title reference back to their allocator or scene owner before this portion
 of the proposed main-view slice can be claimed or suppressed.
+
+### Sampled bytes of recurring draw packets
+
+The prepared-draw observer now hashes the bounded PM4 draw packet bytes at
+the backend callback. It reads from the observed physical packet address to
+the draw end, or to the command-buffer end when the draw-end offset is zero;
+it rejects out-of-bounds spans and limits the sample to 32 bytes. This is a
+diagnostic sample at draw preparation, not a guest-memory write watch or a
+resource-generation rule.
+
+The rebuilt executable SHA-256 was
+`22D8268E6331BF6BFE5595C7845E1D4AB74079A26F7815DA48A95619FAA6CB7C`.
+The sustained race exited normally with seven PPM captures; log
+`.local/native-renderer/snr01/packet-byte-hashes-run-a.log` SHA-256 was
+`1A7935F6A3E9A3EBDF52ECBD000AFAA04B1058ADA01B7749D2D134106C8FD9DF`.
+All 14,912 traced prepared draws had a valid nonzero packet span (8, 12 or
+20 bytes), and no frame/packet-address pair had conflicting sampled hashes.
+The post-view root consumed 249 unique packet addresses; 206 occurred in
+prior backend frames and **all 206 had matching packet byte lengths and
+hashes** between those frames and backend frame 6001. The other 43 newly
+observed addresses matched 40 source-frame direct writes and three semantic
+writes. The generalized camera/view verifier passed with zero uncovered new
+addresses. The track-bucket verifier passed with 455 entries, 334 packet
+headers and zero unmatched in-view submissions; the cube-consumer verifier
+passed for 728 draws and three command writers.
+
+The byte samples make repeated PM4 draw-packet identity stronger than address
+and shader-metadata recurrence alone. They do not cover referenced vertex,
+index or texture bytes, prove that no write happened between samples, or name
+the title owner of the resident stream. SNR-01/02 and Gate A remain open.

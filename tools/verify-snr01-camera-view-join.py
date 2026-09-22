@@ -133,6 +133,19 @@ def verify(path: Path, frame: int):
     matching_prior_metadata = sum(
         metadata.get((packet, False)) == metadata.get((packet, True))
         for packet in packets & prior_packets)
+    byte_hashes = {}
+    for _, row in events["prepared draw"]:
+        if row["packet_physical"] in packets and "packet_hash" in row:
+            assert row["packet_bytes"] > 0
+            key = (row["packet_physical"], row["frame"] == frame + 1)
+            byte_hashes.setdefault(key, set()).add(
+                (row["packet_bytes"], row["packet_hash"]))
+    recurring_hashed = {packet for packet in packets & prior_packets
+                        if (packet, False) in byte_hashes and
+                        (packet, True) in byte_hashes}
+    matching_prior_bytes = sum(
+        byte_hashes[(packet, False)] == byte_hashes[(packet, True)]
+        for packet in recurring_hashed)
     assert direct and all(
         (row["path"] == "indexed2_secondary" and not row["direct_call"] and
          ("indexed2_caller_lr" not in row or row["indexed2_caller_lr"])) or
@@ -177,6 +190,10 @@ def verify(path: Path, frame: int):
             "post_view_source_indexed_packets": len(indexed),
             "post_view_packet_addresses_with_matching_prior_metadata":
                 matching_prior_metadata,
+            "post_view_recurring_packet_byte_hashes_available": len(
+                recurring_hashed),
+            "post_view_recurring_packet_byte_hashes_matching":
+                matching_prior_bytes,
             "resident_survey_active": bool(survey_ranges),
             "resident_survey_covered_recurring_addresses": sum(
                 any(start <= packet < end for start, end in survey_ranges)

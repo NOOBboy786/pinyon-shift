@@ -1,5 +1,6 @@
 #include "native_renderer/graphics_hooks.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -412,11 +413,33 @@ void ObservePreparedDraw(
   if (++logged_draws > kSnr01PacketLimit) {
     return;
   }
+  uint32_t packet_bytes = 0;
+  uint64_t packet_hash = 0;
+  const uint32_t buffer_end_offset = observation.command_buffer_end_offset
+                                         ? observation.command_buffer_end_offset
+                                         : observation.command_buffer_bytes;
+  if (const auto* memory = snr01_memory.load(std::memory_order_acquire);
+      memory && buffer_end_offset <= observation.command_buffer_bytes &&
+      observation.draw_packet_physical_address >=
+          observation.command_buffer_physical_address) {
+    const uint32_t packet_offset = observation.draw_packet_physical_address -
+                                   observation.command_buffer_physical_address;
+    if (packet_offset < buffer_end_offset) {
+      packet_bytes = std::min<uint32_t>(buffer_end_offset - packet_offset, 32);
+      packet_hash = 14695981039346656037ull;
+      const uint8_t* packet = memory->TranslatePhysical(
+          observation.draw_packet_physical_address);
+      for (uint32_t i = 0; i < packet_bytes; ++i) {
+        packet_hash = (packet_hash ^ packet[i]) * 1099511628211ull;
+      }
+    }
+  }
   REXGPU_INFO(
       "FH1 SNR01 prepared draw {{\"frame\":{},\"ordinal\":{},"
       "\"indirect_execution\":{},\"indirect_parent\":{},"
       "\"dispatch_packet_physical\":{},"
-      "\"packet_physical\":{},\"command_buffer\":{},"
+      "\"packet_physical\":{},\"packet_bytes\":{},"
+      "\"packet_hash\":{},\"command_buffer\":{},"
       "\"command_bytes\":{},\"draw_end_offset\":{},\"vertex_shader\":{},"
       "\"pixel_shader\":{},\"index_count\":{},"
       "\"index_buffer_type\":{},\"index_buffer_guest_base\":{},"
@@ -430,6 +453,7 @@ void ObservePreparedDraw(
       observation.indirect_buffer_parent_execution_id,
       observation.indirect_dispatch_packet_physical_address,
       observation.draw_packet_physical_address,
+      packet_bytes, packet_hash,
       observation.command_buffer_physical_address,
       observation.command_buffer_bytes,
       observation.command_buffer_end_offset, observation.vertex_shader_hash,
