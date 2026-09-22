@@ -1868,3 +1868,84 @@ prove referenced geometry and textures stayed unchanged, or extend the result
 to other gameplay frames. SNR-01/02 and Gate A remain open. The next title-side
 join must identify the owner of these resident command buffers and the
 resource generations they reference before the proposed slice can be frozen.
+
+### Render-thread request boundary after the presentation views
+
+The next read-only hook brackets `CRenderThread` slot 8 at
+`sub_8245AEF8`, recording the render-thread object, mode argument and
+request pointer. Static generated code confirms the common return at
+`0x8245BB7C`; the existing post-view path calls `sub_823F10C8` from this
+slot at return `0x8245B870`. This tests whether that path shares the same
+request scope as the eight presentation-view calls.
+
+The sustained-race replay exited normally with seven captures. Its
+executable SHA-256 was
+`C93E989478209E3623A9AC7C809E4F53043CE20C7CFB358CB85E73693EE14A79`;
+`.local/native-renderer/snr01/render-request-join-run-a.log` SHA-256 was
+`4F4A805A6188EECFF177C6AB34975DA0182003564AE80573FBF8179463920C18`.
+All eight source-frame-6000 presentation-view calls ended **before** the
+observed slot-8 request began. The post-view inline command at physical
+`0x1329FAAC` was published within that request on the same title thread.
+The request used mode `1`, request pointer `0`, and render-thread object
+`0x40159510`; it enclosed no presentation-view call. Later slot-8 calls on
+the same object used modes 5, 2 and 4, with null request pointers.
+
+`tools/verify-snr01-camera-view-join.py` now checks this nesting when the
+slot-8 trace is present while accepting older captures without it. The
+post-view command led to three primary roots and 84 prepared draws from 38
+unique packet addresses in this replay; 28 recurred from prior backend
+frames and ten matched source-frame direct writes. The track-bucket verifier
+again found zero unmatched in-view submissions, and the cube-consumer
+verifier passed for 728 draws.
+
+This identifies the post-view publication as a later render-thread mode-1
+operation. It does not make that operation a semantic scene owner or carry
+the earlier camera into it. SNR-01 must recover the producer and owner of
+the resident indirect buffers and the state read by the deferred command
+before assigning the post-view draws to the proposed main-view slice.
+
+### Title scene list to child indirect-buffer execution
+
+Static generated code shows `sub_82416A00` retaining its list argument in
+`r24` and writing child PM4 indirect packets from that list. The existing
+scene-dump hook at `0x82416F18` now records the physical packet header,
+target buffer, word count, list object, immediate caller and active view
+call in the bounded SNR-01 trace. The backend indirect observer reports the
+same header/target pair when executing each child buffer. This join uses
+exact addresses and does not infer an owner from a shader or packet range.
+
+The first normal-exit, seven-capture replay used executable SHA-256
+`2DFE2783DC1AF1A3F0FA21CD730782354CC0E1365CD1D00091928ACFAF8603A5`;
+`.local/native-renderer/snr01/scene-indirect-run-a.log` SHA-256 was
+`DFE09ED3A87F40CF5B765FA8B85D67C060958C4C642A5A73F5D44A78F11B014C`.
+It recorded 1,069 scene-list child packet pairs in source frame 6000. In
+backend frame 6001, 1,395 of 1,410 child indirect executions matched one
+of those pairs. The post-view command produced 84 draws: all 54 draws in
+child buffers matched list packets emitted inside view call 8, while 30
+draws were direct in the later root buffer.
+
+A second normal-exit, seven-capture replay added an entry/exit scope around
+`sub_82416A00` to retain its immediate caller. Executable SHA-256 was
+`861E592B2EE178164942D56C2C8E14E36E876F210BB37AA1FB29339B370962A1`;
+`.local/native-renderer/snr01/scene-indirect-caller-run-a.log` SHA-256 was
+`5D016502E10172E7BF754C384D6E42BDBBD594878F11242BC940CC51765F7D17`.
+Of 1,490 backend-6001 child executions, 1,475 exactly matched source-frame
+scene-list packets. Its post-view command had 38 draws: all five nested
+draws matched two list objects emitted inside view call 8, with immediate
+caller `0x82416898` (`sub_824167F8`); 33 draws were direct in the root
+buffer. Across all scene-list packets, 1,147 used that caller and 49 used
+`0x8246E930` (`sub_8246E8F8`). Fifteen child executions did not match this
+writer in either capture and remain a separate producer path.
+
+The camera/view verifier now requires the exact scene-list join for every
+post-view nested draw when the title scene trace is present and reports the
+unmatched child-execution count separately. Track-bucket and cube-consumer
+verifiers also pass for the second replay (zero unmatched in-view submitted
+items; 728 cube-sampling draws).
+
+This identifies the title **command-list object** that submitted the
+resident child buffer in these captures. It is not yet the semantic mesh,
+material or view owner of each draw, and it does not classify the direct
+root-buffer draws or the 15 other child executions. Follow the callers of
+`sub_824167F8` back to the scene object and map each list entry to its
+resource generation before SNR-01/02 or Gate A can close.

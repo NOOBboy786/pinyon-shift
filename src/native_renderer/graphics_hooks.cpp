@@ -222,6 +222,17 @@ thread_local std::vector<uint32_t> snr01_deferred_indirect_commands;
 thread_local std::vector<uint32_t> snr01_inline_indirect_callers;
 thread_local std::vector<uint32_t> snr01_command_refill_callers;
 thread_local std::vector<uint32_t> snr01_render_request_callers;
+struct Snr01RenderThreadRequest {
+  uint64_t ordinal;
+  uint32_t object;
+  uint32_t mode;
+  uint32_t request;
+  uint64_t first_view;
+};
+thread_local std::vector<Snr01RenderThreadRequest> snr01_render_thread_requests;
+thread_local uint64_t snr01_render_thread_request_count = 0;
+thread_local uint64_t snr01_scene_indirect_count = 0;
+thread_local std::vector<uint32_t> snr01_scene_indirect_callers;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -2004,6 +2015,37 @@ void PinyonShiftObserveRenderRequestBegin(PPCRegister& r12) {
   }
 }
 
+void PinyonShiftObserveRenderThreadRequestBegin(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_render_thread_request_count;
+  snr01_render_thread_requests.push_back(
+      {ordinal, r3.u32, r4.u32, r5.u32, snr01_view_begin_count});
+  REXGPU_INFO("FH1 SNR01 render thread request begin {{\"frame\":{},"
+              "\"ordinal\":{},\"object\":{},\"mode\":{},"
+              "\"request\":{},\"first_view\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              ordinal, r3.u32, r4.u32, r5.u32, snr01_view_begin_count + 1);
+}
+
+void PinyonShiftObserveRenderThreadRequestEnd() {
+  if (snr01_render_thread_requests.empty()) {
+    return;
+  }
+  const auto request = snr01_render_thread_requests.back();
+  snr01_render_thread_requests.pop_back();
+  REXGPU_INFO("FH1 SNR01 render thread request end {{\"frame\":{},"
+              "\"ordinal\":{},\"object\":{},\"mode\":{},"
+              "\"request\":{},\"first_view\":{},\"last_view\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              request.ordinal, request.object, request.mode, request.request,
+              request.first_view + 1, snr01_view_begin_count);
+}
+
 void PinyonShiftObserveRenderRequestEnd() {
   if (!snr01_render_request_callers.empty()) {
     snr01_render_request_callers.pop_back();
@@ -2219,8 +2261,45 @@ void PinyonShiftObserveClearProducerEnd(PPCRegister& r31, PPCRegister& r1) {
       sample.first_shader_destination, sample.refills, sample.nested);
 }
 
+void PinyonShiftObserveSceneCommandBufferBegin(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
+  if (Snr01TraceCurrentFrame()) {
+    snr01_scene_indirect_callers.push_back(r12.u32);
+    REXGPU_INFO("FH1 SNR01 scene indirect scope {{\"frame\":{},"
+                "\"caller_lr\":{},\"device\":{},\"list_object\":{},"
+                "\"arg5\":{},\"view_call\":{}}}",
+                rex::perf::GetTotalCounter(
+                    rex::perf::CounterId::kSourceFrameCount),
+                r12.u32, r3.u32, r4.u32, r5.u32,
+                snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
+  }
+}
+
+void PinyonShiftObserveSceneCommandBufferEnd() {
+  if (!snr01_scene_indirect_callers.empty()) {
+    snr01_scene_indirect_callers.pop_back();
+  }
+}
+
 void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
-                                         PPCRegister& r11) {
+                                         PPCRegister& r11, PPCRegister& r30) {
+  if (Snr01TraceCurrentFrame() &&
+      ++snr01_scene_indirect_count <= kSnr01PacketLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 scene indirect packet {{\"frame\":{},\"ordinal\":{},"
+        "\"header_physical\":{},\"target_physical\":{},"
+        "\"words\":{},\"list_object\":{},\"caller_lr\":{},"
+        "\"view_call\":{},"
+        "\"view\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        snr01_scene_indirect_count, r30.u32 & 0x1FFFFFFF,
+        r10.u32 & 0x1FFFFFFF, r11.u32, r24.u32,
+        snr01_scene_indirect_callers.empty()
+            ? 0
+            : snr01_scene_indirect_callers.back(),
+        snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+        snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
+  }
   static const bool enabled =
       rex::cvar::GetFlagByName("pinyon_shift_fh1_gpu_corpus") == "true" &&
       rex::cvar::GetFlagByName("pinyon_shift_fh1_scene_dump") == "true";

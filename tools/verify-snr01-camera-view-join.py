@@ -9,21 +9,25 @@ from pathlib import Path
 
 
 EVENT = re.compile(r"\[t(\d+)\] FH1 SNR01 (camera method|view object400|view end|"
+                   r"render thread request begin|render thread request end|"
                    r"inline indirect write|deferred indirect command|"
                    r"primary indirect packet|indirect buffer|prepared draw|"
                    r"direct packet|semantic packet|indexed packet|"
-                   r"indexed2 owner|resident packet|watch armed|watched page) (\{.*\})")
+                   r"indexed2 owner|resident packet|scene indirect packet|"
+                   r"watch armed|watched page) (\{.*\})")
 
 
 def verify(path: Path, frame: int):
     events = {kind: [] for kind in ("camera method", "view object400",
                                     "view end", "inline indirect write",
+                                    "render thread request begin",
+                                    "render thread request end",
                                     "deferred indirect command",
                                     "primary indirect packet", "indirect buffer",
                                     "prepared draw", "direct packet",
                                     "semantic packet", "indexed packet",
                                     "indexed2 owner", "watch armed",
-                                    "watched page")}
+                                    "watched page", "scene indirect packet")}
     survey_ranges = []
     resident_writes = []
     watch_active = False
@@ -79,6 +83,24 @@ def verify(path: Path, frame: int):
     assert post[0][1]["_thread"] == ends[-1][1]["_thread"]
     assert post[0][1]["view_call"] == post[0][1]["view"] == 0
     command = post[0][1]["command_physical"]
+    request_begins = events["render thread request begin"]
+    request_ends = events["render thread request end"]
+    post_request = None
+    if request_begins:
+        end_by_ordinal = {row["ordinal"]: (position, row)
+                          for position, row in request_ends}
+        enclosing = [(begin, row, end_by_ordinal[row["ordinal"]])
+                     for begin, row in request_begins
+                     if row["ordinal"] in end_by_ordinal and
+                     begin < post[0][0] < end_by_ordinal[row["ordinal"]][0]]
+        assert len(enclosing) == 1
+        begin, post_request, (end, ending) = enclosing[0]
+        assert post_request["_thread"] == ending["_thread"] == post[0][1]["_thread"]
+        assert (post_request["object"], post_request["mode"],
+                post_request["request"]) == (
+                    ending["object"], ending["mode"], ending["request"])
+        assert post_request["mode"] == 1 and post_request["request"] == 0
+        assert not any(begin < position < end for position, _ in starts)
     reads = [(position, row) for position, row in
              events["deferred indirect command"]
              if row["frame"] == frame + 1 and
@@ -108,6 +130,28 @@ def verify(path: Path, frame: int):
         if header in roots:
             draws.append((header, draw))
     packets = {draw["packet_physical"] for _, draw in draws}
+    scene_packets = {(row["header_physical"], row["target_physical"]): row
+                     for _, row in events["scene indirect packet"]
+                     if row["frame"] == frame}
+    assert len(scene_packets) == sum(row["frame"] == frame for _, row in
+                                     events["scene indirect packet"])
+    scene_children = [row for row in executions.values() if row["parent"]]
+    scene_children_matched = sum(
+        (row["dispatch_packet_physical"], row["command_buffer"])
+        in scene_packets for row in scene_children)
+    nested_draws = [draw for _, draw in draws
+                    if executions[draw["indirect_execution"]]["parent"]]
+    joined_draws = [
+        scene_packets[(executions[draw["indirect_execution"]]
+                       ["dispatch_packet_physical"], draw["command_buffer"])]
+        for draw in nested_draws
+        if (executions[draw["indirect_execution"]]
+            ["dispatch_packet_physical"], draw["command_buffer"])
+        in scene_packets]
+    if scene_packets:
+        assert len(joined_draws) == len(nested_draws)
+        assert all(row["view_call"] == 8 and row["caller_lr"] for row in
+                   joined_draws)
     draws_by_root = Counter(header for header, _ in draws)
     assert packets and all(draws_by_root[root] for root in roots)
     targets = Counter((draw["surface_info"], draw["color_info"][0],
@@ -192,8 +236,22 @@ def verify(path: Path, frame: int):
             "view_calls": len(starts), "slot44_in_view": 8,
             "reflection_matrix144_changes": 6,
             "post_view_command": hex(command),
+            "post_view_render_thread_mode": (
+                post_request["mode"] if post_request else None),
+            "post_view_render_thread_request": (
+                post_request["request"] if post_request else None),
             "post_view_primary_packets": len(roots),
             "post_view_prepared_draws": len(draws),
+            "scene_child_executions": (
+                len(scene_children) if scene_packets else None),
+            "scene_child_executions_matched": (
+                scene_children_matched if scene_packets else None),
+            "post_view_nested_draws": len(nested_draws),
+            "post_view_nested_draws_joined_to_scene_lists": (
+                len(joined_draws) if scene_packets else None),
+            "post_view_scene_list_objects": (
+                len({row["list_object"] for row in joined_draws})
+                if scene_packets else None),
             "post_view_unique_draw_packets": len(packets),
             "post_view_packet_addresses_seen_in_prior_frames": len(
                 packets & prior_packets),
