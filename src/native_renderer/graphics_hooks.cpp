@@ -2287,6 +2287,16 @@ void PinyonShiftObserveSceneListFlushEnd() {
   }
 }
 
+void PinyonShiftObserveSnr01VehiclePoseOwner(PPCRegister& r30,
+                                              PPCRegister& r31) {
+  if (Snr01TraceCurrentFrame()) {
+    REXGPU_INFO("FH1 SNR01 vehicle pose owner {{\"frame\":{},\"source\":{},"
+                "\"owner\":{},\"owner_first_word\":{}}}",
+                rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+                r30.u32, r31.u32, SnrM02ReadU32(r31.u32));
+  }
+}
+
 void PinyonShiftObserveSceneCommandBufferBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
   if (Snr01TraceCurrentFrame()) {

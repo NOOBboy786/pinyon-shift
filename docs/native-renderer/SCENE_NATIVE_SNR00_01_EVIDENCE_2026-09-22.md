@@ -1996,3 +1996,42 @@ car-related title owners for the nested post-view packets in this window.
 They do not distinguish player from traffic cars, classify the 27 direct
 root-buffer draws, map car materials/geometry or prove resource freshness.
 Those remaining joins are required before SNR-01/02 and Gate A can close.
+
+### Vehicle-pose object is audio, not the draw owner
+
+A second read-only hook immediately after the existing `0x82BC5A3C`
+vehicle-pose hook records its retained `r31` object for source frame 6000.
+The saved sustained-race route exited normally with seven captures using
+executable SHA-256
+`738B094BE4A90EF44F794E9B8D3AEACAF43C1B40F906297D54574A5789C572F3`.
+The session log at
+`.local/native-renderer/snr01/pose-owner-run-e-full.log` (SHA-256
+`915F79C1D0C686689385E1143324C657C5EF01D8D433C2FB2A7FC0D796BA1AF1`)
+was reconstructed in time order from that session's `runtime.5.log` through
+`runtime.log` rotating-file segments; the initial segment starts at its
+`20260922T165454Z-p36708` session marker. The camera/view verifier passes.
+The cube-consumer verifier also passes for 728 draws. The track-bucket
+verifier's `dispatched == expected` assertion fails in this particular
+replay, so it is not used as independent track-coverage evidence.
+
+The pose hook recorded 48 calls on eight distinct `r31` objects. Their
+first word was always `0x8213BA54`; the verified base image resolves its
+RTTI locator `0x8234F824` and type descriptor `0x832A183C` to a
+thread-safe `CCarAudio` wrapper. Generated `sub_82BC5870` retains entry
+`r3` in `r31`; its caller `sub_82BC8410` passes that audio object while
+passing a stack argument through `r4`, explaining the common `r30` source
+pointer. In the same frame, 564 view-8 scene-list packets carried 17
+distinct nonzero flush-owner pointers. None equalled any of the eight pose
+objects. The post-view command contained 78 prepared draws: all 51 nested
+draws joined exactly to view-8 scene lists, with 27 direct root-buffer
+draws still unclassified. The 51 nested draws used `CCarPresentation`
+(`0x82003A54`, 32 draws), `CCarModel` (`0x82001618`, 16 draws), and the
+untyped state pointer (3 draws).
+
+The vehicle-pose hook is therefore a verified car-audio update boundary,
+not a direct player/traffic label for rendered car instances. Identifying
+the player requires a title relationship from player state to
+`CCarPresentation`/`CCarModel`, or a separately proven instance identity;
+pointer equality with the pose object is insufficient. The verifier now
+checks the audio vtable and reports distinct pose owners and overlap with
+view-8 flush owners when the probe is present. SNR-01 and Gate A remain open.

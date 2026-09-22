@@ -12,6 +12,7 @@ EVENT = re.compile(r"\[t(\d+)\] FH1 SNR01 (camera method|view object400|view end
                    r"render thread request begin|render thread request end|"
                    r"inline indirect write|deferred indirect command|"
                    r"primary indirect packet|indirect buffer|prepared draw|"
+                   r"vehicle pose owner|"
                    r"direct packet|semantic packet|indexed packet|"
                    r"indexed2 owner|resident packet|scene indirect packet|"
                    r"watch armed|watched page) (\{.*\})")
@@ -25,6 +26,7 @@ def verify(path: Path, frame: int):
                                     "deferred indirect command",
                                     "primary indirect packet", "indirect buffer",
                                     "prepared draw", "direct packet",
+                                    "vehicle pose owner",
                                     "semantic packet", "indexed packet",
                                     "indexed2 owner", "watch armed",
                                     "watched page", "scene indirect packet")}
@@ -133,6 +135,12 @@ def verify(path: Path, frame: int):
     scene_packets = {(row["header_physical"], row["target_physical"]): row
                      for _, row in events["scene indirect packet"]
                      if row["frame"] == frame}
+    pose_rows = [row for _, row in events["vehicle pose owner"]
+                 if row["frame"] == frame]
+    assert all(row["owner_first_word"] == 0x8213BA54 for row in pose_rows)
+    pose_owners = {row["owner"] for row in pose_rows}
+    flush_owners = {row["flush_owner"] for row in scene_packets.values()
+                    if row.get("view_call") == 8 and row.get("flush_owner")}
     assert len(scene_packets) == sum(row["frame"] == frame for _, row in
                                      events["scene indirect packet"])
     scene_children = [row for row in executions.values() if row["parent"]]
@@ -269,6 +277,10 @@ def verify(path: Path, frame: int):
             "post_view_scene_owner_first_words": dict(Counter(
                 hex(row["flush_owner_first_word"]) for row in joined_draws
                 if "flush_owner_first_word" in row)),
+            "vehicle_pose_calls": len(pose_rows),
+            "vehicle_pose_owners": len(pose_owners),
+            "vehicle_pose_owners_matching_view8_flush": len(
+                pose_owners & flush_owners),
             "post_view_unique_draw_packets": len(packets),
             "post_view_packet_addresses_seen_in_prior_frames": len(
                 packets & prior_packets),

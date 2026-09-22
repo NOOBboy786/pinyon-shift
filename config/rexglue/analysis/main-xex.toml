@@ -954,6 +954,11 @@ address = 0x82BC5A3C
 name = "PinyonShiftTraceVehiclePose"
 registers = ["r1", "r30", "r31"]
 
+[[midasm_hook]]
+address = 0x82BC5A40
+name = "PinyonShiftObserveSnr01VehiclePoseOwner"
+registers = ["r30", "r31"]
+
 # M4 markerless-exit classification. PID 25180 produced an unhandled read AV
 # in sub_826E1B10 after a readable object yielded vtable 0x0000487C. Observe
 # the object assignment immediately before the vtable+8 read; do not repair or
