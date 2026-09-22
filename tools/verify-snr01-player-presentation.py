@@ -267,6 +267,13 @@ def main() -> int:
             assert {r["next_call"] for r in descriptors} == set(direct_calls)
             assert len({r["table_root"] for r in descriptors}) == 1
             assert all(r["table_root"] for r in descriptors)
+            if "table_owner_first_word" in descriptors[0]:
+                assert all(
+                    r["table_first_word"] and
+                    r["table_owner_first_word"] == 0x8200373C and
+                    r["list_first_word"] == 0x500009
+                    for r in descriptors
+                )
             assert Counter(
                 (r["header"] - r["table_root"]) // 16 for r in descriptors
             ) == {1799: 27, 1913: 2}

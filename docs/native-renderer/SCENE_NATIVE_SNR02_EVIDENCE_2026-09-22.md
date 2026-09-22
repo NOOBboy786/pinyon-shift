@@ -164,3 +164,28 @@ model path. They still do not identify the mesh/material allocation or
 freshness behind each prepared draw. The next ownership trace must follow
 who populates the command-list descriptor and its child PM4 buffer, while
 keeping the separate path distinct.
+
+## Presentation table owner
+
+A further read-only replay dereferenced the first word at the presentation
+table root and the first word of each selected command list. The seven-capture
+saved-race route exited normally with executable SHA-256
+`E64184AD9AF538A89B88D620227ECFB562F7183A290C3FF37E3D849D0A1F461F`;
+`.local/native-renderer/snr02/table-owner-run-a-full.log` has SHA-256
+`53D301CF1D89729E3B09ED8EDECCD470E9E85444984E391DB94D67BF40279A7C`.
+The existing verifier passed its model-record and backend-join requirements.
+
+For all 29 local direct-model descriptors, the table root's first word points
+to a live object whose first word is vtable `0x8200373C`. The image's RTTI
+locator `0x8235A9DC` resolves through type descriptor `0x832B036C` to
+`TRefCountedObjectThreadSafe<CPresentation>`. The selected command lists begin
+with scalar `0x00500009`, not a vtable. This identifies a presentation
+reference holder at the table root and confirms that the lists are submission
+containers. Neither word identifies a persistent mesh or material owner.
+
+The title lookup `sub_8243CCF0` indexes the table by its three selection
+arguments (with the third clamped to 0..5) and returns a list pointer or null;
+`sub_8243CDC0` flushes a non-null result. This explains why a direct-model
+selector can have no packet, but it does not establish who creates the list
+or its geometry payload. The next trace must follow that producer and join
+its resource lifetime to the prepared draw.

@@ -2455,19 +2455,24 @@ void PinyonShiftObserveSnr02CarDescriptor(
     PPCRegister& presentation, PPCRegister& header, PPCRegister& entry,
     PPCRegister& selector, PPCRegister& list) {
   if (Snr01TraceCurrentFrame()) {
+    const uint32_t table = SnrM02ReadU32(presentation.u32 + 6044);
+    const uint32_t table_owner = SnrM02ReadU32(table);
     REXGPU_INFO(
         "FH1 SNR02 car descriptor {{\"frame\":{},\"next_call\":{},"
-        "\"presentation\":{},\"table_root\":{},\"header\":{},"
+        "\"presentation\":{},\"table_root\":{},"
+        "\"table_first_word\":{},\"table_owner_first_word\":{},"
+        "\"header\":{},"
         "\"header_begin\":{},\"header_end\":{},\"entry\":{},"
         "\"selector\":{},\"entry_words\":[{},{},{}],"
-        "\"list\":{},\"view_call\":{}}}",
+        "\"list\":{},\"list_first_word\":{},\"view_call\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
-        snr01_car_owner_call_count + 1, presentation.u32,
-        SnrM02ReadU32(presentation.u32 + 6044), header.u32,
+        snr01_car_owner_call_count + 1, presentation.u32, table,
+        table_owner, SnrM02ReadU32(table_owner), header.u32,
         SnrM02ReadU32(header.u32), SnrM02ReadU32(header.u32 + 4),
         entry.u32, selector.u32, SnrM02ReadU32(entry.u32),
         SnrM02ReadU32(entry.u32 + 4), SnrM02ReadU32(entry.u32 + 8),
-        list.u32, snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
+        list.u32, SnrM02ReadU32(list.u32),
+        snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
   }
 }
 
