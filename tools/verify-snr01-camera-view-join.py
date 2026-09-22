@@ -233,14 +233,14 @@ def verify(path: Path, frame: int):
     assert direct and all(
         (row["path"] == "indexed2_secondary" and not row["direct_call"] and
          ("indexed2_caller_lr" not in row or row["indexed2_caller_lr"])) or
-        (row["path"] == "secondary" and row["direct_call"] and
+        (row["path"] in ("primary", "secondary") and row["direct_call"] and
          row["direct_caller_lr"])
         for row in direct)
     callers = Counter(row["indexed2_caller_lr"] for row in direct
                       if row["path"] == "indexed2_secondary" and
                       "indexed2_caller_lr" in row)
     scoped_callers = Counter(row["direct_caller_lr"] for row in direct
-                             if row["path"] == "secondary")
+                             if row["path"] in ("primary", "secondary"))
     owner = [(position, row) for position, row in events["indexed2 owner"]
              if row["frame"] == frame]
     if owner:

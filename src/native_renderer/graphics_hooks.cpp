@@ -112,6 +112,17 @@ struct Snr01EmitterScope {
   uint64_t first_semantic_packet;
   uint64_t ordinal;
 };
+struct Snr01SecondPathScope {
+  uint64_t frame;
+  uint64_t ordinal;
+  uint64_t view_call;
+  uint64_t first_semantic;
+  uint32_t caller_lr;
+  uint32_t context;
+  uint32_t arg4;
+  uint32_t arg5;
+  uint32_t arg6;
+};
 struct Snr01DirectScope {
   uint32_t caller_lr;
   uint32_t owner;
@@ -222,6 +233,8 @@ struct Snr01ItemNodeScope {
   uint64_t ordinal;
 };
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
+thread_local std::vector<Snr01SecondPathScope> snr01_second_path_scopes;
+thread_local uint64_t snr01_second_path_count = 0;
 std::atomic<rex::memory::Memory*> snr01_memory{nullptr};
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
 thread_local std::vector<Snr01DirectFamilyScope> snr01_direct_family_scopes;
@@ -1906,6 +1919,40 @@ void PinyonShiftObserveProceduralItemEnd() {
         scope.submit_context, scope.submit_primitive,
         scope.submit_arg5, scope.submit_arg6);
   }
+}
+
+void PinyonShiftObserveSnr01SecondPathBegin(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4,
+    PPCRegister& r5, PPCRegister& r6) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  snr01_second_path_scopes.push_back({
+      static_cast<uint64_t>(rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount)),
+      ++snr01_second_path_count,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      snr01_semantic_packet_count, r12.u32, r3.u32, r4.u32, r5.u32,
+      r6.u32});
+}
+
+void PinyonShiftObserveSnr01SecondPathEnd() {
+  if (snr01_second_path_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr01_second_path_scopes.back();
+  snr01_second_path_scopes.pop_back();
+  if (scope.ordinal > kSnr01ProceduralLimit) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 second path {{\"frame\":{},\"call\":{},"
+      "\"view_call\":{},\"caller_lr\":{},\"context\":{},"
+      "\"arg4\":{},\"arg5\":{},\"arg6\":{},"
+      "\"first_semantic\":{},\"last_semantic\":{}}}",
+      scope.frame, scope.ordinal, scope.view_call, scope.caller_lr,
+      scope.context, scope.arg4, scope.arg5, scope.arg6,
+      scope.first_semantic + 1, snr01_semantic_packet_count);
 }
 
 void PinyonShiftObserveProceduralEmitterBegin(

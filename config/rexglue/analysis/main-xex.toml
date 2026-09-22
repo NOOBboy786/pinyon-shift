@@ -274,6 +274,15 @@ name = "PinyonShiftObserveProceduralItemEnd"
 # The two verified PM4_DRAW_INDX stores in the procedural submission emitter.
 # They bypass the generic indexed wrapper observed at 0x82410328.
 [[midasm_hook]]
+address = 0x82412DDC
+name = "PinyonShiftObserveSnr01SecondPathBegin"
+registers = ["r12", "r3", "r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x82412E1C
+name = "PinyonShiftObserveSnr01SecondPathEnd"
+
+[[midasm_hook]]
 address = 0x82415F6C
 name = "PinyonShiftObserveProceduralEmitterBegin"
 registers = ["r12", "r3", "r4", "r5", "r6"]

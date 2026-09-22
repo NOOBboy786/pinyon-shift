@@ -2578,3 +2578,43 @@ view-8 packet attribution where present, but do not yet have the required
 mesh/instance and resource ownership. Nor does this join resolve the 36
 ownerless scene-list callbacks elsewhere in the frame. The candidate slice
 therefore remains provisional.
+
+### Second context path identifies candidate vegetation records
+
+The generated `sub_82412DD8` is the render-context vtable-offset-164 draw
+method reached by the non-item semantic packet writer at `0x82412E1C`.
+A default-off entry/exit probe records its original caller, arguments,
+active view and exact semantic-packet range. The sustained saved-race replay
+exited normally with seven captures. Executable SHA-256 was
+`99DD130683EDACB90E8EBE454499A310C485459E90FC5EA4189B5B88A781C7B7`;
+the isolated log at `.local/native-renderer/snr01/second-path-run-a-session.log`
+has SHA-256 `48E74F8FA95046BC153B15F63AC2B3CD4B0E02A8624027666323DCD0BB838E95`.
+The strict frame-wide ledger at `.local/native-renderer/snr01/second-path-run-a.json`
+has SHA-256 `C09037DD78600F97ACAE4D5B11086EAA066CE9D3708022C93F569ED4701D14C0`.
+The exact primary-root, track-bucket, camera/view and title-item joins pass.
+This route has 3,900 backend-frame-6001 draws; counts cannot be combined
+with those of the preceding replay.
+
+Of 646 attachment-writing candidate direct-root callbacks, 183 derive from
+80 `sub_82412DD8` semantic packets. Their original title callers split into
+163 callbacks at `0x82413A84`, 11 at `0x8245AEA0`, and nine across three
+other callers. Static code at `0x82413A84` calls the virtual draw from the
+vegetation loop. The existing second-draw and track-bucket records join its
+163 callbacks to 70 unique selected bound records, eight vegetation owner
+objects, and the title-side vertex descriptors. Each joined call has the
+same context and draw arguments as the new second-path scope; its bound
+record equals the selected vegetation record. The track-bucket verifier
+independently checks all 140 vegetation packets and 233 callbacks in this
+frame, including those outside the candidate direct-root group. The 11
+callbacks at `0x8245AEA0` join seven bound records on the character path.
+This establishes title item/record provenance for these observed draws, not
+allocation generation, final transform, material semantics or freshness.
+
+This replay also put five directly observed primary-store packets under the
+post-view deferred roots. The camera/view verifier previously admitted only
+secondary-store direct packets there; it now accepts primary or secondary
+when the same verified direct-emitter scope and caller are present. It passes
+this and the prior character-record replay. The nine other second-path
+callbacks have original call sites but no enclosing second-draw record in
+this capture. They and the remaining candidate direct packets still need
+semantic ownership before the slice can be frozen.

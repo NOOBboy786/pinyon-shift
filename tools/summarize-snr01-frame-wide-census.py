@@ -20,6 +20,8 @@ PREFIXES = {
     "semantic": "FH1 SNR01 semantic packet ",
     "item_node": "FH1 SNR01 item node ",
     "item": "FH1 SNR01 procedural item ",
+    "second_path": "FH1 SNR01 second path ",
+    "second_draw": "FH1 SNR01 second draw call ",
     "family_record": "FH1 SNR01 direct family record ",
     "family": "FH1 SNR01 direct family ",
     "clear": "FH1 clear producer ",
@@ -85,6 +87,18 @@ def summarize(records, frames, backend_frame):
             key = (node["frame"], ordinal)
             assert key not in item_nodes, f"overlapping item nodes: {key}"
             item_nodes[key] = node
+    second_paths = {}
+    for scope in records["second_path"]:
+        for ordinal in range(scope["first_semantic"], scope["last_semantic"] + 1):
+            key = (scope["frame"], ordinal)
+            assert key not in second_paths, f"overlapping second paths: {key}"
+            second_paths[key] = scope
+    second_draws = {}
+    for scope in records["second_draw"]:
+        for ordinal in range(scope["first_semantic"], scope["last_semantic"] + 1):
+            key = (scope["frame"], ordinal)
+            assert key not in second_draws, f"overlapping second draws: {key}"
+            second_draws[key] = scope
     assert len(primary) == len(records["primary"])
     assert len(scene) == len(records["scene"])
     assert all(r["view_call"] == 0 or
@@ -169,10 +183,28 @@ def summarize(records, frames, backend_frame):
         family_record = None
         item = None
         item_node = None
+        second_path = None
+        second_draw = None
         if title_packet and title_packet[0] == "semantic":
             title_row = title_packet[1]
             key = (title_row["frame"], title_row["ordinal"])
             item_node = item_nodes.get(key)
+            second_path = second_paths.get(key)
+            second_draw = second_draws.get(key)
+            if title_row["emitter_caller_lr"] == 0x82412E1C and records["second_path"]:
+                assert second_path, f"missing second path: {draw['ordinal']}"
+            if second_path:
+                assert title_row["emitter_caller_lr"] == 0x82412E1C
+                assert second_path["view_call"] == title_row["title_view_call"]
+            if second_draw and second_path:
+                assert second_draw["context"] == second_path["context"]
+                assert second_draw["arg4"] == second_path["arg4"]
+                assert second_draw["arg5"] == second_path["arg5"]
+                assert second_draw["arg6"] == second_path["arg6"]
+                if second_path["caller_lr"] == 0x82413A84:
+                    assert second_draw["vegetation_owner"]
+                    assert second_draw["bound_record"] == second_draw["vegetation_selected_record"]
+                    assert second_draw["bound_vertex_descriptor"]
             if title_row["procedural_call"]:
                 item = items.get((title_row["frame"], title_row["procedural_call"]))
                 if records["item"]:
@@ -276,6 +308,15 @@ def summarize(records, frames, backend_frame):
             "title_item_list_head": item_node["list_head"] if item_node else None,
             "title_item_render_owner": item_node["render_owner"] if item_node else None,
             "title_item_bucket_entry": item_node["bucket_entry"] if item_node else None,
+            "title_second_path_caller_lr": second_path["caller_lr"] if second_path else None,
+            "title_second_path_context": second_path["context"] if second_path else None,
+            "title_second_path_arg4": second_path["arg4"] if second_path else None,
+            "title_second_path_arg5": second_path["arg5"] if second_path else None,
+            "title_second_draw_bucket_entry": second_draw["bucket_entry"] if second_draw else None,
+            "title_second_draw_target": second_draw["target"] if second_draw else None,
+            "title_second_draw_bound_record": second_draw["bound_record"] if second_draw else None,
+            "title_second_draw_vertex_descriptor": second_draw["bound_vertex_descriptor"] if second_draw else None,
+            "title_second_draw_vegetation_owner": second_draw["vegetation_owner"] if second_draw else None,
             "clear_producer_record": clear_producer["record"] if clear_producer else None,
             "clear_producer_flags": clear_producer["flags"] if clear_producer else None,
         })
@@ -313,6 +354,7 @@ def main():
     parser.add_argument("--require-direct-family", action="store_true")
     parser.add_argument("--require-direct-family-record", action="store_true")
     parser.add_argument("--require-semantic-item-node", action="store_true")
+    parser.add_argument("--require-second-path", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     frames = [args.source_frame, args.source_frame + 1]
@@ -323,6 +365,8 @@ def main():
         assert records["family"] and records["family_record"], "no direct-family records"
     if args.require_semantic_item_node:
         assert records["item"] and records["item_node"], "no item-node records"
+    if args.require_second_path:
+        assert records["second_path"], "no second-path records"
     result = summarize(records, frames, args.source_frame + 1)
     result["log_sha256"] = hashlib.sha256(args.log.read_bytes()).hexdigest().upper()
     args.output.parent.mkdir(parents=True, exist_ok=True)
