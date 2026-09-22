@@ -104,6 +104,7 @@ struct Snr01DirectScope {
 };
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
+thread_local std::vector<uint32_t> snr01_primary_indirect_callers;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -133,6 +134,14 @@ bool Snr01TraceCurrentFrame() {
   return target > 0 && uint64_t(target) ==
                            uint64_t(rex::perf::GetTotalCounter(
                                rex::perf::CounterId::kSourceFrameCount));
+}
+
+bool Snr01TracePrimaryIndirectFrame() {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  const uint64_t frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  return target > 0 && frame >= uint64_t(target) &&
+         frame <= uint64_t(target) + 1;
 }
 
 void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
@@ -248,6 +257,33 @@ void ObservePreparedDraw(
       observation.bound_render_target_bits);
 }
 
+void ObserveIndirectBuffer(
+    const rex::system::GraphicsIndirectBufferObservation& observation) {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  if (target <= 0 || observation.frame_sequence + 1 < uint64_t(target) ||
+      observation.frame_sequence > uint64_t(target) + 1) {
+    return;
+  }
+  static thread_local uint64_t logged_frame = 0;
+  static thread_local uint64_t logged_buffers = 0;
+  if (logged_frame != observation.frame_sequence) {
+    logged_frame = observation.frame_sequence;
+    logged_buffers = 0;
+  }
+  if (++logged_buffers > kSnr01PacketLimit) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 indirect buffer {{\"frame\":{},\"ordinal\":{},"
+      "\"execution\":{},\"parent\":{},\"dispatch_packet_physical\":{},"
+      "\"command_buffer\":{},\"command_bytes\":{}}}",
+      observation.frame_sequence, logged_buffers, observation.execution_id,
+      observation.parent_execution_id,
+      observation.dispatch_packet_physical_address,
+      observation.command_buffer_physical_address,
+      observation.command_buffer_bytes);
+}
+
 void ObserveCopy(const rex::system::GraphicsCopyObservation& observation) {
   RecordFh1GpuCopy(observation);
 }
@@ -264,12 +300,17 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
       enabled || REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
           ? &ObservePreparedDraw
           : nullptr);
+  graphics_system->SetIndirectBufferObserver(
+      REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
+          ? &ObserveIndirectBuffer
+          : nullptr);
   graphics_system->SetCopyObserver(enabled ? &ObserveCopy : nullptr);
 }
 
 void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
   if (graphics_system) {
     graphics_system->SetPreparedDrawObserver(nullptr);
+    graphics_system->SetIndirectBufferObserver(nullptr);
     graphics_system->SetCopyObserver(nullptr);
   }
   FlushFh1GpuCorpus();
@@ -775,6 +816,46 @@ void PinyonShiftObserveIndexed2PacketPrimary(PPCRegister& r30,
                                              PPCRegister& r11,
                                              PPCRegister& r31) {
   RecordSnr01DirectPacket("indexed2_primary", r30.u32, r11.u32, r31.u32);
+}
+
+void PinyonShiftObservePrimaryIndirectBegin(PPCRegister& r12, PPCRegister&,
+                                           PPCRegister&, PPCRegister&) {
+  if (Snr01TracePrimaryIndirectFrame()) {
+    snr01_primary_indirect_callers.push_back(r12.u32);
+  }
+}
+
+void PinyonShiftObservePrimaryIndirectPacket(
+    PPCRegister& r10, PPCRegister& r11, PPCRegister& r28, PPCRegister& r29,
+    PPCRegister& r31, PPCRegister& r27, PPCRegister& r24, PPCRegister& r25,
+    PPCRegister& r26, PPCRegister& r21) {
+  if (!Snr01TracePrimaryIndirectFrame()) {
+    return;
+  }
+  static thread_local uint64_t logged_packets = 0;
+  const uint64_t ordinal = ++logged_packets;
+  if (ordinal > kSnr01PacketLimit) {
+    return;
+  }
+  const uint32_t guest_address = r28.u32 + r11.u32 * sizeof(uint32_t);
+  REXGPU_INFO(
+      "FH1 SNR01 primary indirect packet {{\"frame\":{},\"ordinal\":{},"
+      "\"header_physical\":{},\"header_word\":{},\"gpu_target\":{},"
+      "\"device\":{},\"entry_array\":{},\"entry_count\":{},"
+      "\"entry_index\":{},\"ring_mask\":{},\"mode\":{},"
+      "\"caller_lr\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      ordinal, guest_address & 0x1FFFFFFF, r10.u32, r31.u32, r27.u32,
+      r24.u32, r25.u32, r26.u32, r29.u32, r21.u32,
+      snr01_primary_indirect_callers.empty()
+          ? 0
+          : snr01_primary_indirect_callers.back());
+}
+
+void PinyonShiftObservePrimaryIndirectEnd() {
+  if (!snr01_primary_indirect_callers.empty()) {
+    snr01_primary_indirect_callers.pop_back();
+  }
 }
 
 void PinyonShiftObserveIndexed2PacketSecondary(PPCRegister& r6,

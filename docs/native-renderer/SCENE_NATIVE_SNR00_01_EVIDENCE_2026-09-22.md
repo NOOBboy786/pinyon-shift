@@ -490,3 +490,68 @@ and 1,545 had none matched. These are address correlations, not title-owner
 or generation joins. The backend execution graph is established, but title
 command-buffer submission, owner/view, record and LOD still need a bounded
 join to these executions before SNR-01 or Gate A can close.
+
+### Complete dispatch hierarchy and primary-ring publication
+
+The draw-only observation omits indirect executions that produce no prepared
+draw, including some parents of draw-bearing buffers. A separate default-off
+observer now records every indirect dispatch. The saved race exited normally
+with executable SHA-256
+`4D52B0C637EC38CEFF2CF5EA45AEB55FB07CF6BDD4E893E523D5BCB090673658`.
+The local combined log is
+`.local/native-renderer/snr01/indirect-full-graph-frame-6000/title-backend-full-graph.log`
+(SHA-256 `65E3CF22309C06BA7469FEEABD530C9CDC5093F4159D5C51E0E64E4C7D59B9F4`).
+Backend frame 6001 contained 1,637 unique indirect executions, 5,397
+prepared draws and 133 top-level dispatches. Only 29 roots had prepared
+draws; 167 executions had none. Every draw resolved to a root, every parent
+ID was present, and every child dispatch packet lay inside its parent's
+command-buffer range. Draw ancestry was one or two indirect levels deep.
+Neither 8,192-event diagnostic cap was reached. This establishes backend
+hierarchy for that bounded frame, not title ownership.
+
+Generated title code identifies `sub_82409398` as the primary-ring indirect
+packet writer. Its `0x824095B0` site computes the header address from the
+ring base and word cursor, writes `0xC0013F00`, then writes the target and
+length. Read-only hooks capture that write site and its caller. Static call
+sites at `0x82409838` in `sub_82409668` and `0x829F6308` in
+`sub_829F5FF0` are the two observed immediate paths. The caller names are
+source functions, not view or scene-owner labels.
+
+The final two-source-frame replay exited normally with executable SHA-256
+`3BFCE0CFB1AF4816C894A6063C3366A616A9841D9757F56F4917E769C8E86522`.
+Its combined log is
+`.local/native-renderer/snr01/primary-caller-frame-6000/title-backend-caller.log`
+(SHA-256 `1F41FE50568B3FC3B74084AE94D741FB36936325E7BC7065BCB94ABBFC9239C4`).
+Source frames 6000 and 6001 wrote 132 and 133 primary indirect packets.
+Across both source frames, 168 calls came from `0x82409838` and 97 from
+`0x829F6308`; all used one observed device pointer, and each call submitted
+one entry. Backend frame 6001 had 1,620 indirect executions, 133 roots and
+5,145 prepared draws. Every root matched exactly one earlier title packet
+address, with the same target command-buffer address. Of those roots, 102
+were written in source frame 6000 and 31 in source frame 6001; they account
+for 1,943 and 3,202 prepared draws respectively. The address, target and
+ordering checks passed for every root, with no trace cap hit.
+
+| Source frame / immediate caller | Backend-6001 roots | Roots with draws | Prepared draws |
+| --- | ---: | ---: | ---: |
+| 6000 / `0x82409838` | 84 | 8 | 1,943 |
+| 6000 / `0x829F6308` | 18 | 0 | 0 |
+| 6001 / `0x829F6308` | 31 | 21 | 3,202 |
+
+This partitions the observed backend work by immediate title submission
+path, but a no-draw root can still contain clears, copies, state or other
+effects. The table does not identify scene views or safe replacement cuts.
+Reproduce the check with:
+
+```powershell
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/primary-caller-frame-6000/title-backend-caller.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+Log rotation removed the beginning of backend frame 6000 in this final
+capture, so the complete title-to-root claim applies only to backend frame
+6001. The exact bounded submission join does not yet identify the upstream
+view, visible-list entry, selected LOD, material or allocation generation.
+Trace the two immediate callers back to their queue producers and title
+owners before using this chain for native scene admission or draw suppression.
