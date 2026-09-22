@@ -207,7 +207,7 @@ construction in `sub_824D11B0` calls material binding `sub_82549670` twice
 with its embedded binding object at offset 1056. This proves a title-owned
 tire/wheel material *family* and supplies a precise runtime probe boundary:
 record the root, binding object, load-UI/SLOD flags and asset-key identity at
-`0x82549670`, then join the resulting resource to a selected title draw and
+`0x82549670`, then follow later resolution to a selected title draw and
 its backend geometry. The static audit alone does not prove which selected
 local-car draw uses that binding, any other material role, geometry ownership
 or resource freshness. No native admission follows from it.
@@ -229,7 +229,47 @@ binding offset 1056, and passed zero for both load-UI and SLOD flags. The
 root address is sometimes reused, while its first word changes; it must not
 be treated as a stable resource identity or vtable. Generated
 `sub_82543558` reads the asset-key string at root offset 1712 and its capacity
-at offset 1732 before appending that key to the tire settings path. A later
-probe can record a bounded key hash and the resulting material object, then
-join them to the exact selected title draw. These 32 loading-time records do
-not yet establish that any specific local-player draw uses this family.
+at offset 1732 before appending that key to the tire settings path. Further
+inspection of generated `sub_82549670` shows that it passes the resulting
+temporary string to `sub_82480FC0`, which moves/copies it into the binding
+object. This hook therefore proves path setup, not material-object creation
+or resource generation. A later trace must follow resolution from the binding
+string to the selected draw. These 32 loading-time records do not yet
+establish that any specific local-player draw uses this family.
+
+## Selected car transform input
+
+Generated `sub_824399F8` starts with the `CCarSubModel` record in `r6`.
+It copies a 64-byte matrix from either model offset 800 or binding offset
+176, depending on the binding flag at offset 28. When record byte 352 is
+set, it composes the record matrix at offset 288 into that copy. The call at
+`0x82439B54` passes the resulting stack matrix to `sub_82435F50`, which
+continues writing title render state. Thus this is an authoritative *input*
+to title preparation, not a proved final GPU transform.
+
+A default-off, 512-record-capped read-only pair of hooks at `0x824399F8`
+and `0x82439B54` records the selected record, title owner call, 16 exact
+matrix words, render-state pointer and flag. The corrected preview executable
+SHA-256 was `B037815627439E43AB1A76F98EBF34D3BAB84AEBDB50AE3170D666897C2E646F`.
+The seven-capture saved-race replay exited normally; its ordered diagnostic
+log at `.local/native-renderer/snr02/matrix-input-run-a-full.log` has SHA-256
+`FC087E0B911EC77535DB17710BFFA5C1AA6167BE26D03900295990BFC57B32C2`.
+The verifier's model-record, matrix-input and backend-join requirements pass
+for source frame 6000.
+
+All 29 selected direct-model calls still join their title descriptors and
+records. Twelve call the later matrix-consuming routine and each captured
+matrix matches its selected record. Seventeen do not make that call; static
+control flow skips it when both the binding and record composition flags are
+clear. This replay has 49 local-car command buffers and 268 prepared draws,
+including calls without a new matrix input. The trace therefore does not
+yet explain the carried render state for those calls or identify the final
+matrix at draw time. The number of view-8 presentations also varied from
+the earlier capture (four here); the verifier now requires the local
+presentation's view-8 ownership rather than assuming all eight car
+presentations share it.
+
+The next bounded trace must observe title state after `sub_82435F50` and
+associate its matrix with each draw, including calls that reuse state. This
+still leaves actual mesh/material identity and resource generations open
+before an immutable scene can be admitted.

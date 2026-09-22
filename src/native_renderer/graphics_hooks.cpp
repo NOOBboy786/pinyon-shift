@@ -56,6 +56,8 @@ struct ClearProducerSample {
 thread_local std::vector<ClearProducerSample> clear_producers;
 std::atomic<uint64_t> clear_producer_records{0};
 std::atomic<uint32_t> snr02_vehicle_material_bindings{0};
+std::atomic<uint32_t> snr02_car_matrices{0};
+thread_local uint32_t snr02_car_matrix_record = 0;
 
 struct TitleEmitterSample {
   uint64_t frame;
@@ -2472,6 +2474,38 @@ void PinyonShiftObserveSnr02CarModelRecord(PPCRegister& r3) {
         SnrM02ReadU32(binding + 28),
         snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
   }
+}
+
+void PinyonShiftObserveSnr02CarMatrixBegin(PPCRegister& r6) {
+  if (Snr01TraceCurrentFrame()) {
+    snr02_car_matrix_record = r6.u32;
+  }
+}
+
+void PinyonShiftObserveSnr02CarMatrixInput(PPCRegister& r3, PPCRegister& r4,
+                                            PPCRegister& r5) {
+  if (!Snr01TraceCurrentFrame() ||
+      snr02_car_matrices.fetch_add(1) >= 512) {
+    return;
+  }
+  const uint32_t matrix = r3.u32;
+  REXGPU_INFO(
+      "FH1 SNR02 car matrix input {{\"frame\":{},\"call\":{},"
+      "\"owner\":{},\"record\":{},\"matrix\":{},\"render_state\":{},"
+      "\"flags\":{},\"words\":[{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}],"
+      "\"view_call\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      snr01_car_owner_call.ordinal, snr01_car_owner_call.owner,
+      snr02_car_matrix_record, matrix, r4.u32, r5.u32,
+      SnrM02ReadU32(matrix), SnrM02ReadU32(matrix + 4),
+      SnrM02ReadU32(matrix + 8), SnrM02ReadU32(matrix + 12),
+      SnrM02ReadU32(matrix + 16), SnrM02ReadU32(matrix + 20),
+      SnrM02ReadU32(matrix + 24), SnrM02ReadU32(matrix + 28),
+      SnrM02ReadU32(matrix + 32), SnrM02ReadU32(matrix + 36),
+      SnrM02ReadU32(matrix + 40), SnrM02ReadU32(matrix + 44),
+      SnrM02ReadU32(matrix + 48), SnrM02ReadU32(matrix + 52),
+      SnrM02ReadU32(matrix + 56), SnrM02ReadU32(matrix + 60),
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
 }
 
 void PinyonShiftObserveSnr02CarDescriptor(

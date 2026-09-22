@@ -23,6 +23,7 @@ TEXTURE_FETCH_PREFIX = "FH1 SNR01 prepared texture fetch "
 MODEL_RECORD_PREFIX = "FH1 SNR02 car model record "
 MODEL_INPUT_PREFIX = "FH1 SNR02 car model inputs "
 MODEL_DESCRIPTOR_PREFIX = "FH1 SNR02 car descriptor "
+MATRIX_INPUT_PREFIX = "FH1 SNR02 car matrix input "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -43,7 +44,9 @@ def main() -> int:
     parser.add_argument("--require-owner-calls", action="store_true")
     parser.add_argument("--require-backend-join", action="store_true")
     parser.add_argument("--require-model-records", action="store_true")
+    parser.add_argument("--require-matrix-inputs", action="store_true")
     args = parser.parse_args()
+    assert not args.require_matrix_inputs or args.require_model_records
 
     players = [r for r in records(args.log, PLAYER_PREFIX) if r["frame"] == args.frame]
     presentations = [
@@ -66,7 +69,7 @@ def main() -> int:
     assert {r["constructor_arg_first_word"] for r in presentations} == {
         0x82001BF4
     }
-    assert all(r["view8_owner"] for r in presentations)
+    assert any(r["view8_owner"] for r in presentations)
 
     local_presentations = [
         r for r in records(args.log, LOCAL_PRESENTATION_PREFIX)
@@ -293,6 +296,28 @@ def main() -> int:
                 for r in descriptors
             )
             model_record_summary["local_model_title_descriptors"] = 29
+
+        if args.require_matrix_inputs:
+            matrix_inputs = [
+                r for r in records(args.log, MATRIX_INPUT_PREFIX)
+                if r["frame"] == args.frame and r["view_call"] == 8
+                and r["owner"] == local["model"]
+            ]
+            by_call = {r["call"]: r for r in model_records}
+            assert 0 < len(matrix_inputs) <= len(direct_calls)
+            assert len({r["call"] for r in matrix_inputs}) == len(matrix_inputs)
+            assert all(
+                r["call"] in direct_calls
+                and r["record"] == by_call[r["call"]]["record"]
+                and r["matrix"] and r["render_state"]
+                and len(r["words"]) == 16
+                and r["words"][15] == 0x3F800000
+                for r in matrix_inputs
+            )
+            model_record_summary["local_model_matrix_inputs"] = len(matrix_inputs)
+            model_record_summary["local_model_no_matrix_call"] = (
+                len(direct_calls) - len(matrix_inputs)
+            )
 
     model_inputs = [
         r for r in records(args.log, MODEL_INPUT_PREFIX)
