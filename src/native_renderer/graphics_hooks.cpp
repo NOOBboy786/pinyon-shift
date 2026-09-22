@@ -226,6 +226,7 @@ std::atomic<rex::memory::Memory*> snr01_memory{nullptr};
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
 thread_local std::vector<Snr01DirectFamilyScope> snr01_direct_family_scopes;
 thread_local uint64_t snr01_direct_family_count = 0;
+thread_local uint64_t snr01_direct_family_record_count = 0;
 thread_local std::vector<uint32_t> snr01_indexed2_callers;
 thread_local std::vector<Snr01ViewScope> snr01_view_scopes;
 thread_local std::vector<Snr01TrackCallScope> snr01_track75_scopes;
@@ -2561,6 +2562,29 @@ void PinyonShiftObserveSnr01DirectFamilyEnd() {
       scope.arg7, scope.arg8,
       scope.object ? SnrM02ReadU32(scope.object + 448) : 0,
       scope.first_direct + 1, snr01_direct_packet_count);
+}
+
+void PinyonShiftObserveSnr01DirectFamilyRecord(
+    PPCRegister& r29, PPCRegister& r27, PPCRegister& r30,
+    PPCRegister& r31, PPCRegister& r6, PPCRegister& r7) {
+  if (!Snr01TraceCurrentFrame() || snr01_direct_family_scopes.empty() ||
+      ++snr01_direct_family_record_count > 512) {
+    return;
+  }
+  const auto& scope = snr01_direct_family_scopes.back();
+  REXGPU_INFO(
+      "FH1 SNR01 direct family record {{\"frame\":{},\"family_call\":{},"
+      "\"view_call\":{},\"next_direct\":{},\"record\":{},"
+      "\"record_words\":[{},{},{},{}],\"source\":{},"
+      "\"source_words\":[{},{},{}],\"context\":{},"
+      "\"device\":{},\"arg6\":{},\"arg7\":{}}}",
+      scope.frame, scope.ordinal, scope.view_call,
+      snr01_direct_packet_count + 1, r29.u32,
+      SnrM02ReadU32(r29.u32), SnrM02ReadU32(r29.u32 + 4),
+      SnrM02ReadU32(r29.u32 + 8), SnrM02ReadU32(r29.u32 + 16),
+      r27.u32, SnrM02ReadU32(r27.u32),
+      SnrM02ReadU32(r27.u32 + 12), SnrM02ReadU32(r27.u32 + 20),
+      r30.u32, r31.u32, r6.u32, r7.u32);
 }
 
 void PinyonShiftObserveSnr02CarDescriptor(

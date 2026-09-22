@@ -841,6 +841,11 @@ registers = ["r3", "r4", "r5", "r6", "r7", "r8"]
 address = 0x8243CB24
 name = "PinyonShiftObserveSnr01DirectFamilyEnd"
 
+[[midasm_hook]]
+address = 0x8243C8F8
+name = "PinyonShiftObserveSnr01DirectFamilyRecord"
+registers = ["r29", "r27", "r30", "r31", "r6", "r7"]
+
 # The presentation's 12-byte model descriptor supplies selector and command
 # list immediately before the model call. Keep the header/entry join read-only.
 [[midasm_hook]]

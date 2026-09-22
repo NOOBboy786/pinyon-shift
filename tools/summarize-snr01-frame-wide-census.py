@@ -18,6 +18,7 @@ PREFIXES = {
     "view_end": "FH1 SNR01 view end ",
     "direct": "FH1 SNR01 direct packet ",
     "semantic": "FH1 SNR01 semantic packet ",
+    "family_record": "FH1 SNR01 direct family record ",
     "family": "FH1 SNR01 direct family ",
     "clear": "FH1 clear producer ",
 }
@@ -64,16 +65,18 @@ def summarize(records, frames, backend_frame):
                for r in records["primary"]}
     scene = {(r["header_physical"], r["target_physical"]): r
              for r in records["scene"]}
-    title_draw_packets = {r["header_physical"]: (key, r)
-                          for key in ("direct", "semantic")
-                          for r in records[key]}
+    title_draw_packets = collections.defaultdict(list)
+    for key in ("direct", "semantic"):
+        for row in records[key]:
+            title_draw_packets[row["header_physical"]].append((key, row))
     families = collections.defaultdict(list)
     for row in records["family"]:
         families[row["frame"]].append(row)
+    family_records = {(r["frame"], r["next_direct"]): r
+                      for r in records["family_record"]}
+    assert len(family_records) == len(records["family_record"])
     assert len(primary) == len(records["primary"])
     assert len(scene) == len(records["scene"])
-    assert len(title_draw_packets) == sum(len(records[key])
-                                          for key in ("direct", "semantic"))
     assert all(r["view_call"] == 0 or
                r["view"] == views[r["frame"]][r["view_call"]]["view"]
                for r in scene.values())
@@ -119,7 +122,10 @@ def summarize(records, frames, backend_frame):
         source_frames[source["frame"]] += 1
         packet = scene.get((execution["dispatch_packet_physical"],
                             execution["command_buffer"])) if execution["parent"] else None
-        title_packet = title_draw_packets.get(draw["packet_physical"]) if not execution["parent"] else None
+        title_matches = title_draw_packets.get(draw["packet_physical"], [])
+        if not execution["parent"]:
+            assert len(title_matches) <= 1, f"ambiguous title packet: {draw['ordinal']}"
+        title_packet = title_matches[0] if title_matches and not execution["parent"] else None
         clear_producer = None
         if (not execution["parent"] and title_packet is None and
                 draw.get("packet_bytes", 0) > 0):
@@ -150,6 +156,7 @@ def summarize(records, frames, backend_frame):
                     title_row["title_view_call"]]["view"]
             direct_views[f'{title_row["frame"]}:{title_row["title_view_call"]}'] += 1
         family = None
+        family_record = None
         if title_packet and title_packet[0] == "direct":
             title_row = title_packet[1]
             matches = [row for row in families[title_row["frame"]]
@@ -159,8 +166,16 @@ def summarize(records, frames, backend_frame):
             family = matches[0] if matches else None
             if family:
                 assert family["view_call"] == title_row["title_view_call"]
+            family_record = family_records.get((title_row["frame"], title_row["ordinal"]))
+            if family_record:
+                assert family and family_record["family_call"] == family["call"]
+                assert family_record["view_call"] == title_row["title_view_call"]
+                assert family_record["arg7"] == draw["index_count"], (
+                    f"record/draw index count differs: {draw['ordinal']}")
             if families[title_row["frame"]] and title_row["direct_caller_lr"] == 0x8243C8FC:
                 assert family, f"missing direct family: {draw['ordinal']}"
+                if records["family_record"]:
+                    assert family_record, f"missing direct record: {draw['ordinal']}"
         target = (draw["surface_info"], draw["color_info"][0],
                   draw["depth_info"], draw["render_target_bits"])
         target_key = "/".join(f"{value:08X}" for value in target)
@@ -215,6 +230,11 @@ def summarize(records, frames, backend_frame):
             "title_direct_family_call": family["call"] if family else None,
             "title_direct_family_object": family["object"] if family else None,
             "title_direct_family_list": family["list"] if family else None,
+            "title_direct_record": family_record["record"] if family_record else None,
+            "title_direct_record_words": family_record["record_words"] if family_record else None,
+            "title_direct_record_source": family_record["source"] if family_record else None,
+            "title_direct_record_arg6": family_record["arg6"] if family_record else None,
+            "title_direct_record_arg7": family_record["arg7"] if family_record else None,
             "clear_producer_record": clear_producer["record"] if clear_producer else None,
             "clear_producer_flags": clear_producer["flags"] if clear_producer else None,
         })
@@ -250,12 +270,15 @@ def main():
     parser.add_argument("log", type=Path)
     parser.add_argument("--source-frame", type=int, required=True)
     parser.add_argument("--require-direct-family", action="store_true")
+    parser.add_argument("--require-direct-family-record", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     frames = [args.source_frame, args.source_frame + 1]
     records = read_records(args.log, set(frames), args.source_frame + 1)
     if args.require_direct_family:
         assert records["family"], "no bounded direct-family scopes"
+    if args.require_direct_family_record:
+        assert records["family"] and records["family_record"], "no direct-family records"
     result = summarize(records, frames, args.source_frame + 1)
     result["log_sha256"] = hashlib.sha256(args.log.read_bytes()).hexdigest().upper()
     args.output.parent.mkdir(parents=True, exist_ok=True)

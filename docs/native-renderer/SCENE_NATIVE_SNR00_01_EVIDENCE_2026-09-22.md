@@ -2508,3 +2508,42 @@ This establishes the manager and title pass boundary for this direct family,
 not the identity or lifetime of each character mesh/material. The other
 candidate direct-root families, ownerless scene-list draws and resource
 relationships still block a frozen object slice.
+
+### Character-manager record to backend-draw join
+
+A second default-off probe at the `sub_8243C050` call to `sub_82416380`
+captures the manager's selected 128-byte record, its 24-byte source entry and
+the direct-draw arguments immediately before packet emission. The saved
+sustained-race replay exited normally with seven captures. Executable SHA-256
+was `8D5D4220A784847E70C00194DF718AF09E05227EB0F928FDCD7E6999232A3E52`.
+The isolated ordered log at
+`.local/native-renderer/snr01/direct-family-record-run-a-session.log` has
+SHA-256 `BEA74D62B6D9A9237DDDB7DB84B073487006BE6B149A339591B49D664353FAD1`;
+the per-draw ledger at `.local/native-renderer/snr01/direct-family-record-run-a.json`
+has SHA-256 `1750EDF5170DB63A649B32B6D3FA03B1BDD0DE77022878976CA8FD35C3E13916`.
+The ledger's frame-wide, record-to-packet and index-count assertions pass,
+as do the camera/view and primary-indirect join verifiers.
+
+This backend frame contains 4,326 prepared draws, including 724
+attachment-writing candidate direct-root draws. The source-frame-6000
+character-manager depth and view-8 color calls each select the same 126 record
+addresses, at an exact 128-byte stride, from 15 source entries at an exact
+24-byte stride. All captured record words, source addresses and draw arguments
+match across those two calls. Each depth record produces one backend draw;
+each color record produces two or three, for 309 color draws total. Every one
+of those 309 draws retains the title's `arg7` index count and writes the
+candidate scene-color attachment. Thus this family accounts for 309 of the
+724 candidate direct-root draws in this replay. Record address reuse across
+the two passes supports a same-frame selected-record identity; it does not
+prove allocation generation, mesh/material ownership, or resource freshness.
+
+Some title packet physical addresses recur across the two captured source
+frames. The ledger no longer assumes global address uniqueness: for each
+direct-root backend draw it requires at most one captured title writer at
+that physical address. In this replay, 1,205 of 1,221 direct-root draws have
+one such writer and 16 have none; none are ambiguous. Of the 724 candidate
+attachment-writing direct-root draws, 723 have a unique title writer and one
+has none. The earlier clear-producer join identified this kind of candidate
+gap in a separate replay; it was not re-established in this record capture.
+If a future backend draw matches two source-frame writers, the ledger will
+stop instead of choosing one without a buffer-generation proof.
