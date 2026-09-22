@@ -1391,12 +1391,44 @@ recorded writes are:
 | 6001 / `0xD319EA84` | 5997 / `0xB319EA44` | 64 bytes | `0x8240D1B0` / `0x81000010` |
 | 6001 / `0xD319EBBC` | 5997 / `0xB319EA44` | 376 bytes | `0x8240D1B0` / `0x81000010` |
 
-These are address and ordering **candidates**, not a command-chain or
-view-owner join. The 5999 and 5997 writes precede the worker by one or four
-source-frame counts; the trace does not prove the entire intervening linked
-block, distinguish old allocation contents from current payload generation,
-or assign a camera. The writer's `view_call` is zero even for writes in traced
-frame 6000; earlier views were outside that narrow view-scope window. Next,
-recover the linked block extent and exact command pointer traversal, then
-trace the producer's owning view rather than treating nearby addresses as
-proof.
+These were address and ordering **candidates**, not a command-chain or
+view-owner join. The exact-command probe below supersedes this proximity
+inference for the cube: these nearby linked writes are not its command words.
+
+### Exact deferred command writer and reader join
+
+The interpreter `sub_829F5FF0` now records the command pointer, opcode and
+payload at `0x829F62F0`, immediately after loading the payload and before
+calling `sub_82409398`. The primary-packet probe carries that physical
+command address to backend draws. The `sub_8240D070` inline writer records
+both its cached and stream-write paths with physical destination, opcode,
+payload and active presentation-view call. The verifier joins each cube
+consumer's primary packet to the preceding read and latest preceding write
+at the **same physical command address**, then requires identical opcode and
+payload. Physical addresses normalize guest aliases with `& 0x1FFFFFFF`.
+
+The bounded `fh1-race-sustained.fh1test` replay exited normally with seven
+captures. The executable SHA-256 was
+`8C584AE9B3217EDA17A93BF5B4369982C7C8269C079C6F205E1A2D92F04A3EFD`;
+`.local/native-renderer/snr01/exact-payload-runtime.log` SHA-256 was
+`D8A692003F2300FD24F3BC6DC2A627704E01D02B699DE7A19D18BD557D61500A`.
+Run `python tools/verify-snr01-cube-consumers.py <log> --source-frame 6001
+--backend-frame 6001 --allow-missing-view-trace --require-command-writers`
+to reproduce the join. It passed for 728 cube-sampling draws from eight
+primary roots. In this capture, three distinct command words account for
+those roots:
+
+| Physical command | Cube draws | Opcode / payload | Writer |
+| --- | ---: | --- | --- |
+| `0x13103C04` | 414 | `0x81005739` / `0x130EDBA0` | frame 6000, inline path 1, view call 8 |
+| `0x13103C0C` | 124 | `0x81007FD7` / `0x1310AE80` | frame 6000, inline path 1, view call 8 |
+| `0x13103C24` | 190 | `0x81007FCB` / `0x1316AD00` | frame 6000, inline path 1, view call 8 |
+
+All three writes occurred with presentation-view pointer `0x423CFA30`
+active in call 8 and were read by the deferred worker in source frame 6001.
+The track-bucket verifier independently passed for source frame 6000 and
+backend frame 6001: 459 visible-list entries yielded 328 packet headers,
+with zero unmatched submitted items inside a view. The exact command join
+establishes this cube consumer path's generation inside call 8; it does not
+yet identify the camera or prove that every other deferred command belongs
+to that view. SNR-01 and Gate A remain open.

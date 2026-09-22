@@ -204,6 +204,8 @@ struct Snr01WorkerScope {
   uint64_t first_packet;
 };
 thread_local std::vector<Snr01WorkerScope> snr01_worker_scopes;
+thread_local std::vector<uint32_t> snr01_deferred_indirect_commands;
+thread_local std::vector<uint32_t> snr01_inline_indirect_callers;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
 thread_local std::vector<Snr01DispatchScope> snr01_render_state_scopes;
 thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
@@ -1505,6 +1507,28 @@ void PinyonShiftObserveDeferredWorkerEnd() {
       snr01_primary_indirect_packet_count);
 }
 
+void PinyonShiftObserveDeferredIndirectCommandBegin(PPCRegister& r31,
+                                                    PPCRegister& r10,
+                                                    PPCRegister& r11) {
+  if (!Snr01TracePrimaryIndirectFrame()) {
+    return;
+  }
+  snr01_deferred_indirect_commands.push_back(r31.u32);
+  REXGPU_INFO(
+      "FH1 SNR01 deferred indirect command {{\"frame\":{},"
+      "\"command_guest\":{},\"command_physical\":{},"
+      "\"opcode\":{},\"payload\":{},\"worker_stream\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      r31.u32, r31.u32 & 0x1FFFFFFF, r10.u32, r11.u32,
+      snr01_worker_scopes.empty() ? 0 : snr01_worker_scopes.back().stream);
+}
+
+void PinyonShiftObserveDeferredIndirectCommandEnd() {
+  if (!snr01_deferred_indirect_commands.empty()) {
+    snr01_deferred_indirect_commands.pop_back();
+  }
+}
+
 void PinyonShiftObserveLinkedIndirectWrite(
     PPCRegister& r29, PPCRegister& r11, PPCRegister& r30, PPCRegister& r27,
     PPCRegister& r25, PPCRegister& r31) {
@@ -1525,6 +1549,56 @@ void PinyonShiftObserveLinkedIndirectWrite(
           : snr01_queued_indirect_callers.back(),
       snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
       snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
+}
+
+void PinyonShiftObserveInlineIndirectBegin(PPCRegister& r12) {
+  if (Snr01TraceLinkedWriteFrame()) {
+    snr01_inline_indirect_callers.push_back(r12.u32);
+  }
+}
+
+void PinyonShiftObserveInlineIndirectCachedWrite(
+    PPCRegister& r3, PPCRegister& r9, PPCRegister& r11, PPCRegister& r31) {
+  if (!Snr01TraceLinkedWriteFrame()) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 inline indirect write {{\"frame\":{},\"path\":0,"
+      "\"command_guest\":{},\"command_physical\":{},"
+      "\"opcode\":{},\"payload\":{},\"device\":{},"
+      "\"caller_lr\":{},\"view_call\":{},\"view\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      r3.u32, r3.u32 & 0x1FFFFFFF, r9.u32, r11.u32, r31.u32,
+      snr01_inline_indirect_callers.empty()
+          ? 0
+          : snr01_inline_indirect_callers.back(),
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
+}
+
+void PinyonShiftObserveInlineIndirectStreamWrite(
+    PPCRegister& r11, PPCRegister& r30, PPCRegister& r29, PPCRegister& r31) {
+  if (!Snr01TraceLinkedWriteFrame()) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 inline indirect write {{\"frame\":{},\"path\":1,"
+      "\"command_guest\":{},\"command_physical\":{},"
+      "\"opcode\":{},\"payload\":{},\"device\":{},"
+      "\"caller_lr\":{},\"view_call\":{},\"view\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      r11.u32, r11.u32 & 0x1FFFFFFF, r30.u32 | 0x81000000, r29.u32,
+      r31.u32, snr01_inline_indirect_callers.empty()
+                   ? 0
+                   : snr01_inline_indirect_callers.back(),
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
+}
+
+void PinyonShiftObserveInlineIndirectEnd() {
+  if (!snr01_inline_indirect_callers.empty()) {
+    snr01_inline_indirect_callers.pop_back();
+  }
 }
 
 void PinyonShiftObservePrimaryIndirectBegin(PPCRegister& r12, PPCRegister&,
@@ -1552,7 +1626,8 @@ void PinyonShiftObservePrimaryIndirectPacket(
       "\"device\":{},\"entry_array\":{},\"entry_count\":{},"
       "\"entry_index\":{},\"ring_mask\":{},\"mode\":{},"
       "\"caller_lr\":{},\"queued_caller_lr\":{},"
-      "\"worker_stream\":{},\"worker_queue\":{}}}",
+      "\"worker_stream\":{},\"worker_queue\":{},"
+      "\"worker_command_physical\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       ordinal, guest_address & 0x1FFFFFFF, r10.u32, r31.u32, r27.u32,
       r24.u32, r25.u32, r26.u32, r29.u32, r21.u32,
@@ -1563,7 +1638,10 @@ void PinyonShiftObservePrimaryIndirectPacket(
           ? 0
           : snr01_queued_indirect_callers.back(),
       snr01_worker_scopes.empty() ? 0 : snr01_worker_scopes.back().stream,
-      snr01_worker_scopes.empty() ? 0 : snr01_worker_scopes.back().queue);
+      snr01_worker_scopes.empty() ? 0 : snr01_worker_scopes.back().queue,
+      snr01_deferred_indirect_commands.empty()
+          ? 0
+          : snr01_deferred_indirect_commands.back() & 0x1FFFFFFF);
 }
 
 void PinyonShiftObservePrimaryIndirectEnd() {

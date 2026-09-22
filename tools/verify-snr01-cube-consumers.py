@@ -14,14 +14,19 @@ FACE_BYTES = 256 * 256 * 4
 
 
 def verify(path: Path, source_frame: int, backend_frame: int,
-           allow_missing_view_trace: bool = False):
+           allow_missing_view_trace: bool = False,
+           require_command_writers: bool = False):
     events = collections.defaultdict(list)
     for line_number, line in enumerate(path.open(encoding="utf-8-sig",
                                                   errors="replace")):
         match = EVENT.search(line)
         if match:
             row = json.loads(match[3])
-            if row["frame"] in (source_frame, backend_frame):
+            if row["frame"] in (source_frame, backend_frame) or (
+                require_command_writers and
+                match[2] in ("linked indirect write", "inline indirect write") and
+                source_frame - 12 <= row["frame"] <= source_frame
+            ):
                 events[match[2]].append((line_number, int(match[1]), row))
 
     copies = [(position, row) for position, _, row in events["copy"]
@@ -70,7 +75,7 @@ def verify(path: Path, source_frame: int, backend_frame: int,
 
     dispatches = {row["execution"]: row for _, _, row in
                   events["indirect buffer"] if row["frame"] == backend_frame}
-    primary = {row["header_physical"]: row for _, _, row in
+    primary = {row["header_physical"]: (position, row) for position, _, row in
                events["primary indirect packet"]
                if row["frame"] == source_frame}
     assert dispatches and primary
@@ -80,6 +85,34 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         while dispatches[execution]["parent"]:
             execution = dispatches[execution]["parent"]
         return primary[dispatches[execution]["dispatch_packet_physical"]]
+
+    commands = events["deferred indirect command"]
+    writers = events["linked indirect write"] + events["inline indirect write"]
+    command_writers = {}
+
+    def writer_for(packet_position, source):
+        address = source["worker_command_physical"]
+        reads = [(position, row) for position, _, row in commands
+                 if position <= packet_position and
+                 row["command_physical"] == address]
+        assert reads, f"no deferred command read for {address:#x}"
+        read_position, read = max(reads, key=lambda item: item[0])
+        candidates = [(position, row) for position, _, row in writers
+                      if position < read_position and
+                      (row.get("command_physical",
+                               row.get("opcode_address", 0) & 0x1FFFFFFF) == address)]
+        assert candidates, f"no prior command writer for {address:#x}"
+        _, writer = max(candidates, key=lambda item: item[0])
+        assert (read["opcode"], read["payload"]) == (
+            writer["opcode"], writer["payload"]), (
+                f"command {address:#x} changed between write and read")
+        assert read["worker_stream"] == source["worker_stream"]
+        return {"address": hex(address), "writer_frame": writer["frame"],
+                "writer_path": writer.get("path", "linked"),
+                "writer_view_call": writer["view_call"],
+                "writer_view": hex(writer["view"]),
+                "opcode": hex(read["opcode"]),
+                "payload": hex(read["payload"])}
 
     view_packets = {(kind, thread, row["ordinal"]): row["header_physical"]
                     for kind in ("semantic packet", "direct packet")
@@ -116,10 +149,15 @@ def verify(path: Path, source_frame: int, backend_frame: int,
     entry_arrays = set()
     worker_streams = set()
     worker_queues = set()
+    worker_commands = set()
+    worker_command_draws = collections.Counter()
     for _, fetch in consumers:
         draw = prepared[fetch["draw"]][1]
         assert draw["packet_physical"] not in tracked_headers
-        source = source_for(draw)
+        packet_position, source = source_for(draw)
+        if require_command_writers:
+            address = source["worker_command_physical"]
+            command_writers[address] = writer_for(packet_position, source)
         if worker_scopes:
             scope = worker_scopes[source["worker_stream"],
                                   source["worker_queue"]]
@@ -132,6 +170,8 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         entry_arrays.add(source["entry_array"])
         worker_streams.add(source.get("worker_stream", 0))
         worker_queues.add(source.get("worker_queue", 0))
+        worker_commands.add(source.get("worker_command_physical", 0))
+        worker_command_draws[source.get("worker_command_physical", 0)] += 1
         targets[(draw["surface_info"], tuple(draw["color_info"]),
                  draw["depth_info"], draw["render_target_bits"])] += 1
     assert len(source_callers) == len(targets) == 1
@@ -147,6 +187,11 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             "consumer_entry_arrays": [hex(address) for address in sorted(entry_arrays)],
             "consumer_worker_streams": [hex(address) for address in sorted(worker_streams)],
             "consumer_worker_queues": [hex(address) for address in sorted(worker_queues)],
+            "consumer_worker_commands": [hex(address) for address in sorted(worker_commands)],
+            "consumer_worker_command_draws": {
+                hex(address): count for address, count in sorted(worker_command_draws.items())},
+            "consumer_command_writers": [command_writers[address]
+                                         for address in sorted(command_writers)],
             "consumer_source": [{"frame": key[0], "caller_lr": hex(key[1]),
                                  "queued_caller_lr": hex(key[2]), "draws": count}
                                 for key, count in source_callers.items()],
@@ -163,7 +208,9 @@ if __name__ == "__main__":
     parser.add_argument("--source-frame", type=int, required=True)
     parser.add_argument("--backend-frame", type=int, required=True)
     parser.add_argument("--allow-missing-view-trace", action="store_true")
+    parser.add_argument("--require-command-writers", action="store_true")
     args = parser.parse_args()
     print(json.dumps(verify(args.log, args.source_frame, args.backend_frame,
-                            args.allow_missing_view_trace),
+                            args.allow_missing_view_trace,
+                            args.require_command_writers),
                      indent=2))

@@ -309,9 +309,37 @@ address = 0x829F6608
 name = "PinyonShiftObserveDeferredWorkerEnd"
 
 [[midasm_hook]]
+address = 0x829F62F0
+name = "PinyonShiftObserveDeferredIndirectCommandBegin"
+registers = ["r31", "r10", "r11"]
+
+[[midasm_hook]]
+address = 0x829F6308
+name = "PinyonShiftObserveDeferredIndirectCommandEnd"
+
+[[midasm_hook]]
 address = 0x82409710
 name = "PinyonShiftObserveLinkedIndirectWrite"
 registers = ["r29", "r11", "r30", "r27", "r25", "r31"]
+
+[[midasm_hook]]
+address = 0x8240D078
+name = "PinyonShiftObserveInlineIndirectBegin"
+registers = ["r12"]
+
+[[midasm_hook]]
+address = 0x8240D100
+name = "PinyonShiftObserveInlineIndirectCachedWrite"
+registers = ["r3", "r9", "r11", "r31"]
+
+[[midasm_hook]]
+address = 0x8240D158
+name = "PinyonShiftObserveInlineIndirectStreamWrite"
+registers = ["r11", "r30", "r29", "r31"]
+
+[[midasm_hook]]
+address = 0x8240D1F0
+name = "PinyonShiftObserveInlineIndirectEnd"
 
 [[midasm_hook]]
 address = 0x8240939C
