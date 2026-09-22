@@ -979,7 +979,7 @@ second path. SNR-01 still needs the selected mesh/instance and final
 transform/material identities, view-role classification, and an account
 of packetless entries before Gate A can be considered.
 
-### Character and vegetation bound-record identity
+### Character and vegetation state-record identity
 
 In the generated character slot-41 function, the render-context
 vtable-offset-124 call binds `owner + 132` immediately before its
@@ -987,7 +987,7 @@ vtable-offset-164 draw. In the vegetation function, the corresponding
 binding argument comes from a loop-derived record pointer:
 `record = running_40_byte_offset + *(owner + 108 + group_offset)`.
 The same loop walks 12-byte count entries and 8-byte selector entries.
-These are binding records, not yet verified mesh or instance objects.
+These are state-binding records, not verified mesh or instance objects.
 
 Read-only hooks at `0x8245AE80` and `0x82413A0C` captured the raw binding
 argument and carried it into each child draw scope. The saved sustained
@@ -1018,7 +1018,44 @@ python tools/verify-snr01-indirect-join.py `
   --source-frames 6000 6001 --backend-frame 6001
 ```
 
-The repeated addresses are frame-local identities only. The next probe
-must classify the slot-31 record's underlying geometry payload and
-generation, then join the final transform/material state without reading
-mutable guest state after frame publication. SNR-01 remains open.
+The repeated addresses are frame-local identities only. The target of
+both virtual slot-31 calls was not yet included in this capture.
+
+### Slot-31 target identifies a state binding
+
+The next saved sustained-race capture exited normally with executable
+SHA-256
+`BBA5D68CD973E2892B389D291B17C314952C10C7D53315EF20DEFD4B94318E58`.
+Its combined log is
+`.local/native-renderer/snr01/binding-target-frame-6000/title-backend-binding-target.log`
+(SHA-256 `916F43884B82D20819BBC5DDA2F67A75ED55B30702B56CB0C551DC41CDB1F095`).
+The hooks recorded the virtual target at the bind sites. All 26 character
+and 108 vegetation child draws reached `0x82415CA8`. The generated
+function reads fields at offsets 0 and 7 of the bound record, converts
+the slot to a bit mask, and tail-calls `0x82410A70`. Existing
+`discover-native-renderer-static-world-mesh-semantics.py` identifies
+`0x82410A70` as the material-state binding used by the bounded
+`CSimpleSubModel`/`CSimpleMesh` draw route. Its implementation updates
+graphics-context state and dirty masks. This classifies the observed
+slot-31 record as a **state-binding input**, not a geometry payload.
+
+The character calls used 13 distinct records twice each; vegetation used
+54 distinct records twice each. Both verifiers still passed. The
+second-path capture contained 144 packets with 254 backend draw callbacks;
+the indirect verifier matched 133 roots, 1,623 executions, and 4,643
+prepared draws:
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/binding-target-frame-6000/title-backend-binding-target.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/binding-target-frame-6000/title-backend-binding-target.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+The selected geometry and instance identities, final transforms and
+material resources, view role, and packetless entries remain unresolved.
+Do not infer geometry from these state-record addresses or publish mutable
+guest state after frame publication. SNR-01 remains open.

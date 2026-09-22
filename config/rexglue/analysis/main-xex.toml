@@ -183,8 +183,8 @@ registers = ["r3", "r4", "r5", "r6"]
 
 [[midasm_hook]]
 address = 0x82413A0C
-name = "PinyonShiftObserveSecondGeometryBind"
-registers = ["r3", "r4", "r5"]
+name = "PinyonShiftObserveSecondStateBind"
+registers = ["r3", "r4", "r5", "r11"]
 
 [[midasm_hook]]
 address = 0x82413A84
@@ -197,8 +197,8 @@ registers = ["r3", "r4", "r5", "r6"]
 
 [[midasm_hook]]
 address = 0x8245AE80
-name = "PinyonShiftObserveSecondGeometryBind"
-registers = ["r3", "r4", "r5"]
+name = "PinyonShiftObserveSecondStateBind"
+registers = ["r3", "r4", "r5", "r11"]
 
 [[midasm_hook]]
 address = 0x8245AEA0

@@ -294,6 +294,7 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         bound_enabled = any("bound_record" in row for _, row in second_draws)
         bound_records = collections.defaultdict(collections.Counter)
         bound_record_counts = {}
+        binding_targets = collections.defaultdict(collections.Counter)
         child_packets = set()
         expected_second_packets = set()
         for (thread, _), bucket in buckets.items():
@@ -319,6 +320,9 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 if target == "procedural_characters":
                     assert draw["bound_record"] == bucket["secondary_resolved"] + 132
                 bound_records[target][draw["bound_record"]] += 1
+                if "bound_target" in draw:
+                    assert draw["bound_target"] == 0x82415CA8
+                    binding_targets[target][draw["bound_target"]] += 1
                 record_key = (target, draw["bound_record"])
                 assert (record_key not in bound_record_counts or
                         bound_record_counts[record_key] == draw["arg5"])
@@ -347,6 +351,10 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             second_targets[target]["bound_records"] = len(records)
             second_targets[target]["bound_record_multiplicity"] = dict(sorted(
                 collections.Counter(records.values()).items()))
+            if binding_targets[target]:
+                second_targets[target]["binding_targets"] = {
+                    hex(address): count for address, count
+                    in sorted(binding_targets[target].items())}
         counts["second_draw_skips"] = summary["second_draw_skips"]
 
     return {
