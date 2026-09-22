@@ -1829,3 +1829,42 @@ The byte samples make repeated PM4 draw-packet identity stronger than address
 and shader-metadata recurrence alone. They do not cover referenced vertex,
 index or texture bytes, prove that no write happened between samples, or name
 the title owner of the resident stream. SNR-01/02 and Gate A remain open.
+
+### Guest write watch on recurring packet pages
+
+The next default-off probe uses ReXGlue's existing physical-memory access and
+invalidation callbacks. On the first prepared draw at backend frame 5999, it
+arms the packet header's physical page (only the two surveyed resident ranges,
+up to 1,024 pages). It records later guest accesses and write invalidations
+through frame 6001. The callback limits unwatching to the faulting range so
+another cache's wider invalidation cannot silently disarm neighboring watched
+pages. This is a one-shot page observation, not an exact-byte watch.
+
+The replay build's executable SHA-256 was
+`EA64056C48AAFA9F4D8E38E7B6F20EBD710049E5782A4429E8DD24264AE891BC`.
+Its seven-capture, normal-exit sustained-race log
+`.local/native-renderer/snr01/packet-page-watch-run-b.log` SHA-256 was
+`5024F5CD23AFAEBF46F544E68CA178BCB2051C3423D79BC39CFC850EB8A2C156`.
+The probe armed 730 distinct pages in frame 5999. The frame-6000 post-view
+command consumed 192 unique draw packet addresses in backend frame 6001;
+183 were recurring. **All 183 recurring addresses lay on 99 armed pages, and
+none of those pages generated a guest access or invalidation notification**
+between arming and the end of the observed window. All 183 recurring packet
+byte hashes matched the preceding frames. The nine newly seen addresses
+matched title direct-packet writes. The camera/view verifier reports this
+coverage; track-bucket and cube-consumer verifiers also pass with their
+documented frame selections.
+
+The first version of the probe, before narrowing the callback unwatch range,
+recorded two guest writes to other packet pages, neither used by its 147
+recurring post-view addresses. That replay is useful as a callback activation
+check but not the strongest no-write claim, since wider cache invalidation
+could unwatch adjacent pages. The final replay has no such notifications.
+
+This excludes observed guest CPU writes to those armed physical pages during
+this three-frame window. It does not establish when or by whom the resident
+streams were originally built, exclude host writes that bypass this callback,
+prove referenced geometry and textures stayed unchanged, or extend the result
+to other gameplay frames. SNR-01/02 and Gate A remain open. The next title-side
+join must identify the owner of these resident command buffers and the
+resource generations they reference before the proposed slice can be frozen.

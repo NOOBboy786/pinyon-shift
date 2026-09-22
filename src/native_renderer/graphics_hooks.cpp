@@ -29,6 +29,9 @@ REXCVAR_DEFINE_INT32(pinyon_shift_snr01_trace_source_frame, 0, "Pinyon Shift",
 REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_resident_packet_writers, false,
                     "Pinyon Shift", "Trace bounded resident PM4 packet writes")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_watch_packet_pages, false,
+                    "Pinyon Shift", "Watch observed PM4 packet pages for guest access")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_INT32(pinyon_shift_snr_m02_trace_source_frame, 0, "Pinyon Shift",
                      "Trace the title command-position wait for three frames")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
@@ -247,6 +250,13 @@ thread_local uint64_t snr01_item_node_count = 0;
 thread_local uint64_t snr01_direct_call_count = 0;
 thread_local uint64_t snr01_direct_packet_count = 0;
 thread_local uint64_t snr01_resident_packet_count = 0;
+std::mutex snr01_watch_mutex;
+std::set<uint32_t> snr01_watch_pages;
+void* snr01_watch_access_handle = nullptr;
+void* snr01_watch_invalidation_handle = nullptr;
+std::atomic<uint32_t> snr01_watch_events{0};
+constexpr uint32_t kSnr01WatchPageLimit = 1024;
+constexpr uint32_t kSnr01WatchEventLimit = 8192;
 thread_local uint64_t snr01_primary_indirect_packet_count = 0;
 thread_local uint64_t snr01_unmatched_direct_exits = 0;
 thread_local uint64_t snr01_unmatched_track_bucket_exits = 0;
@@ -303,6 +313,67 @@ uint32_t SnrM02ReadU32(uint32_t address) {
 uint32_t SnrM02Physical(uint32_t address) {
   const auto* memory = snr01_memory.load(std::memory_order_acquire);
   return memory && address ? memory->GetPhysicalAddress(address) : UINT32_MAX;
+}
+
+void Snr01RecordWatchedPages(const char* path, uint32_t start, uint32_t length,
+                            bool is_write) {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  const uint64_t frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  if (target <= 0 || frame + 1 < uint64_t(target) ||
+      frame > uint64_t(target) + 1) {
+    return;
+  }
+  std::lock_guard lock(snr01_watch_mutex);
+  for (auto it = snr01_watch_pages.lower_bound(start);
+       it != snr01_watch_pages.end() && uint64_t(*it) < uint64_t(start) + length;
+       ++it) {
+    const uint32_t ordinal = ++snr01_watch_events;
+    if (ordinal > kSnr01WatchEventLimit) {
+      if (ordinal == kSnr01WatchEventLimit + 1) {
+        REXGPU_INFO("FH1 SNR01 watched page trace limit reached");
+      }
+      return;
+    }
+    REXGPU_INFO("FH1 SNR01 watched page {{\"frame\":{},\"path\":\"{}\","
+                "\"page\":{},\"is_write\":{}}}",
+                frame, path, *it, is_write);
+  }
+}
+
+void Snr01WatchAccess(void*, uint32_t start, uint32_t length, bool is_write) {
+  Snr01RecordWatchedPages("guest_access", start, length, is_write);
+}
+
+std::pair<uint32_t, uint32_t> Snr01WatchInvalidation(
+    void*, uint32_t start, uint32_t length, bool exact_range) {
+  Snr01RecordWatchedPages(exact_range ? "exact_invalidation" : "invalidation",
+                          start, length, true);
+  return {start, length};
+}
+
+void Snr01ArmPacketPage(uint32_t packet_physical) {
+  auto* memory = snr01_memory.load(std::memory_order_acquire);
+  if (!memory ||
+      !((packet_physical >= 0x14000000 && packet_physical < 0x16000000) ||
+        (packet_physical >= 0x17000000 && packet_physical < 0x18000000))) {
+    return;
+  }
+  const uint32_t page_size = uint32_t(rex::memory::page_size());
+  const uint32_t page = packet_physical & ~(page_size - 1);
+  {
+    std::lock_guard lock(snr01_watch_mutex);
+    if (snr01_watch_pages.size() >= kSnr01WatchPageLimit ||
+        !snr01_watch_pages.insert(page).second) {
+      return;
+    }
+  }
+  memory->EnablePhysicalMemoryAccessCallbacks(page, page_size, true, false,
+                                               true);
+  REXGPU_INFO("FH1 SNR01 watch armed {{\"frame\":{},\"page\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              page);
 }
 
 bool Snr01TraceCurrentFrame() {
@@ -516,6 +587,10 @@ void ObservePreparedDraw(
       observation.surface_info, observation.color_info[0],
       observation.color_info[1], observation.color_info[2],
       observation.color_info[3], observation.depth_info);
+  if (REXCVAR_GET(pinyon_shift_snr01_watch_packet_pages) &&
+      observation.frame_sequence + 1 == uint64_t(target) && packet_bytes) {
+    Snr01ArmPacketPage(observation.draw_packet_physical_address);
+  }
   if (observation.frame_sequence == uint64_t(target) ||
       observation.frame_sequence == uint64_t(target) + 1) {
     for (uint32_t i = 0; i < observation.texture_fetch_count; ++i) {
@@ -628,6 +703,17 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
     return;
   }
   snr01_memory.store(memory, std::memory_order_release);
+  if (memory && REXCVAR_GET(pinyon_shift_snr01_watch_packet_pages) &&
+      REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0) {
+    snr01_watch_events.store(0, std::memory_order_relaxed);
+    snr01_watch_access_handle = memory->RegisterPhysicalMemoryAccessCallback(
+        Snr01WatchAccess, nullptr);
+    snr01_watch_invalidation_handle =
+        memory->RegisterPhysicalMemoryInvalidationCallback(
+            Snr01WatchInvalidation, nullptr);
+    REXGPU_INFO("FH1 SNR01 packet page watch active page_limit={} event_limit={}",
+                kSnr01WatchPageLimit, kSnr01WatchEventLimit);
+  }
   if (REXCVAR_GET(pinyon_shift_snr01_trace_resident_packet_writers)) {
     REXGPU_INFO("FH1 SNR01 resident packet survey active "
                 "range=[0x14000000,0x16000000)+[0x17000000,0x18000000) "
@@ -650,11 +736,20 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
 }
 
 void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
-  snr01_memory.store(nullptr, std::memory_order_release);
   if (graphics_system) {
     graphics_system->SetPreparedDrawObserver(nullptr);
     graphics_system->SetIndirectBufferObserver(nullptr);
     graphics_system->SetCopyObserver(nullptr);
+  }
+  auto* memory = snr01_memory.exchange(nullptr, std::memory_order_acq_rel);
+  if (memory && snr01_watch_access_handle) {
+    memory->UnregisterPhysicalMemoryAccessCallback(snr01_watch_access_handle);
+    memory->UnregisterPhysicalMemoryInvalidationCallback(
+        snr01_watch_invalidation_handle);
+    snr01_watch_access_handle = nullptr;
+    snr01_watch_invalidation_handle = nullptr;
+    std::lock_guard lock(snr01_watch_mutex);
+    snr01_watch_pages.clear();
   }
   FlushFh1GpuCorpus();
 }

@@ -12,7 +12,7 @@ EVENT = re.compile(r"\[t(\d+)\] FH1 SNR01 (camera method|view object400|view end
                    r"inline indirect write|deferred indirect command|"
                    r"primary indirect packet|indirect buffer|prepared draw|"
                    r"direct packet|semantic packet|indexed packet|"
-                   r"indexed2 owner|resident packet) (\{.*\})")
+                   r"indexed2 owner|resident packet|watch armed|watched page) (\{.*\})")
 
 
 def verify(path: Path, frame: int):
@@ -22,11 +22,15 @@ def verify(path: Path, frame: int):
                                     "primary indirect packet", "indirect buffer",
                                     "prepared draw", "direct packet",
                                     "semantic packet", "indexed packet",
-                                    "indexed2 owner")}
+                                    "indexed2 owner", "watch armed",
+                                    "watched page")}
     survey_ranges = []
     resident_writes = []
+    watch_active = False
     for position, line in enumerate(path.open(encoding="utf-8-sig",
                                               errors="replace")):
+        if "FH1 SNR01 packet page watch active" in line:
+            watch_active = True
         if "FH1 SNR01 resident packet survey active" in line:
             assert not survey_ranges
             survey_ranges = [(int(a, 16), int(b, 16)) for a, b in
@@ -40,7 +44,8 @@ def verify(path: Path, frame: int):
                 resident_writes.append(row)
                 continue
             if row["frame"] in (frame, frame + 1) or (
-                    match[2] == "prepared draw" and row["frame"] == frame - 1):
+                    match[2] in ("prepared draw", "watch armed") and
+                    row["frame"] == frame - 1):
                 events[match[2]].append((position, row))
 
     starts, ends = events["view object400"], events["view end"]
@@ -146,6 +151,14 @@ def verify(path: Path, frame: int):
     matching_prior_bytes = sum(
         byte_hashes[(packet, False)] == byte_hashes[(packet, True)]
         for packet in recurring_hashed)
+    recurring_pages = {packet & ~0xFFF for packet in packets & prior_packets}
+    armed_pages = {row["page"] for _, row in events["watch armed"]}
+    touched_pages = {row["page"] for _, row in events["watched page"]
+                     if row["is_write"]}
+    if watch_active:
+        assert recurring_pages <= armed_pages
+        assert not any("trace limit reached" in line for line in
+                       path.open(encoding="utf-8-sig", errors="replace"))
     assert direct and all(
         (row["path"] == "indexed2_secondary" and not row["direct_call"] and
          ("indexed2_caller_lr" not in row or row["indexed2_caller_lr"])) or
@@ -194,6 +207,9 @@ def verify(path: Path, frame: int):
                 recurring_hashed),
             "post_view_recurring_packet_byte_hashes_matching":
                 matching_prior_bytes,
+            "packet_page_watch_active": watch_active,
+            "post_view_recurring_pages_armed": len(recurring_pages & armed_pages),
+            "post_view_recurring_pages_touched": len(recurring_pages & touched_pages),
             "resident_survey_active": bool(survey_ranges),
             "resident_survey_covered_recurring_addresses": sum(
                 any(start <= packet < end for start, end in survey_ranges)
