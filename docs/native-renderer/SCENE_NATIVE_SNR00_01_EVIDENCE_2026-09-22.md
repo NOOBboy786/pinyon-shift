@@ -1558,3 +1558,26 @@ backend frame 6001 with 408 visible-list entries, 332 packet headers and
 zero unmatched submitted items inside a view. SNR-01 still needs the
 render-thread request's source view/camera relationship and a title-level
 camera state/transform map before the full deferred path is owned.
+
+### Presentation-camera matrix writers (static)
+
+The same image's `CPresentationCamera` vtable at `0x82002F64` has 65 slots;
+the next vtable begins at `0x8200306C`. The generated title functions provide
+these exact writes to the camera object (`r3`):
+
+| Vtable slot / function | Proven object writes or reads |
+| --- | --- |
+| 43 / `sub_82D8C820` | Copies a 64-byte argument into `camera+80` |
+| 44 / `sub_82DB8190` | Copies a 64-byte argument into `camera+144` |
+| 11 / `sub_82DBAFC0` | Reads floats at `+208`, `+212`, `+256`, `+260` and byte `+268`; constructs values at `+80`, stores its argument at `+12`, `camera+80` at `+8`, and sets dirty byte `+464` |
+| 12 / `sub_82DB7C00` | Reads floats at `+208`, `+212`, `+240`, `+244`, `+248`, `+252` and byte `+268`; writes a 64-byte result at `+80`, stores its argument at `+12`, and sets `+8` and dirty byte `+464` to one |
+| 8, 14, 17 | Store an argument at `+8` or floats at `+260` / `+256`, respectively, and set dirty byte `+464` |
+
+Slots 2 and 3 change a refcount at `+496`; slots 62–64 delegate to
+`sub_823F8848`, with two of them also calling helpers on `camera+272`.
+These are field and call facts, not yet a projection/view/world-transform
+semantic map. In particular, slot 12 uses separate branches for its byte
+`+268` and argument, so a single assumed matrix convention would be unsafe.
+The next bounded runtime probe should record slots 11/12/43/44 and their
+camera object pointers around the eight view calls, then join the observed
+state to the render-thread request and submitted matrix bindings.
