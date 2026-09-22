@@ -351,7 +351,7 @@ void ObservePreparedDraw(
       "\"pixel_shader\":{},\"index_count\":{},"
       "\"index_buffer_type\":{},\"index_buffer_guest_base\":{},"
       "\"index_buffer_length\":{},\"guest_primitive_type\":{},"
-      "\"vertex_fetch_count\":{},"
+      "\"vertex_fetch_count\":{},\"texture_fetch_count\":{},"
       "\"render_target_bits\":{},\"attachment_state\":{},"
       "\"surface_info\":{},\"color_info\":[{},{},{},{}],"
       "\"depth_info\":{}}}",
@@ -366,12 +366,29 @@ void ObservePreparedDraw(
       observation.pixel_shader_hash, observation.index_count,
       observation.index_buffer_type, observation.index_buffer_guest_base,
       observation.index_buffer_length, observation.guest_primitive_type,
-      observation.vertex_fetch_count,
+      observation.vertex_fetch_count, observation.texture_fetch_count,
       observation.bound_render_target_bits,
       observation.fh1_execution_key.attachment_state,
       observation.surface_info, observation.color_info[0],
       observation.color_info[1], observation.color_info[2],
       observation.color_info[3], observation.depth_info);
+  if (observation.frame_sequence == uint64_t(target) ||
+      observation.frame_sequence == uint64_t(target) + 1) {
+    for (uint32_t i = 0; i < observation.texture_fetch_count; ++i) {
+      const auto& fetch = observation.texture_fetches[i];
+      REXGPU_INFO(
+          "FH1 SNR01 prepared texture fetch {{\"frame\":{},"
+          "\"draw\":{},\"packet_physical\":{},"
+          "\"fetch_constant\":{},\"type\":{},"
+          "\"base_address\":{},\"mip_address\":{},"
+          "\"format\":{},\"dimension\":{},"
+          "\"width\":{},\"height\":{},\"stack_depth\":{}}}",
+          observation.frame_sequence, logged_draws,
+          observation.draw_packet_physical_address, fetch.fetch_constant,
+          fetch.type, fetch.base_address, fetch.mip_address, fetch.format,
+          fetch.dimension, fetch.width, fetch.height, fetch.stack_depth);
+    }
+  }
   if (observation.frame_sequence == uint64_t(target) + 1) {
     for (uint32_t i = 0;
          i < observation.vertex_fetch_count &&

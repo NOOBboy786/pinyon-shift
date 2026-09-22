@@ -1282,3 +1282,40 @@ View 8 remains the main-view candidate. Its two color targets and the
 unmatched second target mean the final presentation and retained-pass
 dependency cut are not yet established. The trace does not authorize
 suppressing any view or pass.
+
+### Reflection-cube consumers and the separate title command path
+
+The prepared-draw observer now exposes the live shader-used texture fetches:
+fetch constant, base/mip addresses, format, dimension and dimensions. A
+default-off source-frame-6001 saved-race replay with a dedicated log exited
+normally with seven captures. Its executable SHA-256 was
+`D6CB1AEB4AE4448D72AC7E2AD5A2317697EE373E9B7A7522D647FC11FB2D8DDA`,
+the D3D12 DLL SHA-256 was
+`D83C0A2792BE79DCE3192442A3D39A7C0C00C380A964712FDE65289CC56F8253`,
+and `.local/native-renderer/snr01/texture-consumer-view-runtime.log` has
+SHA-256 `0128D11544B3FD27C35A07A0EC517FB8AB401D06EB4C4BBE8411964017CF6879`.
+`tools/verify-snr01-cube-consumers.py` passed on source/backend frame 6001;
+the indirect and track-bucket verifiers also passed for source frame 6001
+and backend frame 6002.
+
+In backend frame 6001, six successful 256×256 face copies (ordinals 8–13)
+write `0x1C879000 + face × 0x40000` in order 0, 4, 2, 1, 3, 5. After the
+sixth copy, 728 prepared draws each have one live texture fetch from base
+`0x1C879000`, mip base `0x1C9F9000`, format 54
+(`k_2_10_10_10_AS_16_16_16_16`), cube dimension and 256×256×6 shape.
+All 728 render with depth and color to raw target `(surface 335676672,
+color 0 786432, depth 66560)`. This is a direct producer-to-consumer address
+join in one backend frame, not a shader-hash inference. The verifier checks
+that every prepared draw's declared texture-fetch count appears in the log.
+
+Each of those 728 draws descends from a source-frame-6001 primary packet
+written at title caller return `0x829F6308`, with no queued caller. None of
+their draw packet addresses belongs to a source-frame-6001 tracked view/slot-75
+bucket. Static generated code shows `sub_829F5FF0` calls `sub_82409398` at
+this return while interpreting a title command stream. This identifies a
+separate command path, **not** its semantic scene owner. The consumers use the
+same raw target tuple as some view-8 draws in the previous capture, but shared
+EDRAM registers do not prove they belong to view 8. SNR-01 must recover this
+path's source owner, view/camera and ordering before the proposed main-view
+slice can be frozen or suppressed. SNR-05 must preserve the cube production,
+mip publication and sampling dependency across that boundary.
