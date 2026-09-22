@@ -587,3 +587,50 @@ publication paths, not the scene owner that originally recorded a buffer.
 No-draw roots may still perform clears, copies or state changes. The next
 join must follow queue/command-buffer production back to the view and its
 visible objects; adding more device-flush callers alone cannot prove SNR-01.
+
+### Presentation-view and track-presenter boundary
+
+Static RTTI and the generated call site identify `sub_82444E60` as
+`CPresentationView` virtual slot 13. Its `sub_8244CA98` path reads the
+view state at `view+4`, loads a nested `CTrackPresentation` pointer from
+`state+36`, and passes the outer view to track-presentation slot 75. The
+default-off, read-only hooks now record view entry, selection, track link and
+common exit. The selected-context pointer and numeric view arguments remain
+raw observations; they are not camera, pass or LOD labels.
+
+The saved race exited normally with the RelWithDebInfo executable SHA-256
+`CEEEAC33737C238D483554213FF31CBF12D0CF82DCFFDD78CB661750C71568C1`.
+The combined local log is
+`.local/native-renderer/snr01/view-scope-frame-6000-probed/title-backend-view-scope.log`
+(SHA-256 `9B21DE65BB68F8BF2CAFE04D9A1B226DD224173FD785CCF38927685632423521`).
+The eight source-frame-6000 view calls had one view pointer, `0x43F84EC0`,
+and matched eight exits on one title thread. The entry callers were
+`0x823FA398` once, `0x8240A154` six times, and `0x8245032C` once. The
+six middle calls used raw argument values `0, 4, 2, 1, 3, 5`. All eight
+selection events observed context pointer `0x2E02E000`. All 19 track-link
+events resolved the same view through state `0x41BEBCE0` to presenter
+`0x41E40120`; 19 slot-75 calls carried the view in argument 9, and two
+slot-79 calls carried it in argument 5. These pointers are capture-local.
+
+The entry/exit scopes contained 282 of 374 semantic packets, 366 of 646
+direct packet events across all threads, and only 6 of 130 primary indirect
+packets in source frame 6000. The per-call semantic/direct/primary counts
+were `84/160/4`, `11/1/2`, `10/1/0`, `11/1/0`, `7/1/0`,
+`5/1/0`, `11/1/0`, and `143/200/0`. Scope ranges matched every packet
+ordinal on the view thread, with no unmatched view entry or exit. The
+existing indirect-join verifier also passed: backend frame 6001 had 131
+top-level roots, 1,624 indirect executions and 5,180 prepared draws;
+all roots joined to source-frame-6000/6001 title packets.
+
+```powershell
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/view-scope-frame-6000-probed/title-backend-view-scope.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+The scoped calls do not cover most primary-ring publication. Some work may
+be deferred, interleaved or performed by another title path; the capture
+does not establish which. The next SNR-01 probe must join view/visible-list
+entries to the command-buffer production and queue path, then to the exact
+primary packets and backend draws. Do not infer main-view completeness or
+safe draw suppression from the presenter-pointer relationship alone.

@@ -102,8 +102,17 @@ struct Snr01DirectScope {
   uint64_t first_packet;
   uint64_t ordinal;
 };
+struct Snr01ViewScope {
+  uint32_t view;
+  uint32_t argument;
+  uint64_t first_semantic_packet;
+  uint64_t first_direct_packet;
+  uint64_t first_primary_packet;
+  uint64_t ordinal;
+};
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
+thread_local std::vector<Snr01ViewScope> snr01_view_scopes;
 thread_local std::vector<uint32_t> snr01_primary_indirect_callers;
 thread_local std::vector<uint32_t> snr01_queued_indirect_callers;
 thread_local std::vector<Snr01DispatchScope> snr01_dispatch_scopes;
@@ -120,8 +129,12 @@ thread_local uint64_t snr01_dispatch_wrapper_count = 0;
 thread_local uint64_t snr01_track75_count = 0;
 thread_local uint64_t snr01_track79_count = 0;
 thread_local uint64_t snr01_track_pass_count = 0;
+thread_local uint64_t snr01_view_begin_count = 0;
+thread_local uint64_t snr01_view_selected_count = 0;
+thread_local uint64_t snr01_view_track_count = 0;
 thread_local uint64_t snr01_direct_call_count = 0;
 thread_local uint64_t snr01_direct_packet_count = 0;
+thread_local uint64_t snr01_primary_indirect_packet_count = 0;
 thread_local uint64_t snr01_unmatched_direct_exits = 0;
 thread_local uint64_t snr01_unmatched_emitter_exits = 0;
 thread_local uint64_t snr01_unmatched_dispatch_exits = 0;
@@ -445,6 +458,81 @@ void PinyonShiftObserveTitleDrawPacketPublish(PPCRegister& r3, PPCRegister& r11,
   }
   title_last_packet_ns = now_ns;
   ++title_packet_count;
+}
+
+void PinyonShiftObservePresentationViewBegin(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
+    PPCRegister& r6, PPCRegister& r7, PPCRegister& r8) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_view_begin_count;
+  snr01_view_scopes.push_back(
+      {r3.u32, r4.u32, snr01_semantic_packet_count,
+       snr01_direct_packet_count, snr01_primary_indirect_packet_count,
+       ordinal});
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 view begin {{\"frame\":{},\"call\":{},"
+        "\"caller_lr\":{},\"view\":{},\"arg4\":{},\"arg5\":{},"
+        "\"arg6\":{},\"arg7\":{},\"arg8\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r12.u32, r3.u32, r4.u32, r5.u32, r6.u32, r7.u32,
+        r8.u32);
+  }
+}
+
+void PinyonShiftObservePresentationViewEnd() {
+  if (snr01_view_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr01_view_scopes.back();
+  snr01_view_scopes.pop_back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 view end {{\"frame\":{},\"call\":{},"
+        "\"view\":{},\"arg4\":{},"
+        "\"first_semantic\":{},\"last_semantic\":{},"
+        "\"first_direct\":{},\"last_direct\":{},"
+        "\"first_primary\":{},\"last_primary\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.view, scope.argument,
+        scope.first_semantic_packet + 1, snr01_semantic_packet_count,
+        scope.first_direct_packet + 1, snr01_direct_packet_count,
+        scope.first_primary_packet + 1,
+        snr01_primary_indirect_packet_count);
+  }
+}
+
+void PinyonShiftObservePresentationViewSelected(PPCRegister& r31,
+                                                PPCRegister& r25) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_view_selected_count;
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 view selected {{\"frame\":{},\"call\":{},"
+        "\"view\":{},\"selected_context\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r31.u32, r25.u32);
+  }
+}
+
+void PinyonShiftObservePresentationTrackLink(PPCRegister& r31,
+                                             PPCRegister& r11,
+                                             PPCRegister& r10) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_view_track_count;
+  if (ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 view track link {{\"frame\":{},\"call\":{},"
+        "\"view\":{},\"view_state\":{},\"track_presenter\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        ordinal, r31.u32, r11.u32, r10.u32);
+  }
 }
 
 void PinyonShiftObserveTrackPresentation75(
@@ -847,8 +935,7 @@ void PinyonShiftObservePrimaryIndirectPacket(
   if (!Snr01TracePrimaryIndirectFrame()) {
     return;
   }
-  static thread_local uint64_t logged_packets = 0;
-  const uint64_t ordinal = ++logged_packets;
+  const uint64_t ordinal = ++snr01_primary_indirect_packet_count;
   if (ordinal > kSnr01PacketLimit) {
     return;
   }
