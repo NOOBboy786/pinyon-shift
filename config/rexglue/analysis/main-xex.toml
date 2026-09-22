@@ -51,6 +51,27 @@ address = 0x82444ED0
 name = "PinyonShiftObservePresentationViewObject400"
 registers = ["r31", "r3", "r11"]
 
+# SNR-01 camera-state writers, bounded by the trace source-frame option.
+[[midasm_hook]]
+address = 0x82DBAFC0
+name = "PinyonShiftObserveCameraMethod11"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
+address = 0x82DB7C00
+name = "PinyonShiftObserveCameraMethod12"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
+address = 0x82D8C820
+name = "PinyonShiftObserveCameraMethod43"
+registers = ["r3", "r4"]
+
+[[midasm_hook]]
+address = 0x82DB8190
+name = "PinyonShiftObserveCameraMethod44"
+registers = ["r3", "r4"]
+
 [[midasm_hook]]
 address = 0x82445040
 name = "PinyonShiftObservePresentationSelectedContextVtable"

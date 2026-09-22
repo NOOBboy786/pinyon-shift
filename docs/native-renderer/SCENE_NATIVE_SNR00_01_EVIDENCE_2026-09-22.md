@@ -1567,8 +1567,8 @@ these exact writes to the camera object (`r3`):
 
 | Vtable slot / function | Proven object writes or reads |
 | --- | --- |
-| 43 / `sub_82D8C820` | Copies a 64-byte argument into `camera+80` |
-| 44 / `sub_82DB8190` | Copies a 64-byte argument into `camera+144` |
+| 43 / `sub_82D8C820` | Copies four 16-byte vectors assembled on the stack into `camera+80` |
+| 44 / `sub_82DB8190` | Copies four 16-byte vectors assembled on the stack into `camera+144` |
 | 11 / `sub_82DBAFC0` | Reads floats at `+208`, `+212`, `+256`, `+260` and byte `+268`; constructs values at `+80`, stores its argument at `+12`, `camera+80` at `+8`, and sets dirty byte `+464` |
 | 12 / `sub_82DB7C00` | Reads floats at `+208`, `+212`, `+240`, `+244`, `+248`, `+252` and byte `+268`; writes a 64-byte result at `+80`, stores its argument at `+12`, and sets `+8` and dirty byte `+464` to one |
 | 8, 14, 17 | Store an argument at `+8` or floats at `+260` / `+256`, respectively, and set dirty byte `+464` |
@@ -1581,3 +1581,35 @@ semantic map. In particular, slot 12 uses separate branches for its byte
 The next bounded runtime probe should record slots 11/12/43/44 and their
 camera object pointers around the eight view calls, then join the observed
 state to the render-thread request and submitted matrix bindings.
+
+### Live camera-method and view-state join
+
+Default-off hooks at slots 11/12/43/44 and the existing view scope produced
+two normal-exit sustained-race replays with seven captures each. The second
+build's executable SHA-256 was
+`30531EE26E6B40E34BA97D5AF15BF7E73F4225B282AC167E1437A0E408E8565D`;
+`.local/native-renderer/snr01/camera-method-run-b.log` SHA-256 was
+`1B909F52A1AAB090E7B7B1CD2D962FBDC641358A52FC22B961A0328AE20629A7`.
+The new `tools/verify-snr01-camera-view-join.py` passes for source frame 6000.
+
+In that frame, view calls 1 and 8 use camera `0x2E4B6200`; calls 2–7 use
+camera `0x2E0B0E00`. Slot 11 runs 14 times on the first camera before the
+view calls; slots 12 and 43 have no calls in this frame. Slot 44 runs once
+inside every view call on its associated camera. The 64-byte region at
+`camera+80` has a stable hash within every call. The `camera+144` hash stays
+stable in calls 1 and 8, but changes during each of calls 2–7. Each middle
+call's exit hash is the next call's entry hash. Thus the six face calls
+successively update one live camera's second matrix region; they are not six
+independent camera objects. This does **not** yet identify the matrix's
+coordinate convention or prove main-view pass semantics.
+
+The same frame writes one command at `0x130FE12C` after view call 8 returns,
+via render-request caller `0x8245B870`, with no active view scope. Its camera
+ownership remains unassigned. The track-bucket verifier passed: 441 visible
+entries, 353 packet headers and zero unmatched submissions inside a view.
+The cube-consumer verifier passed for 728 draws when invoked with primary
+packet frame 6001 and backend frame 6001; its three consumer command writers
+were in view call 8 in source frame 6000. Using source frame 6000 for that
+verifier fails because the observed primary packets in this replay carry
+frame 6001. This timing-dependent frame label must not be hidden by claiming
+the separate post-view command has a cube consumer or camera join.

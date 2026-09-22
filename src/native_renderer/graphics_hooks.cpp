@@ -111,6 +111,7 @@ struct Snr01ViewScope {
   uint64_t first_direct_packet;
   uint64_t first_primary_packet;
   uint64_t ordinal;
+  uint32_t camera = 0;
 };
 struct Snr01TrackCallScope {
   uint64_t ordinal;
@@ -226,6 +227,7 @@ thread_local uint64_t snr01_track_pass_count = 0;
 thread_local uint64_t snr01_view_begin_count = 0;
 thread_local uint64_t snr01_view_selected_count = 0;
 thread_local uint64_t snr01_view_track_count = 0;
+thread_local uint64_t snr01_camera_method_count = 0;
 thread_local uint64_t snr01_track_bucket_count = 0;
 thread_local uint64_t snr01_second_draw_count = 0;
 thread_local uint64_t snr01_second_draw_skips = 0;
@@ -265,6 +267,23 @@ bool Snr01TraceLinkedWriteFrame() {
       rex::perf::CounterId::kSourceFrameCount);
   return target > 0 && frame + 12 >= uint64_t(target) &&
          frame <= uint64_t(target) + 1;
+}
+
+uint64_t Snr01CameraMatrixHash(uint32_t camera, uint32_t offset) {
+  if (!camera) {
+    return 0;
+  }
+  auto* memory = snr01_memory.load(std::memory_order_acquire);
+  if (!memory) {
+    return 0;
+  }
+  uint64_t hash = 14695981039346656037ull;
+  for (uint32_t i = 0; i < 16; ++i) {
+    hash ^= rex::memory::load_and_swap<uint32_t>(
+        memory->TranslateVirtual(camera + offset + i * 4));
+    hash *= 1099511628211ull;
+  }
+  return hash;
 }
 
 void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
@@ -715,12 +734,15 @@ void PinyonShiftObservePresentationViewEnd() {
   if (scope.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(
         "FH1 SNR01 view end {{\"frame\":{},\"call\":{},"
-        "\"view\":{},\"arg4\":{},"
+        "\"view\":{},\"arg4\":{},\"camera\":{},"
+        "\"matrix80_hash\":{},\"matrix144_hash\":{},"
         "\"first_semantic\":{},\"last_semantic\":{},"
         "\"first_direct\":{},\"last_direct\":{},"
         "\"first_primary\":{},\"last_primary\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
-        scope.ordinal, scope.view, scope.argument,
+        scope.ordinal, scope.view, scope.argument, scope.camera,
+        Snr01CameraMatrixHash(scope.camera, 80),
+        Snr01CameraMatrixHash(scope.camera, 144),
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_direct_packet + 1, snr01_direct_packet_count,
         scope.first_primary_packet + 1,
@@ -748,11 +770,46 @@ void PinyonShiftObservePresentationViewObject400(
   if (!Snr01TraceCurrentFrame() || snr01_view_scopes.empty()) {
     return;
   }
+  const uint32_t camera = r11.u32 == 0x82002F64 ? r3.u32 : 0;
+  snr01_view_scopes.back().camera = camera;
   REXGPU_INFO(
       "FH1 SNR01 view object400 {{\"frame\":{},\"call\":{},"
-      "\"view\":{},\"object\":{},\"vtable\":{}}}",
+      "\"view\":{},\"object\":{},\"vtable\":{},"
+      "\"matrix80_hash\":{},\"matrix144_hash\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
-      snr01_view_scopes.back().ordinal, r31.u32, r3.u32, r11.u32);
+      snr01_view_scopes.back().ordinal, r31.u32, r3.u32, r11.u32,
+      Snr01CameraMatrixHash(camera, 80), Snr01CameraMatrixHash(camera, 144));
+}
+
+void ObserveSnr01CameraMethod(uint32_t slot, PPCRegister& r3,
+                             PPCRegister& r4) {
+  if (!Snr01TraceLinkedWriteFrame() || ++snr01_camera_method_count > 1024) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 camera method {{\"frame\":{},\"ordinal\":{},"
+      "\"slot\":{},\"camera\":{},\"arg4\":{},"
+      "\"view_call\":{},\"view\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      snr01_camera_method_count, slot, r3.u32, r4.u32,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
+}
+
+void PinyonShiftObserveCameraMethod11(PPCRegister& r3, PPCRegister& r4) {
+  ObserveSnr01CameraMethod(11, r3, r4);
+}
+
+void PinyonShiftObserveCameraMethod12(PPCRegister& r3, PPCRegister& r4) {
+  ObserveSnr01CameraMethod(12, r3, r4);
+}
+
+void PinyonShiftObserveCameraMethod43(PPCRegister& r3, PPCRegister& r4) {
+  ObserveSnr01CameraMethod(43, r3, r4);
+}
+
+void PinyonShiftObserveCameraMethod44(PPCRegister& r3, PPCRegister& r4) {
+  ObserveSnr01CameraMethod(44, r3, r4);
 }
 
 void PinyonShiftObservePresentationSelectedContextVtable(
