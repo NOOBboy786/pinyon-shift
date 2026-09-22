@@ -2367,7 +2367,46 @@ dependencies and actual resource owners before admission or suppression.
 The 24 indirect gaps are consecutive draw ordinals 5152–5175 under one child
 execution (ID 3396208, header `0x12F756D8`, target `0x132C5F00`) whose
 root header `0x12EB876C` was published in source frame 6001. The other gap
-is direct-root draw ordinal 1977 at packet `0x12EB8620`. These are
+is direct-root draw ordinal 1977 at packet `0x12EC6368` under root header
+`0x12EB8620`. These are
 capture-specific addresses, not persistent identities. The next probe can
 focus on the missing child-packet producer and the direct-root writer rather
 than expanding the already verified local-car pointer chain.
+
+### Exact attachment-write state of the repeated point draws
+
+A further default-off two-source-frame replay logged the prepared draw's
+existing normalized depth control, color mask and draw flags. It exited
+normally with seven captures using executable SHA-256
+`B9729C6876729F7338E24A31D23AC679067C98FD3F267729D10F0FA8990FCF38`.
+The ordered log at `.local/native-renderer/snr01/frame-wide-state-run-a-full.log`
+has SHA-256
+`C8E3CDE57074E21A48693746F8BD85593E10BCA84BFDD070D9653158F92F71AE`;
+the per-draw ledger at `.local/native-renderer/snr01/frame-wide-state-run-a.json`
+has SHA-256
+`7FCAAEC52083F4E1A8E535CAA92907215DE7A95C8B736F9F1EFA8B1224598A5A`.
+The route's traffic differed from the prior replay (4,098 versus 5,282
+backend draws), so its counts are not substituted into that census.
+
+The same resident 192-byte child buffer produced 24 one-point draws in each
+of four target phases, including the candidate scene-color `0x30000` phase.
+In all 96 observations the vertex program was `B6C9863F710683EC`, there was
+no pixel program, and normalized color mask and depth/stencil control were
+both zero. The 24 candidate-phase draws therefore made **no color, depth or
+stencil attachment write** in this replay. The earlier RenderDoc race capture
+independently shows three 24-draw phases using that vertex program with depth
+disabled. This supports keeping these draws outside the diagnostic *image*
+slice, while retaining their compatibility execution until any query or other
+guest-visible side effect and consumer is proved. It is not permission to
+suppress them.
+
+The one direct-root candidate gap recurred as draw ordinal 1635. It used
+`1E6883FCCDE1F688`/`A4A965C189287B99`, a three-index rectangle draw,
+normalized color mask 15 and depth control 34679, whose low enable/write bits
+are nonzero. It was the first draw to either candidate scene-color target in
+this backend frame, immediately before the captured view-8 draws. That order
+suggests a scene-pass setup draw, but does not establish its title owner or
+semantics. It is an image-writing draw with no captured title packet writer
+or view, and it still blocks freezing the candidate slice. All 24
+attachment-write-free draws and this image-writing draw remain separately
+identified in the ledger; attachment words alone must not decide admission.

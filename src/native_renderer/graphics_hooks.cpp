@@ -613,7 +613,8 @@ void ObservePreparedDraw(
       "\"vertex_fetch_count\":{},\"texture_fetch_count\":{},"
       "\"render_target_bits\":{},\"attachment_state\":{},"
       "\"surface_info\":{},\"color_info\":[{},{},{},{}],"
-      "\"depth_info\":{}}}",
+      "\"depth_info\":{},\"depth_control\":{},"
+      "\"color_mask\":{},\"draw_flags\":{}}}",
       observation.frame_sequence, logged_draws,
       observation.indirect_buffer_execution_id,
       observation.indirect_buffer_parent_execution_id,
@@ -631,7 +632,9 @@ void ObservePreparedDraw(
       observation.fh1_execution_key.attachment_state,
       observation.surface_info, observation.color_info[0],
       observation.color_info[1], observation.color_info[2],
-      observation.color_info[3], observation.depth_info);
+      observation.color_info[3], observation.depth_info,
+      observation.normalized_depth_control, observation.normalized_color_mask,
+      observation.flags);
   if (REXCVAR_GET(pinyon_shift_snr01_watch_packet_pages) &&
       observation.frame_sequence + 1 == uint64_t(target) && packet_bytes) {
     Snr01ArmPacketPage(observation.draw_packet_physical_address);

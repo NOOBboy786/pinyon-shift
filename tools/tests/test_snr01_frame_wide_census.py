@@ -61,15 +61,20 @@ class FrameWideCensusTest(unittest.TestCase):
         records["draw"] = [
             {"ordinal": ordinal, "indirect_execution": execution,
              "surface_info": 1, "color_info": [2], "depth_info": 3,
-             "render_target_bits": 3, "packet_physical": ordinal * 4}
+             "render_target_bits": 3, "packet_physical": ordinal * 4,
+             "depth_control": 0, "color_mask": 0}
             for ordinal, execution in enumerate((2, 1, 4, 3), 1)
         ]
+        records["draw"][0]["color_mask"] = 15
+        records["draw"][1]["depth_control"] = 2
         result = SUMMARIZE(records, [10, 11], 11)
         self.assertEqual(result["totals"]["draws"], 4)
         self.assertEqual(result["totals"]["classifications"],
                          {"view_owner": 1, "direct_root": 2,
                           "unmatched_indirect": 1})
         self.assertEqual(result["totals"]["draws_by_scene_source_frame"], {10: 1})
+        self.assertEqual(result["targets"]["00000001/00000002/00000003/00000003"]
+                         ["no_attachment_write_draws"], 2)
         self.assertEqual(len(result["draws"]), 4)
 
 

@@ -84,6 +84,7 @@ def summarize(records, frames, backend_frame):
 
     target_classes = collections.defaultdict(collections.Counter)
     target_views = collections.defaultdict(collections.Counter)
+    target_no_attachment_write = collections.Counter()
     source_frames = collections.Counter()
     scene_frames = collections.Counter()
     direct_views = collections.Counter()
@@ -125,7 +126,13 @@ def summarize(records, frames, backend_frame):
         target = (draw["surface_info"], draw["color_info"][0],
                   draw["depth_info"], draw["render_target_bits"])
         target_key = "/".join(f"{value:08X}" for value in target)
+        no_attachment_write = (
+            draw.get("color_mask") == 0 and
+            draw.get("depth_control") is not None and
+            draw["depth_control"] & 7 == 0
+        )
         target_classes[target_key][classification] += 1
+        target_no_attachment_write[target_key] += no_attachment_write
         if packet:
             target_views[target_key][f'{packet["frame"]}:{packet["view_call"]}'] += 1
         classifications[classification] += 1
@@ -147,6 +154,13 @@ def summarize(records, frames, backend_frame):
             "owner": packet["flush_owner"] if packet else None,
             "owner_first_word": packet["flush_owner_first_word"] if packet else None,
             "flush_caller_lr": packet["flush_caller_lr"] if packet else None,
+            "vertex_shader": draw.get("vertex_shader"),
+            "pixel_shader": draw.get("pixel_shader"),
+            "index_count": draw.get("index_count"),
+            "depth_control": draw.get("depth_control"),
+            "color_mask": draw.get("color_mask"),
+            "draw_flags": draw.get("draw_flags"),
+            "no_attachment_write": no_attachment_write,
             "title_packet_kind": title_packet[0] if title_packet else None,
             "title_packet_path": title_packet[1].get("path") if title_packet else None,
             "title_packet_source_frame": title_packet[1]["frame"] if title_packet else None,
@@ -179,6 +193,7 @@ def summarize(records, frames, backend_frame):
         "targets": {
             target: {"draws": sum(classes.values()),
                      "classifications": dict(classes),
+                     "no_attachment_write_draws": target_no_attachment_write[target],
                      "scene_views": dict(target_views[target])}
             for target, classes in sorted(target_classes.items())
         },
