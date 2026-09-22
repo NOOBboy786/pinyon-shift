@@ -157,6 +157,21 @@ name = "PinyonShiftObserveProceduralRuntimeRecord"
 registers = ["r26"]
 
 [[midasm_hook]]
+address = 0x82417A74
+name = "PinyonShiftObserveProceduralResourceCandidate"
+registers = ["r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x82417A9C
+name = "PinyonShiftObserveProceduralResourceCandidate"
+registers = ["r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x82415C50
+name = "PinyonShiftObserveProceduralResourceResolution"
+registers = ["r3"]
+
+[[midasm_hook]]
 address = 0x82417B7C
 name = "PinyonShiftObserveProceduralGeometrySubmit"
 registers = ["r3", "r4", "r5", "r6"]

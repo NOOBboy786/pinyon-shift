@@ -947,6 +947,36 @@ void PinyonShiftObserveProceduralRuntimeRecord(PPCRegister& r26) {
   scope.runtime_seen = true;
 }
 
+void PinyonShiftObserveProceduralResourceCandidate(
+    PPCRegister& r4, PPCRegister& r5, PPCRegister& r6) {
+  if (!Snr01TraceCurrentFrame() || snr01_procedural_scopes.empty()) {
+    return;
+  }
+  const auto& scope = snr01_procedural_scopes.back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 resource candidate {{\"frame\":{},\"call\":{},"
+        "\"descriptor\":{},\"key\":{},\"slot\":{},"
+        "\"resolver_context\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.descriptor_address, r4.u32, r5.u32, r6.u32);
+  }
+}
+
+void PinyonShiftObserveProceduralResourceResolution(PPCRegister& r3) {
+  if (!Snr01TraceCurrentFrame() || snr01_procedural_scopes.empty()) {
+    return;
+  }
+  const auto& scope = snr01_procedural_scopes.back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 resource resolution {{\"frame\":{},\"call\":{},"
+        "\"object\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, r3.u32);
+  }
+}
+
 void PinyonShiftObserveProceduralGeometrySubmit(
     PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
     PPCRegister& r6) {

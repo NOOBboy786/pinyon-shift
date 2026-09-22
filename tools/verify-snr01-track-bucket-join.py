@@ -193,6 +193,59 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 node["first_semantic"] == node["last_semantic"])
         assert claimed_items == set(items)
 
+    candidates = [(thread, row) for thread, row in events["resource candidate"]
+                  if row["frame"] == source_frame]
+    if candidates:
+        items = {(thread, row["call"]): row
+                 for thread, row in events["procedural item"]
+                 if row["frame"] == source_frame}
+        candidate_slots = collections.defaultdict(set)
+        resource_keys = set()
+        for thread, candidate in candidates:
+            key = (thread, candidate["call"])
+            assert key in items
+            item = items[key]
+            assert item["submit_seen"]
+            assert candidate["descriptor"] == item["descriptor_address"]
+            assert candidate["slot"] in (0, 1)
+            assert candidate["slot"] not in candidate_slots[key]
+            candidate_slots[key].add(candidate["slot"])
+            resource_keys.add(candidate["key"])
+        assert set(candidate_slots) == {
+            key for key, item in items.items() if item["submit_seen"]}
+        counts["resource_candidates"] = len(candidates)
+        counts["resource_keys"] = len(resource_keys)
+        counts["resource_slot1_candidates"] = sum(
+            1 in slots for slots in candidate_slots.values())
+
+        resolutions = [(thread, row) for thread, row in events["resource resolution"]
+                       if row["frame"] == source_frame]
+        if resolutions:
+            candidates_by_call = {(thread, row["call"]): row
+                                  for thread, row in candidates}
+            resolved_calls = set()
+            objects_by_key = collections.defaultdict(set)
+            for thread, resolution in resolutions:
+                key = (thread, resolution["call"])
+                assert key in candidates_by_call and key not in resolved_calls
+                assert resolution["object"]
+                resolved_calls.add(key)
+                objects_by_key[candidates_by_call[key]["key"]].add(
+                    resolution["object"])
+            assert all(len(objects) == 1 for objects in objects_by_key.values())
+            previous_keys = {}
+            for thread, candidate in candidates:
+                slot = (thread, candidate["slot"])
+                call = (thread, candidate["call"])
+                if slot in previous_keys:
+                    assert (call in resolved_calls) == (
+                        candidate["key"] != previous_keys[slot])
+                previous_keys[slot] = candidate["key"]
+            counts["resource_resolutions"] = len(resolutions)
+            counts["resolved_resource_keys"] = len(objects_by_key)
+            counts["resolved_resource_objects"] = len({
+                obj for objects in objects_by_key.values() for obj in objects})
+
     return {
         "source_frame": source_frame,
         "backend_frame": backend_frame,

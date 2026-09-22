@@ -816,3 +816,48 @@ This closes a bounded linked node → descriptor/runtime record → PM4 header
 identify geometry payload, material, transform and pass at the submit call,
 and trace the second bucket path. The 61 non-submitting nodes and other
 packet producers remain unclassified; SNR-01 and Gate A stay open.
+
+### Descriptor resource keys and resolver returns
+
+Before the final draw call, `sub_82417418` reads descriptor words 0 and 1
+as indices into the receiver's table at `+8`. It passes the selected table
+value to `sub_82415BF8` with slot 0 or optional slot 1. That helper caches
+the key per slot and, on a change, calls `sub_82415AD0`; its returned object
+is passed to a render-context virtual call at vtable offset 88. The object
+type and semantic resource role are not yet proven.
+
+Read-only hooks at the two call sites and the resolver return captured a
+second saved-race replay. It exited normally with executable SHA-256
+`9DC46A97B54155BCB6A9BAC1D5031402C9FD34EE8EB75F085F55A66759E73BD7`.
+The combined log is
+`.local/native-renderer/snr01/resource-resolution-frame-6000/title-backend-resource-resolution.log`
+(SHA-256 `E4C4EE1EE07B9CDAA5070514CB4B02808F7260141F61BE4FAA6983B7E3CA416D`).
+
+Source frame 6000 had 342 balanced item nodes. All 281 submitting items
+reached exactly one resource candidate in slot 0; the 61 non-submitting
+items reached none. There were 11 distinct keys. The resolver ran 197 times,
+for the first candidate and each subsequent key change; 84 repeated-key calls
+used its cache. All resolver returns were nonzero, and each key mapped to
+one distinct returned object within this frame. These are frame-local
+identities, not a lifetime or streaming guarantee. The 189 first-path
+submitted items still joined exactly to backend draws; the 130 second-path
+packets still lack an item/resource ownership join.
+
+The expanded bucket verifier checks candidate-to-descriptor association,
+slot uniqueness, submitted versus non-submitted reachability, cache-change
+behavior and one object per key. The indirect verifier passed for 133
+backend roots, 1,628 executions and 4,887 prepared draws:
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/resource-resolution-frame-6000/title-backend-resource-resolution.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/resource-resolution-frame-6000/title-backend-resource-resolution.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+The next relationship to recover is the concrete resource type and the
+geometry/index source behind the final draw. Key-to-object stability must
+also be retested across unload/reload and address reuse before SNR-02.
