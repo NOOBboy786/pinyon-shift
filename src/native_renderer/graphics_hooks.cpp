@@ -20,6 +20,9 @@
 REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_clear_producer_trace, false, "Pinyon Shift",
                     "Record bounded guest clear-producer timing and shader copies")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_INT32(pinyon_shift_snr01_trace_source_frame, 0, "Pinyon Shift",
+                     "Trace one source frame's procedural scopes and indexed PM4 headers")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 namespace {
 
@@ -47,6 +50,51 @@ thread_local uint64_t title_emitter_time_ns = 0;
 thread_local uint64_t title_packet_count = 0;
 thread_local int64_t title_first_packet_ns = 0;
 thread_local int64_t title_last_packet_ns = 0;
+
+struct Snr01ProceduralScope {
+  uint32_t receiver;
+  uint64_t first_packet;
+  uint64_t first_semantic_packet;
+  uint64_t ordinal;
+};
+thread_local std::vector<Snr01ProceduralScope> snr01_procedural_scopes;
+thread_local uint64_t snr01_packet_count = 0;
+thread_local uint64_t snr01_semantic_packet_count = 0;
+thread_local uint64_t snr01_procedural_count = 0;
+thread_local uint64_t snr01_unmatched_exits = 0;
+constexpr uint64_t kSnr01PacketLimit = 8192;
+constexpr uint64_t kSnr01ProceduralLimit = 4096;
+
+bool Snr01TraceCurrentFrame() {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  return target > 0 && uint64_t(target) ==
+                           uint64_t(rex::perf::GetTotalCounter(
+                               rex::perf::CounterId::kSourceFrameCount));
+}
+
+void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
+                               uint32_t header_word, uint32_t command_owner) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_semantic_packet_count;
+  if (ordinal > kSnr01PacketLimit) {
+    return;
+  }
+  const uint32_t guest_address = previous_word + 4;
+  REXGPU_INFO(
+      "FH1 SNR01 semantic packet {{\"frame\":{},\"ordinal\":{},"
+      "\"path\":\"{}\",\"header_guest\":{},\"header_physical\":{},"
+      "\"header_word\":{},\"command_owner\":{},"
+      "\"procedural_receiver\":{},\"procedural_call\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      ordinal, path, guest_address, guest_address & 0x1FFFFFFF,
+      header_word, command_owner,
+      snr01_procedural_scopes.empty()
+          ? 0 : snr01_procedural_scopes.back().receiver,
+      snr01_procedural_scopes.empty()
+          ? 0 : snr01_procedural_scopes.back().ordinal);
+}
 
 bool ClearProducerTraceEnabled() {
   static const bool enabled = REXCVAR_GET(pinyon_shift_fh1_clear_producer_trace);
@@ -93,6 +141,20 @@ void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
 // FH1's sole VdSwap call is the source-frame boundary used by the real-frame
 // presentation and performance gates. It intentionally changes no guest state.
 void PinyonShiftObserveGraphicsFrame() {
+  if (Snr01TraceCurrentFrame()) {
+    REXGPU_INFO(
+        "FH1 SNR01 summary {{\"frame\":{},\"indexed_packets\":{},"
+        "\"semantic_packets\":{},"
+        "\"procedural_calls\":{},\"unmatched_exits\":{},"
+        "\"unfinished_scopes\":{},\"packet_limit\":{},\"scope_limit\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        snr01_packet_count, snr01_semantic_packet_count,
+        snr01_procedural_count, snr01_unmatched_exits,
+        snr01_procedural_scopes.size(), kSnr01PacketLimit, kSnr01ProceduralLimit);
+  }
+  snr01_procedural_scopes.clear();
+  snr01_packet_count = snr01_semantic_packet_count =
+      snr01_procedural_count = snr01_unmatched_exits = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
       (title_emitter_calls || title_packet_count)) {
     rex::perf::TraceCriticalPath("title_emitter", int64_t(title_emitter_frame),
@@ -132,7 +194,25 @@ void PinyonShiftObserveTitleDrawEmitterEnd() {
           .count());
 }
 
-void PinyonShiftObserveTitleDrawPacketPublish() {
+void PinyonShiftObserveTitleDrawPacketPublish(PPCRegister& r3, PPCRegister& r11,
+                                             PPCRegister& r31) {
+  if (Snr01TraceCurrentFrame()) {
+    const uint64_t ordinal = ++snr01_packet_count;
+    if (ordinal <= kSnr01PacketLimit) {
+      const uint32_t guest_address = r3.u32 + 4;
+      REXGPU_INFO(
+          "FH1 SNR01 indexed packet {{\"frame\":{},\"ordinal\":{},"
+          "\"header_guest\":{},\"header_physical\":{},"
+          "\"header_word\":{},\"command_owner\":{},"
+          "\"procedural_receiver\":{},\"procedural_call\":{}}}",
+          rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+          ordinal, guest_address, guest_address & 0x1FFFFFFF, r11.u32,
+          r31.u32, snr01_procedural_scopes.empty()
+                       ? 0 : snr01_procedural_scopes.back().receiver,
+          snr01_procedural_scopes.empty()
+                       ? 0 : snr01_procedural_scopes.back().ordinal);
+    }
+  }
   if (!rex::perf::CriticalPathTraceEnabled()) {
     return;
   }
@@ -144,6 +224,50 @@ void PinyonShiftObserveTitleDrawPacketPublish() {
   }
   title_last_packet_ns = now_ns;
   ++title_packet_count;
+}
+
+void PinyonShiftObserveProceduralItemBegin(PPCRegister& r3) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint64_t ordinal = ++snr01_procedural_count;
+  snr01_procedural_scopes.push_back(
+      {r3.u32, snr01_packet_count, snr01_semantic_packet_count, ordinal});
+}
+
+void PinyonShiftObserveProceduralItemEnd() {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  if (snr01_procedural_scopes.empty()) {
+    ++snr01_unmatched_exits;
+    return;
+  }
+  const auto scope = snr01_procedural_scopes.back();
+  snr01_procedural_scopes.pop_back();
+  if (scope.ordinal <= kSnr01ProceduralLimit) {
+    REXGPU_INFO(
+        "FH1 SNR01 procedural item {{\"frame\":{},\"call\":{},"
+        "\"receiver\":{},\"first_indexed_packet\":{},"
+        "\"last_indexed_packet\":{},\"first_semantic_packet\":{},"
+        "\"last_semantic_packet\":{},\"nested_depth\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        scope.ordinal, scope.receiver, scope.first_packet + 1,
+        snr01_packet_count, scope.first_semantic_packet + 1,
+        snr01_semantic_packet_count, snr01_procedural_scopes.size());
+  }
+}
+
+void PinyonShiftObserveProceduralDrawPacketPrimary(PPCRegister& r30,
+                                                  PPCRegister& r11,
+                                                  PPCRegister& r31) {
+  RecordSnr01SemanticPacket("primary", r30.u32, r11.u32, r31.u32);
+}
+
+void PinyonShiftObserveProceduralDrawPacketSecondary(PPCRegister& r6,
+                                                    PPCRegister& r9,
+                                                    PPCRegister& r31) {
+  RecordSnr01SemanticPacket("secondary", r6.u32, r9.u32, r31.u32);
 }
 
 // Read-only hooks at the checked producer entry/common epilogue. Logging is

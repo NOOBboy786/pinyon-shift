@@ -6,8 +6,9 @@ scene admission, draw suppression or claim of native-renderer speedup.
 
 ## Qualified local control
 
-The current source is Pinyon `a9ed5d5cda4cf19cd8bb5c3a9c83e6869c023115`
-on `dev`, with ShiftGlue `bf7df82c6322d98b099e19909a8cfc657cfbea36`.
+The compatibility control used Pinyon
+`a9ed5d5cda4cf19cd8bb5c3a9c83e6869c023115` on `dev`, with ShiftGlue
+`bf7df82c6322d98b099e19909a8cfc657cfbea36`.
 The RelWithDebInfo build completed on 2026-09-22. The SDK build used
 `tools/prepare-rexglue.ps1` to materialize `libmspack` symlink targets on
 Windows; this leaves only generated vendor-file differences in the nested
@@ -140,11 +141,37 @@ the color output has ten later pixel readers. These are resource dependencies,
 not proof of camera identity or which individual draw is visible. See the
 [race-frame attribution](CPU_HOTSPOT_RESULTS_2026-09-21.md#renderdoc-race-frame-producer-and-consumer-join--2026-09-22).
 
+### Bounded source-frame packet probe
+
+The default-off `pinyon_shift_snr01_trace_source_frame` probe observes one
+source frame without changing guest state. The saved sustained-race route ran
+to normal exit with target frame 6000 and executable SHA-256
+`E932A4A6BB0F203CC901CDC8A3ABE2D19682A790262ADDC6D84ECB224EF3F388`.
+The raw title packet log is local at
+`.local/native-renderer/snr01/semantic-frame-6000/title-packets.log` (SHA-256
+`03CCB835A58927FC27CB18724042CB39FE5648F36345AC8E55A6B91D632859A0`).
+Its source-frame summary reports 42 generic indexed packets, 392 packets at
+the two verified procedural emitter stores, 231 procedural item calls, zero
+unmatched returns and zero unfinished scopes. Neither bound was hit (8192
+packets, 4096 items). The probe is diagnostic, not a timing baseline.
+
+The generic indexed wrapper produced **zero** packets within item scopes.
+The procedural emitter instead produced 197 packets within 197 item calls:
+186 at `0x82416260` and 11 at `0x824162F4`, across 36 observed receiver
+addresses. Thirty-four calls produced no packet. The remaining 195
+procedural-emitter packets occurred outside those item scopes; this may be
+other callers or work stages and is not yet classified by view. All 392
+packets used one observed command-owner register value, which identifies a
+shared command context, not a render owner. Guest packet addresses and
+header words are recorded for the later backend join. Counts from this run
+are not a draw census for every view or route position.
+
 The next runtime capture must carry a bounded title owner/generation, view,
 record and selected LOD through final draw preparation and join those exact
-submissions to prepared draw sequence and RenderDoc phase. Capture helper
-entry **and post-original state** so transforms/palettes are not read before
-the title finishes them. Distinguish main, shadow and reflection dispatch by
-owner/view relationships. Record unmatched title entries and GPU draws on
-both sides of the join. Until this is demonstrated, SNR-01 and Gate A stay
-open and no shader/attachment heuristic authorizes suppression.
+packet addresses to backend prepared draw sequence and RenderDoc phase.
+Capture helper entry **and post-original state** so transforms/palettes are
+not read before the title finishes them. Distinguish main, shadow and
+reflection dispatch by owner/view relationships. Record unmatched title
+entries and GPU draws on both sides of the join. Until this is demonstrated,
+SNR-01 and Gate A stay open and no shader/attachment heuristic authorizes
+suppression.

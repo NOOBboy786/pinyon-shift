@@ -27,10 +27,35 @@ name = "PinyonShiftObserveTitleDrawEmitterBegin"
 [[midasm_hook]]
 address = 0x82410328
 name = "PinyonShiftObserveTitleDrawPacketPublish"
+registers = ["r3", "r11", "r31"]
 
 [[midasm_hook]]
 address = 0x82410620
 name = "PinyonShiftObserveTitleDrawEmitterEnd"
+
+# SNR-01 bounded, read-only procedural owner probe. The first hook observes
+# the verified CProceduralModels per-record helper; the second sees its common
+# return after the original draw preparation and indirect submission.
+[[midasm_hook]]
+address = 0x8241741C
+name = "PinyonShiftObserveProceduralItemBegin"
+registers = ["r3"]
+
+[[midasm_hook]]
+address = 0x82417B80
+name = "PinyonShiftObserveProceduralItemEnd"
+
+# The two verified PM4_DRAW_INDX stores in the procedural submission emitter.
+# They bypass the generic indexed wrapper observed at 0x82410328.
+[[midasm_hook]]
+address = 0x82416260
+name = "PinyonShiftObserveProceduralDrawPacketPrimary"
+registers = ["r30", "r11", "r31"]
+
+[[midasm_hook]]
+address = 0x824162F4
+name = "PinyonShiftObserveProceduralDrawPacketSecondary"
+registers = ["r6", "r9", "r31"]
 
 # Observe the native UI4 scene-registry construction after the title's
 # constructor returns. This is default-off and records registers only.
