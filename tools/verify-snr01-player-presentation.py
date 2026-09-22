@@ -15,6 +15,7 @@ LOCAL_PRESENTATION_PREFIX = "FH1 SNR01 local car presentation link "
 DISCOVERY_PREFIX = "FH1 SNR01 local car presentation shared pointer "
 SCENE_PACKET_PREFIX = "FH1 SNR01 scene indirect packet "
 CAR_OWNER_CALL_PREFIX = "FH1 SNR01 car owner call "
+CAR_OWNER_SELECTION_PREFIX = "FH1 SNR01 car owner selection "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -128,6 +129,8 @@ def main() -> int:
         assert all(r["owner_call"] in calls_by_id for r in owner_packets)
         assert all(
             r["flush_owner"] == calls_by_id[r["owner_call"]]["owner"]
+            and r["owner_caller_lr"]
+            == calls_by_id[r["owner_call"]]["caller_lr"]
             and r["owner_args"] == calls_by_id[r["owner_call"]]["owner_args"]
             for r in owner_packets
         )
@@ -139,6 +142,7 @@ def main() -> int:
         model_calls = [r for r in owner_calls if r["owner"] == local["model"]]
         assert len(presentation_calls) == 20
         assert len(model_calls) == 31
+        assert all(r["caller_lr"] for r in owner_calls)
         assert sum(r["call"] in packet_counts for r in presentation_calls) == 12
         assert sum(r["call"] not in packet_counts for r in presentation_calls) == 8
         assert all(packet_counts[r["call"]] == 1 for r in presentation_calls
@@ -148,11 +152,54 @@ def main() -> int:
             1: 29,
             4: 2,
         }
+        selections = [
+            r for r in records(args.log, CAR_OWNER_SELECTION_PREFIX)
+            if r["frame"] == args.frame
+            and r["view_call"] == 8
+            and r["owner"] == local["presentation"]
+        ]
+        assert len(selections) == len(presentation_calls)
+        selection_by_call = {r["call"]: r["selected_list"] for r in selections}
+        assert len(selection_by_call) == len(selections)
+        assert all(selection_by_call[r["call"]] for r in presentation_calls
+                   if r["call"] in packet_counts)
+        assert all(not selection_by_call[r["call"]] for r in presentation_calls
+                   if r["call"] not in packet_counts)
+        assert all(
+            selection_by_call[r["owner_call"]] == r["list_object"]
+            for r in local_packets
+        )
+        presentation_callers = Counter(r["caller_lr"] for r in presentation_calls)
+        model_callers = Counter(r["caller_lr"] for r in model_calls)
+        assert presentation_callers == {
+            0x82437A04: 1,
+            0x82437A3C: 1,
+            0x82437CFC: 2,
+            0x82437EA8: 1,
+            0x824383CC: 1,
+            0x8243842C: 1,
+            0x824384EC: 1,
+            0x8243D270: 12,
+        }
+        assert model_callers == {
+            0x8243786C: 17,
+            0x82437900: 10,
+            0x824380AC: 1,
+            0x824385C0: 1,
+            0x8245AB44: 2,
+        }
         owner_call_summary = {
             "local_presentation_owner_calls": len(presentation_calls),
             "local_presentation_no_submission_calls": 8,
+            "local_presentation_null_selection_calls": 8,
             "local_model_owner_calls": len(model_calls),
             "local_model_no_submission_calls": 0,
+            "local_presentation_callers": {
+                hex(k): v for k, v in sorted(presentation_callers.items())
+            },
+            "local_model_callers": {
+                hex(k): v for k, v in sorted(model_callers.items())
+            },
         }
 
     text = args.log.read_text(encoding="utf-8", errors="replace")

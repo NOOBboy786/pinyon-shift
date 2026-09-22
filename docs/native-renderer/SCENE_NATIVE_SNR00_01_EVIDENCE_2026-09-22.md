@@ -2232,3 +2232,31 @@ yet been observed, so they are not claimed as intentional culling. The numeric
 selector values are also not yet semantic mesh or LOD labels. SNR-01 remains
 open for those meanings, final-state timing, complete selected-slice coverage
 including the direct root-buffer draws, and explicit no-submission reasons.
+
+### Null list selections explain the local presentation no-submissions
+
+A follow-up hook records the presentation list lookup result at `0x8243CDE8`,
+immediately before `sub_8243CDC0`'s existing null branch. Moving the three
+owner-call probes one instruction past their entry `mflr` also records the
+original caller without altering arguments. The normal-exit sustained replay
+again produced seven captures. Its executable SHA-256 is
+`114BDDB983B079DEC29FE3EE597BCA392AF365D260F1DA32862BC7F0830EFABC`;
+`.local/native-renderer/snr01/local-car-selection-run-a.log` has SHA-256
+`EAAC15D78722EC186DC1E87CB50AB4E85613862B7280346C96CE43FDEE08B50F`.
+The owner-call verifier passes with the stricter selection and caller checks.
+
+Every one of the 12 packet-producing local-presentation calls selected a
+nonzero list, and the selected pointer exactly equals its emitted packet's
+`list_object`. Each of the other eight calls selected null. They are therefore
+proved title-side null-list skips rather than missing packet observations.
+This classifies the branch outcome; it does not establish whether the empty
+slot represents absent geometry, LOD policy, damage state or visibility.
+
+The 20 presentation calls originate from seven sites in `sub_82437218` and 12
+calls from `sub_8243CEE0` at return `0x8243D270`. The local model's 31 calls
+originate from four sites in `sub_82437218` and two calls from `sub_8245AA98`.
+The verifier locks their exact per-site counts. These call sites and the
+selector-table formula in
+`sub_8243CCF0` provide a bounded next boundary for recovering part/LOD meaning;
+numeric selector values remain unnamed until their producer or data schema is
+proved.
