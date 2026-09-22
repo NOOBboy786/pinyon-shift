@@ -2035,3 +2035,15 @@ the player requires a title relationship from player state to
 pointer equality with the pose object is insufficient. The verifier now
 checks the audio vtable and reports distinct pose owners and overlap with
 view-8 flush owners when the probe is present. SNR-01 and Gate A remain open.
+
+The existing static player-ingress discovery was rerun against the same
+verified base image and generated title functions. Its local result at
+`.local/native-renderer/snr01/player-ingress-static.json` (SHA-256
+`94ABDCA2F8D670CE13EA18B505610A790AFBD790742CD02E96A8E7E1246C67ED`)
+verifies `CMapEntityVehiclePlayerLocal` vtable `0x8201D380`, distinct
+from the AI/traffic map-entity types, and a vehicle ID getter at
+`0x82BBA010` reading receiver offset 12. This is an exact semantic
+*ingress* for player identity, but its own contract marks the runtime join
+as required. The next probe must carry that map-entity identity into the
+car presentation/model instance before any post-view draw can be called
+the player's.
