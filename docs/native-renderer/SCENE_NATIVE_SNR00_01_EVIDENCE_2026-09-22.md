@@ -634,3 +634,17 @@ does not establish which. The next SNR-01 probe must join view/visible-list
 entries to the command-buffer production and queue path, then to the exact
 primary packets and backend draws. Do not infer main-view completeness or
 safe draw suppression from the presenter-pointer relationship alone.
+
+An address-range check supplies a narrower candidate join without another
+hook. Every source-frame-6000 semantic and direct packet header lay inside at
+least one backend-frame-6001 root command-buffer range. Mapping only the
+packets within view scopes gave 15 distinct roots (7 distinct buffer ranges)
+and 3,023 descendant prepared draws. Calls 1–7 reached three roots published
+in source frame 6000 by the `0x8240D1B0` device path; call 8 reached twelve
+roots published in source frame 6001 by the `0x829F6308` interpreter path.
+The latter twelve are three executions each of four buffer ranges, so a
+packet address alone cannot select one execution. This is a buffer-membership
+candidate, not proof that every descendant draw belongs to the view call:
+the buffer can contain packets recorded outside that scope, and address reuse
+needs lifetime evidence. Capture exact buffer record/submit boundaries and
+the visible-list owner before promoting these candidates to an ownership map.
