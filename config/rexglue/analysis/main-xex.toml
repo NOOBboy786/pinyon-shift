@@ -803,6 +803,21 @@ name = "PinyonShiftObserveSceneListFlushBegin"
 registers = ["r12", "r31", "r30"]
 
 [[midasm_hook]]
+address = 0x8243CDC0
+name = "PinyonShiftObserveSnr01CarOwnerCall"
+registers = ["r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
+address = 0x82439960
+name = "PinyonShiftObserveSnr01CarOwnerCall"
+registers = ["r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
+address = 0x82419A30
+name = "PinyonShiftObserveSnr01CarOwnerCall"
+registers = ["r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+
+[[midasm_hook]]
 address = 0x82416898
 name = "PinyonShiftObserveSceneListFlushEnd"
 

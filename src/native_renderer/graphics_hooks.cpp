@@ -238,8 +238,17 @@ struct Snr01SceneListFlush {
   uint32_t caller;
   uint32_t owner;
   uint32_t owner_first_word;
+  uint64_t owner_call;
+  std::array<uint32_t, 7> owner_args;
 };
 thread_local std::vector<Snr01SceneListFlush> snr01_scene_list_flushes;
+struct Snr01CarOwnerCall {
+  uint64_t ordinal = 0;
+  uint32_t owner = 0;
+  std::array<uint32_t, 7> args{};
+};
+thread_local Snr01CarOwnerCall snr01_car_owner_call;
+thread_local uint64_t snr01_car_owner_call_count = 0;
 std::atomic<uint32_t> snr01_vehicle_map_pool_root{0};
 std::mutex snr01_player_mutex;
 std::set<uint32_t> snr01_forza_players;
@@ -2360,14 +2369,35 @@ void PinyonShiftObserveSceneListFlushBegin(
                                    r12.u32 == 0x824170BC
                                ? r31.u32
                                : 0;
-    snr01_scene_list_flushes.push_back(
-        {r12.u32, owner, owner ? SnrM02ReadU32(owner) : 0});
+    snr01_scene_list_flushes.push_back({
+        r12.u32, owner, owner ? SnrM02ReadU32(owner) : 0,
+        snr01_car_owner_call.owner == owner ? snr01_car_owner_call.ordinal : 0,
+        snr01_car_owner_call.owner == owner ? snr01_car_owner_call.args
+                                            : std::array<uint32_t, 7>{}});
   }
 }
 
 void PinyonShiftObserveSceneListFlushEnd() {
   if (!snr01_scene_list_flushes.empty()) {
     snr01_scene_list_flushes.pop_back();
+  }
+}
+
+void PinyonShiftObserveSnr01CarOwnerCall(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCRegister& r6,
+    PPCRegister& r7, PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
+  if (Snr01TraceCurrentFrame()) {
+    snr01_car_owner_call = {
+        ++snr01_car_owner_call_count, r3.u32,
+        {r4.u32, r5.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32}};
+    REXGPU_INFO(
+        "FH1 SNR01 car owner call {{\"frame\":{},\"call\":{},"
+        "\"owner\":{},\"owner_first_word\":{},"
+        "\"owner_args\":[{},{},{},{},{},{},{}],\"view_call\":{}}}",
+        rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+        snr01_car_owner_call.ordinal, r3.u32, SnrM02ReadU32(r3.u32), r4.u32,
+        r5.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32,
+        snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
   }
 }
 
@@ -2463,6 +2493,8 @@ void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
         "\"words\":{},\"list_object\":{},\"caller_lr\":{},"
         "\"flush_caller_lr\":{},\"flush_owner\":{},"
         "\"flush_owner_first_word\":{},"
+        "\"owner_call\":{},"
+        "\"owner_args\":[{},{},{},{},{},{},{}],"
         "\"view_call\":{},"
         "\"view\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
@@ -2480,6 +2512,30 @@ void PinyonShiftObserveSceneCommandBuffer(PPCRegister& r24, PPCRegister& r10,
         snr01_scene_list_flushes.empty()
             ? 0
             : snr01_scene_list_flushes.back().owner_first_word,
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_call,
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_args[0],
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_args[1],
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_args[2],
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_args[3],
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_args[4],
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_args[5],
+        snr01_scene_list_flushes.empty()
+            ? 0
+            : snr01_scene_list_flushes.back().owner_args[6],
         snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
         snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
   }

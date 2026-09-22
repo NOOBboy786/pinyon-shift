@@ -2200,3 +2200,35 @@ its presentation and model instances into title submission. Remaining SNR-01
 work is per-buffer mesh/LOD accounting, final-state timing, unmatched/culling
 classification and the 27 direct root-buffer draws; material/resource identity
 belongs to SNR-02.
+
+### Every local car owner call is accounted for
+
+Read-only hooks at the entries of `sub_8243CDC0`, `sub_82439960` and
+`sub_82419A30` now assign an ordinal to each owner call and retain entry
+arguments `r4` through `r10` on every scene-list packet emitted by that call.
+The sustained-race replay exited normally with seven captures. Its executable
+SHA-256 is
+`02997B8A6569C81F565D5EFC99FB4ECB2DD6EF2CE71449FDDF20281F9F316B4D`;
+the isolated frame-6000 log at
+`.local/native-renderer/snr01/local-car-owner-calls-run-a.log` has SHA-256
+`5BF966BDFDE5144951185BC3AE61E54A83F071E132A594CF9737BA6F8C5AD720`.
+`tools/verify-snr01-player-presentation.py --require-owner-calls` verifies the
+semantic local-player chain and the exact call-to-packet relationships.
+
+The local presentation received 20 owner calls in view 8. Twelve calls each
+emitted one scene buffer; their third observed argument selected values 0, 16,
+18, 20, 21, 43, 46, 48, 51, 52, 54 and 56. Eight calls emitted no scene
+buffer, with selector values 22, 40, 41, 57, 58, 59, 60 and 61. The local
+model received 31 owner calls and every call emitted a scene buffer: 29 calls
+emitted one and two list calls emitted four, yielding the previously observed
+37 model buffers. Every one of the 49 local buffers references a same-owner
+call ordinal and carries byte-for-byte identical captured arguments; there are
+no missing or mismatched call records.
+
+This proves complete call-to-buffer accounting at the three observed local-car
+owner functions for this frame. The eight presentation calls are classified
+only as title-side no-submission cases. Their branch or resource reason has not
+yet been observed, so they are not claimed as intentional culling. The numeric
+selector values are also not yet semantic mesh or LOD labels. SNR-01 remains
+open for those meanings, final-state timing, complete selected-slice coverage
+including the direct root-buffer draws, and explicit no-submission reasons.

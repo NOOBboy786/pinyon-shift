@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 from pathlib import Path
 
@@ -13,6 +14,7 @@ PRESENTATION_PREFIX = "FH1 SNR01 car presentation "
 LOCAL_PRESENTATION_PREFIX = "FH1 SNR01 local car presentation link "
 DISCOVERY_PREFIX = "FH1 SNR01 local car presentation shared pointer "
 SCENE_PACKET_PREFIX = "FH1 SNR01 scene indirect packet "
+CAR_OWNER_CALL_PREFIX = "FH1 SNR01 car owner call "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -30,6 +32,7 @@ def main() -> int:
     parser.add_argument("--frame", type=int, default=6000)
     parser.add_argument("--require-local-presentation", action="store_true")
     parser.add_argument("--require-local-model", action="store_true")
+    parser.add_argument("--require-owner-calls", action="store_true")
     args = parser.parse_args()
 
     players = [r for r in records(args.log, PLAYER_PREFIX) if r["frame"] == args.frame]
@@ -75,7 +78,11 @@ def main() -> int:
             and r["presentation_offset"] == 2800
         ]
     scene_packets = records(args.log, SCENE_PACKET_PREFIX)
-    require_local = args.require_local_presentation or args.require_local_model
+    require_local = (
+        args.require_local_presentation
+        or args.require_local_model
+        or args.require_owner_calls
+    )
     if require_local:
         assert len(local_presentations) == 1
         local = local_presentations[0]
@@ -94,7 +101,7 @@ def main() -> int:
         assert {r["flush_owner_first_word"] for r in local_packets} == {0x82003A54}
         assert len({r["target_physical"] for r in local_packets}) == 12
     model_packets = []
-    if args.require_local_model:
+    if args.require_local_model or args.require_owner_calls:
         assert local["model_vtable"] == 0x82001618
         model_packets = [
             r for r in scene_packets
@@ -108,12 +115,52 @@ def main() -> int:
         assert {r["flush_owner_first_word"] for r in model_packets} == {0x82001618}
         assert len({r["target_physical"] for r in model_packets}) == 37
 
+    owner_call_summary = {}
+    if args.require_owner_calls:
+        owner_calls = [
+            r for r in records(args.log, CAR_OWNER_CALL_PREFIX)
+            if r["frame"] == args.frame
+            and r["view_call"] == 8
+            and r["owner"] in {local["presentation"], local["model"]}
+        ]
+        calls_by_id = {r["call"]: r for r in owner_calls}
+        owner_packets = local_packets + model_packets
+        assert all(r["owner_call"] in calls_by_id for r in owner_packets)
+        assert all(
+            r["flush_owner"] == calls_by_id[r["owner_call"]]["owner"]
+            and r["owner_args"] == calls_by_id[r["owner_call"]]["owner_args"]
+            for r in owner_packets
+        )
+
+        packet_counts = Counter(r["owner_call"] for r in owner_packets)
+        presentation_calls = [
+            r for r in owner_calls if r["owner"] == local["presentation"]
+        ]
+        model_calls = [r for r in owner_calls if r["owner"] == local["model"]]
+        assert len(presentation_calls) == 20
+        assert len(model_calls) == 31
+        assert sum(r["call"] in packet_counts for r in presentation_calls) == 12
+        assert sum(r["call"] not in packet_counts for r in presentation_calls) == 8
+        assert all(packet_counts[r["call"]] == 1 for r in presentation_calls
+                   if r["call"] in packet_counts)
+        assert all(r["call"] in packet_counts for r in model_calls)
+        assert Counter(packet_counts[r["call"]] for r in model_calls) == {
+            1: 29,
+            4: 2,
+        }
+        owner_call_summary = {
+            "local_presentation_owner_calls": len(presentation_calls),
+            "local_presentation_no_submission_calls": 8,
+            "local_model_owner_calls": len(model_calls),
+            "local_model_no_submission_calls": 0,
+        }
+
     text = args.log.read_text(encoding="utf-8", errors="replace")
     direct_links = text.count("FH1 SNR01 local car owner link ")
     reverse_links = text.count("FH1 SNR01 local presentation car link ")
     assert direct_links == reverse_links == 0
 
-    print(json.dumps({
+    summary = {
         "frame": args.frame,
         "players": len(players),
         "local_players": len(local_players),
@@ -124,7 +171,9 @@ def main() -> int:
         "local_model_view8_scene_packets": len(model_packets),
         "direct_links": direct_links,
         "reverse_links": reverse_links,
-    }, indent=2))
+    }
+    summary.update(owner_call_summary)
+    print(json.dumps(summary, indent=2))
     return 0
 
 
