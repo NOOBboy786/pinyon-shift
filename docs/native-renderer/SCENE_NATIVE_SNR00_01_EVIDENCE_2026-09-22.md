@@ -2172,3 +2172,31 @@ lineage. This closes the missing semantic local-player `CCar` →
 still requires complete selected-slice accounting, mesh/instance ownership and
 explicit culling classification before its acceptance condition can be marked
 complete.
+
+### The local presentation supplies the exact `CCarModel` owner
+
+Generated `sub_82437218` retains entry `r3` as the `CCarPresentation` in
+`r31`. Its model paths load `r3` from offset 5648 before calling
+`sub_82439960` or `sub_82419A30`; those functions retain entry `r3` as the
+scene-list flush owner. This is the same static path whose runtime owner vtable
+was previously resolved to `CCarModel`, so no object scan or address heuristic
+is needed.
+
+A normal-exit sustained-race replay at source frame 6000 produced seven
+captures with executable SHA-256
+`8B7CCCDD3EB383D1E3B0ECB146643A1F51ED0507AD35DCB1A9864961D3E6C43B`.
+The isolated session log at
+`.local/native-renderer/snr01/local-car-model-run-a.log` has SHA-256
+`39ED26AF6B53CF2DF65B7C89994DFB88BC7606EA9A0836D6FE738DF9832F431A`.
+`tools/verify-snr01-player-presentation.py --require-local-model` passes.
+
+The unique local `CCarPresentation` held a nonzero object at offset 5648 with
+exact `CCarModel` vtable `0x82001618`. That same pointer owned 37 distinct
+view-8 scene buffers: 29 returned through `0x824399F0` in `sub_82439960` and
+eight through `0x8241A2A4` in `sub_82419A30`, totaling 23,425 PM4 words. The
+local presentation separately owned the 12 previously identified buffers.
+Together these observations establish the selected player-car chain through
+its presentation and model instances into title submission. Remaining SNR-01
+work is per-buffer mesh/LOD accounting, final-state timing, unmatched/culling
+classification and the 27 direct root-buffer draws; material/resource identity
+belongs to SNR-02.

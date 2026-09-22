@@ -1136,13 +1136,16 @@ void PinyonShiftObservePresentationViewEnd() {
           presentation, constructor_arg, SnrM02ReadU32(constructor_arg),
           snr01_view8_flush_owners.contains(presentation));
       if (local_livery && SnrM02ReadU32(presentation + 2800) == local_livery) {
+        const uint32_t model = SnrM02ReadU32(presentation + 5648);
         REXGPU_INFO(
             "FH1 SNR01 local car presentation link "
             "{{\"frame\":{},\"car\":{},\"presentation\":{},"
-            "\"livery\":{},\"livery_vtable\":{},\"view8_owner\":{}}}",
+            "\"livery\":{},\"livery_vtable\":{},\"model\":{},"
+            "\"model_vtable\":{},\"view8_owner\":{}}}",
             rex::perf::GetTotalCounter(
                 rex::perf::CounterId::kSourceFrameCount),
             local_car, presentation, local_livery, SnrM02ReadU32(local_livery),
+            model, SnrM02ReadU32(model),
             snr01_view8_flush_owners.contains(presentation));
       }
     }
