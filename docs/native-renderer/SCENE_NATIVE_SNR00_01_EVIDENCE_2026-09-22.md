@@ -978,3 +978,47 @@ This closes packet ownership at the child-call level for the observed
 second path. SNR-01 still needs the selected mesh/instance and final
 transform/material identities, view-role classification, and an account
 of packetless entries before Gate A can be considered.
+
+### Character and vegetation bound-record identity
+
+In the generated character slot-41 function, the render-context
+vtable-offset-124 call binds `owner + 132` immediately before its
+vtable-offset-164 draw. In the vegetation function, the corresponding
+binding argument comes from a loop-derived record pointer:
+`record = running_40_byte_offset + *(owner + 108 + group_offset)`.
+The same loop walks 12-byte count entries and 8-byte selector entries.
+These are binding records, not yet verified mesh or instance objects.
+
+Read-only hooks at `0x8245AE80` and `0x82413A0C` captured the raw binding
+argument and carried it into each child draw scope. The saved sustained
+race exited normally with executable SHA-256
+`7146544F345D68575CFBCCB6B0F8E21577AF73D91EBDBCC2F235F434F1C454A2`.
+The combined log is
+`.local/native-renderer/snr01/second-bind-frame-6000/title-backend-second-bind.log`
+(SHA-256 `1098335F4AC5B1F2EB487C149C4759E1F0B18EBBCEA22606B085D8C83ED0FD18`).
+
+All 22 character child draws used the same render context as their
+preceding slot-31 binding and exactly `resolved owner + 132` as the bound
+record. They represented 11 distinct record addresses, each submitted
+twice with a consistent count argument. All 108 vegetation child draws
+used a nonzero bound record on the same context. They represented 54
+distinct addresses, again each submitted twice with a consistent count.
+The verifier preserves those repeated submissions, checks every bound
+record against its child packet and exact backend draw, and still joins
+all 140 second-path packets in this capture. The indirect verifier passed
+for 133 backend roots, 1,660 executions and 4,940 prepared draws:
+
+```powershell
+python tools/verify-snr01-track-bucket-join.py `
+  .local/native-renderer/snr01/second-bind-frame-6000/title-backend-second-bind.log `
+  --source-frame 6000 --backend-frame 6001 `
+  --first-model-vtable 0x82001D74
+python tools/verify-snr01-indirect-join.py `
+  .local/native-renderer/snr01/second-bind-frame-6000/title-backend-second-bind.log `
+  --source-frames 6000 6001 --backend-frame 6001
+```
+
+The repeated addresses are frame-local identities only. The next probe
+must classify the slot-31 record's underlying geometry payload and
+generation, then join the final transform/material state without reading
+mutable guest state after frame publication. SNR-01 remains open.

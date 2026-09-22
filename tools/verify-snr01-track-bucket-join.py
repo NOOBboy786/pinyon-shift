@@ -291,6 +291,9 @@ def verify(path: Path, source_frame: int, backend_frame: int,
         buckets = {(thread, row["ordinal"]): row for thread, row in entries}
         target_by_bucket = {(thread, row["bucket_entry"]): row["target"]
                             for thread, row in dispatches}
+        bound_enabled = any("bound_record" in row for _, row in second_draws)
+        bound_records = collections.defaultdict(collections.Counter)
+        bound_record_counts = {}
         child_packets = set()
         expected_second_packets = set()
         for (thread, _), bucket in buckets.items():
@@ -309,6 +312,17 @@ def verify(path: Path, source_frame: int, backend_frame: int,
             assert draw["target"] == target_by_bucket[key]
             target = SECOND_TARGETS[draw["target"]]
             assert target != "procedural_models"
+            if bound_enabled and target in (
+                    "procedural_characters", "procedural_vegetation"):
+                assert draw["bound_context"] == draw["context"]
+                assert draw["bound_slot"] == 0 and draw["bound_record"]
+                if target == "procedural_characters":
+                    assert draw["bound_record"] == bucket["secondary_resolved"] + 132
+                bound_records[target][draw["bound_record"]] += 1
+                record_key = (target, draw["bound_record"])
+                assert (record_key not in bound_record_counts or
+                        bound_record_counts[record_key] == draw["arg5"])
+                bound_record_counts[record_key] = draw["arg5"]
             second_targets[target]["child_calls"] += 1
             produced = 0
             for kind, label in (("semantic packet", "semantic"),
@@ -329,6 +343,10 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                     produced += 1
             assert produced
         assert child_packets == expected_second_packets
+        for target, records in bound_records.items():
+            second_targets[target]["bound_records"] = len(records)
+            second_targets[target]["bound_record_multiplicity"] = dict(sorted(
+                collections.Counter(records.values()).items()))
         counts["second_draw_skips"] = summary["second_draw_skips"]
 
     return {

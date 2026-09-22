@@ -132,6 +132,9 @@ struct Snr01TrackBucketScope {
   uint32_t auxiliary_flag = 0;
   bool auxiliary_seen = false;
   uint32_t second_dispatch_target = 0;
+  uint32_t bound_context = 0;
+  uint32_t bound_slot = 0;
+  uint32_t bound_record = 0;
 };
 struct Snr01SecondDrawScope {
   uint64_t bucket_entry;
@@ -140,6 +143,9 @@ struct Snr01SecondDrawScope {
   uint32_t arg4;
   uint32_t arg5;
   uint32_t arg6;
+  uint32_t bound_context;
+  uint32_t bound_slot;
+  uint32_t bound_record;
   uint64_t first_semantic_packet;
   uint64_t first_direct_packet;
   uint64_t ordinal;
@@ -1032,8 +1038,20 @@ void PinyonShiftObserveSecondDrawBegin(
   snr01_second_draw_scopes.push_back(
       {bucket.ordinal, bucket.second_dispatch_target,
        r3.u32, r4.u32, r5.u32, r6.u32,
+       bucket.bound_context, bucket.bound_slot, bucket.bound_record,
        snr01_semantic_packet_count, snr01_direct_packet_count,
        ++snr01_second_draw_count});
+}
+
+void PinyonShiftObserveSecondGeometryBind(
+    PPCRegister& r3, PPCRegister& r4, PPCRegister& r5) {
+  if (!Snr01TraceCurrentFrame() || snr01_track_bucket_scopes.empty()) {
+    return;
+  }
+  auto& bucket = snr01_track_bucket_scopes.back();
+  bucket.bound_context = r3.u32;
+  bucket.bound_slot = r4.u32;
+  bucket.bound_record = r5.u32;
 }
 
 void PinyonShiftObserveSecondDrawEnd() {
@@ -1054,11 +1072,14 @@ void PinyonShiftObserveSecondDrawEnd() {
         "FH1 SNR01 second draw call {{\"frame\":{},\"ordinal\":{},"
         "\"bucket_entry\":{},\"target\":{},\"context\":{},"
         "\"arg4\":{},\"arg5\":{},\"arg6\":{},"
+        "\"bound_context\":{},\"bound_slot\":{},"
+        "\"bound_record\":{},"
         "\"first_semantic\":{},\"last_semantic\":{},"
         "\"first_direct\":{},\"last_direct\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         scope.ordinal, scope.bucket_entry, scope.target,
         scope.context, scope.arg4, scope.arg5, scope.arg6,
+        scope.bound_context, scope.bound_slot, scope.bound_record,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_direct_packet + 1, snr01_direct_packet_count);
   }

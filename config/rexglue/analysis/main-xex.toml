@@ -182,6 +182,11 @@ name = "PinyonShiftObserveSecondDrawBegin"
 registers = ["r3", "r4", "r5", "r6"]
 
 [[midasm_hook]]
+address = 0x82413A0C
+name = "PinyonShiftObserveSecondGeometryBind"
+registers = ["r3", "r4", "r5"]
+
+[[midasm_hook]]
 address = 0x82413A84
 name = "PinyonShiftObserveSecondDrawEnd"
 
@@ -189,6 +194,11 @@ name = "PinyonShiftObserveSecondDrawEnd"
 address = 0x8245AE9C
 name = "PinyonShiftObserveSecondDrawBegin"
 registers = ["r3", "r4", "r5", "r6"]
+
+[[midasm_hook]]
+address = 0x8245AE80
+name = "PinyonShiftObserveSecondGeometryBind"
+registers = ["r3", "r4", "r5"]
 
 [[midasm_hook]]
 address = 0x8245AEA0
