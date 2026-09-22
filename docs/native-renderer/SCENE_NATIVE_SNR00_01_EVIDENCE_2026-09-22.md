@@ -1153,3 +1153,26 @@ conditions when provenance fields exist, while accepting older captures.
 This establishes the GPU register setter's packet, **not** the title object
 or allocation that supplied the vertex bytes. Repeated command-buffer
 execution and state carry-over remain part of SNR-01's ownership map.
+
+### Character and vegetation title vertex descriptors
+
+The generated `0x82415CA8` state-bind path loads a descriptor pointer from
+the bound record's first word, then `0x82410A70` reads descriptor words at
+offsets 24 and 28 to set the vertex fetch. A bounded read-only hook captured
+those words at the existing character and vegetation bind sites. The saved
+race exited normally with seven captures; executable SHA-256 was
+`B3F9A03702693C27377503DD7C7993AC2EF2E90F9756BDF28C3F79EAED3A3477`.
+The combined log is
+`.local/native-renderer/snr01/vertex-descriptor-frame-6000/title-backend-vertex-descriptor.log`
+(SHA-256 `097E084920ECE3FE4F4BC6065B99FD28FB52BBDCB9B115964786B9289AB48C01`).
+
+For source frame 6000, 24 character calls produced 24 packets and 30 backend
+fetches; 136 vegetation calls produced 136 packets and 230 backend fetches.
+Every call's descriptor size word equaled its existing draw argument 6.
+For every joined backend fetch 95, the title descriptor decoded exactly:
+`guest_base = word24 & 0x1FFFFFFC`, `length = word28 & 0x03FFFFFC`,
+and `type = word24 & 3`. The verifier asserts these equalities when the
+title descriptor fields are present. This proves the selected draws use
+the captured title-side fetch descriptor. It does not yet prove who owns
+the referenced allocation, how long it lives, or which final instance
+transform belongs to each packet. Other draw paths remain open.

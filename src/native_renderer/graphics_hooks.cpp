@@ -10,10 +10,12 @@
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
+#include <rex/memory/utils.h>
 #include <rex/ppc/context.h>
 
 #include <rex/perf/counter.h>
 #include <rex/system/interfaces/graphics.h>
+#include <rex/system/xmemory.h>
 
 #include "native_renderer/fh1_gpu_corpus.h"
 
@@ -136,6 +138,9 @@ struct Snr01TrackBucketScope {
   uint32_t bound_slot = 0;
   uint32_t bound_record = 0;
   uint32_t bound_target = 0;
+  uint32_t bound_vertex_descriptor = 0;
+  uint32_t bound_vertex_address = 0;
+  uint32_t bound_vertex_size = 0;
 };
 struct Snr01SecondDrawScope {
   uint64_t bucket_entry;
@@ -148,6 +153,9 @@ struct Snr01SecondDrawScope {
   uint32_t bound_slot;
   uint32_t bound_record;
   uint32_t bound_target;
+  uint32_t bound_vertex_descriptor;
+  uint32_t bound_vertex_address;
+  uint32_t bound_vertex_size;
   uint64_t first_semantic_packet;
   uint64_t first_direct_packet;
   uint64_t ordinal;
@@ -165,6 +173,7 @@ struct Snr01ItemNodeScope {
   uint64_t ordinal;
 };
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
+std::atomic<rex::memory::Memory*> snr01_memory{nullptr};
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
 thread_local std::vector<Snr01ViewScope> snr01_view_scopes;
 thread_local std::vector<Snr01TrackBucketScope> snr01_track_bucket_scopes;
@@ -395,10 +404,11 @@ void ObserveCopy(const rex::system::GraphicsCopyObservation& observation) {
 }  // namespace
 
 void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
-                           rex::memory::Memory*) {
+                           rex::memory::Memory* memory) {
   if (!graphics_system) {
     return;
   }
+  snr01_memory.store(memory, std::memory_order_release);
   const bool enabled = ResetFh1GpuCorpus();
   graphics_system->SetPreparedDrawObserver(
       enabled || REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
@@ -412,6 +422,7 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
 }
 
 void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
+  snr01_memory.store(nullptr, std::memory_order_release);
   if (graphics_system) {
     graphics_system->SetPreparedDrawObserver(nullptr);
     graphics_system->SetIndirectBufferObserver(nullptr);
@@ -1084,7 +1095,8 @@ void PinyonShiftObserveSecondDrawBegin(
       {bucket.ordinal, bucket.second_dispatch_target,
        r3.u32, r4.u32, r5.u32, r6.u32,
        bucket.bound_context, bucket.bound_slot, bucket.bound_record,
-       bucket.bound_target,
+       bucket.bound_target, bucket.bound_vertex_descriptor,
+       bucket.bound_vertex_address, bucket.bound_vertex_size,
        snr01_semantic_packet_count, snr01_direct_packet_count,
        ++snr01_second_draw_count});
 }
@@ -1100,6 +1112,21 @@ void PinyonShiftObserveSecondStateBind(
   bucket.bound_slot = r4.u32;
   bucket.bound_record = r5.u32;
   bucket.bound_target = r11.u32;
+  bucket.bound_vertex_descriptor = 0;
+  bucket.bound_vertex_address = 0;
+  bucket.bound_vertex_size = 0;
+  if (r11.u32 == 0x82415CA8 && r4.u32 == 0 && r5.u32) {
+    if (auto* memory = snr01_memory.load(std::memory_order_acquire)) {
+      auto read = [memory](uint32_t address) {
+        return rex::memory::load_and_swap<uint32_t>(memory->TranslateVirtual(address));
+      };
+      bucket.bound_vertex_descriptor = read(r5.u32);
+      if (bucket.bound_vertex_descriptor) {
+        bucket.bound_vertex_address = read(bucket.bound_vertex_descriptor + 24);
+        bucket.bound_vertex_size = read(bucket.bound_vertex_descriptor + 28);
+      }
+    }
+  }
 }
 
 void PinyonShiftObserveSecondDrawEnd() {
@@ -1122,13 +1149,16 @@ void PinyonShiftObserveSecondDrawEnd() {
         "\"arg4\":{},\"arg5\":{},\"arg6\":{},"
         "\"bound_context\":{},\"bound_slot\":{},"
         "\"bound_record\":{},\"bound_target\":{},"
+        "\"bound_vertex_descriptor\":{},\"bound_vertex_address\":{},"
+        "\"bound_vertex_size\":{},"
         "\"first_semantic\":{},\"last_semantic\":{},"
         "\"first_direct\":{},\"last_direct\":{}}}",
         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
         scope.ordinal, scope.bucket_entry, scope.target,
         scope.context, scope.arg4, scope.arg5, scope.arg6,
         scope.bound_context, scope.bound_slot, scope.bound_record,
-        scope.bound_target,
+        scope.bound_target, scope.bound_vertex_descriptor,
+        scope.bound_vertex_address, scope.bound_vertex_size,
         scope.first_semantic_packet + 1, snr01_semantic_packet_count,
         scope.first_direct_packet + 1, snr01_direct_packet_count);
   }

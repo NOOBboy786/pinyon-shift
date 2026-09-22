@@ -390,6 +390,9 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                 if "bound_target" in draw:
                     assert draw["bound_target"] == 0x82415CA8
                     binding_targets[target][draw["bound_target"]] += 1
+                if "bound_vertex_descriptor" in draw:
+                    assert draw["bound_vertex_descriptor"]
+                    assert draw["bound_vertex_size"] == draw["arg6"]
                 record_key = (target, draw["bound_record"])
                 assert (record_key not in bound_record_counts or
                         bound_record_counts[record_key] == draw["arg5"])
@@ -420,6 +423,13 @@ def verify(path: Path, source_frame: int, backend_frame: int,
                         assert all(backend["index_buffer_type"] == 0 and
                                    backend["guest_primitive_type"] == 13
                                    for _, backend in backend_draws)
+                        if "bound_vertex_descriptor" in draw:
+                            assert signature[0][1] == (draw["bound_vertex_address"] &
+                                                       0x1FFFFFFC)
+                            assert signature[0][2] == (draw["bound_vertex_size"] &
+                                                       0x03FFFFFC)
+                            assert signature[0][4] == (draw["bound_vertex_address"] & 3)
+                            second_targets[target]["title_fetch_matches"] += len(backend_draws)
                         fetches_by_record[target][draw["bound_record"]].add(signature)
                         records_by_fetch[target][signature].add(draw["bound_record"])
                     if target in ("procedural_characters", "procedural_vegetation"):
