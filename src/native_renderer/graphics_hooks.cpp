@@ -255,6 +255,14 @@ bool Snr01TracePrimaryIndirectFrame() {
          frame <= uint64_t(target) + 1;
 }
 
+bool Snr01TraceLinkedWriteFrame() {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  const uint64_t frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  return target > 0 && frame + 12 >= uint64_t(target) &&
+         frame <= uint64_t(target) + 1;
+}
+
 void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
                                uint32_t header_word, uint32_t command_owner) {
   if (!Snr01TraceCurrentFrame()) {
@@ -1457,7 +1465,7 @@ void PinyonShiftObserveIndexed2PacketPrimary(PPCRegister& r30,
 void PinyonShiftObserveQueuedIndirectBegin(
     PPCRegister& r12, PPCRegister&, PPCRegister&, PPCRegister&, PPCRegister&,
     PPCRegister&, PPCRegister&, PPCRegister&) {
-  if (Snr01TracePrimaryIndirectFrame()) {
+  if (Snr01TraceLinkedWriteFrame()) {
     snr01_queued_indirect_callers.push_back(r12.u32);
   }
 }
@@ -1495,6 +1503,28 @@ void PinyonShiftObserveDeferredWorkerEnd() {
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       scope.stream, scope.queue, scope.first_packet + 1,
       snr01_primary_indirect_packet_count);
+}
+
+void PinyonShiftObserveLinkedIndirectWrite(
+    PPCRegister& r29, PPCRegister& r11, PPCRegister& r30, PPCRegister& r27,
+    PPCRegister& r25, PPCRegister& r31) {
+  const uint64_t frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  if (!Snr01TraceLinkedWriteFrame()) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 linked indirect write {{\"frame\":{},\"block\":{},"
+      "\"opcode_address\":{},\"opcode\":{},\"payload\":{},"
+      "\"buffer\":{},\"device\":{},\"caller_lr\":{},"
+      "\"view_call\":{},\"view\":{}}}",
+      frame, r29.u32, r29.u32 + 4, r11.u32 | r30.u32, r27.u32,
+      r25.u32, r31.u32,
+      snr01_queued_indirect_callers.empty()
+          ? 0
+          : snr01_queued_indirect_callers.back(),
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().view);
 }
 
 void PinyonShiftObservePrimaryIndirectBegin(PPCRegister& r12, PPCRegister&,

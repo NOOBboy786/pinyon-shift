@@ -1356,3 +1356,47 @@ candidate queue-write instruction `0x829F680C` saw no events in source frames
 5998–6001 and was removed; this does not rule out earlier or other enqueue
 paths. SNR-01 still needs the command-stream producer and semantic camera/view
 join. No main-view exclusion or native pass admission follows from this trace.
+
+### Earlier linked-command writes near deferred streams
+
+Static title code in `sub_82409668` has a branch at `0x82409710` that writes
+an `0x81` or `0x8F` indirect command at `r29 + 4`, its payload at `r29 + 8`,
+then links the block through `sub_823E6568`. A default-off probe at that write
+captured the command address, payload, device, title return and active
+slot-75 view scope. The first bounded window (source frames 5998–6001) logged
+156 writes but no write close to the source-frame-6001 worker streams. A
+separate probe of `sub_829EE338`, which copies commands to another buffer,
+logged zero calls in source frames 6000–6001 and was removed.
+
+The final probe kept the expensive draw/view trace at source frame 6000 and
+extended **only** the linked-write window back to frame 5988. The
+`fh1-race-sustained.fh1test` replay exited normally with seven captures. Its
+executable SHA-256 was
+`0C9617B055C3EB264FD0109F0D7604DF51B947DE04EA2C212A621238B6DD1110`,
+and `.local/native-renderer/snr01/linked-indirect-wide-runtime.log` has
+SHA-256 `FD39C40756805680017456FEB377138529DDA76799AFE3B2612CCCCB246D6358`.
+It recorded 628 linked writes from title returns `0x8240CFF8`,
+`0x8240D1B0` and `0x8246946C`. The cube-consumer verifier again found 728
+fetches on the same resource,
+device and target, this time from eight source-frame-6001 primary roots.
+
+For comparison, subtracting `0x20000000` from the worker's virtual stream
+pointer gives the alias used by the linked-write probe. The nearest preceding
+recorded writes are:
+
+| Worker source frame / stream | Nearest write source frame / opcode address | Distance before stream | Title return / opcode |
+| --- | --- | ---: | --- |
+| 6000 / `0xD301C084` | 5999 / `0xB301C030` | 84 bytes | `0x8240CFF8` / `0x8100000B` |
+| 6000 / `0xD301C1B4` | 5999 / `0xB301C030` | 388 bytes | `0x8240CFF8` / `0x8100000B` |
+| 6001 / `0xD319EA84` | 5997 / `0xB319EA44` | 64 bytes | `0x8240D1B0` / `0x81000010` |
+| 6001 / `0xD319EBBC` | 5997 / `0xB319EA44` | 376 bytes | `0x8240D1B0` / `0x81000010` |
+
+These are address and ordering **candidates**, not a command-chain or
+view-owner join. The 5999 and 5997 writes precede the worker by one or four
+source-frame counts; the trace does not prove the entire intervening linked
+block, distinguish old allocation contents from current payload generation,
+or assign a camera. The writer's `view_call` is zero even for writes in traced
+frame 6000; earlier views were outside that narrow view-scope window. Next,
+recover the linked block extent and exact command pointer traversal, then
+trace the producer's owning view rather than treating nearby addresses as
+proof.

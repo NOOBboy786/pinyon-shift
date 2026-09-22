@@ -309,6 +309,11 @@ address = 0x829F6608
 name = "PinyonShiftObserveDeferredWorkerEnd"
 
 [[midasm_hook]]
+address = 0x82409710
+name = "PinyonShiftObserveLinkedIndirectWrite"
+registers = ["r29", "r11", "r30", "r27", "r25", "r31"]
+
+[[midasm_hook]]
 address = 0x8240939C
 name = "PinyonShiftObservePrimaryIndirectBegin"
 registers = ["r12", "r3", "r4", "r5"]
