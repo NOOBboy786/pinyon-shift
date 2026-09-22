@@ -800,7 +800,7 @@ after_instruction = true
 [[midasm_hook]]
 address = 0x824167FC
 name = "PinyonShiftObserveSceneListFlushBegin"
-registers = ["r12", "r31", "r30"]
+registers = ["r12", "r31", "r30", "r5"]
 
 [[midasm_hook]]
 address = 0x8243CDC4

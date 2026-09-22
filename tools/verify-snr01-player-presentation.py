@@ -21,6 +21,7 @@ PREPARED_DRAW_PREFIX = "FH1 SNR01 prepared draw "
 VERTEX_FETCH_PREFIX = "FH1 SNR01 prepared vertex fetch "
 TEXTURE_FETCH_PREFIX = "FH1 SNR01 prepared texture fetch "
 MODEL_RECORD_PREFIX = "FH1 SNR02 car model record "
+MODEL_INPUT_PREFIX = "FH1 SNR02 car model inputs "
 
 
 def records(path: Path, prefix: str) -> list[dict]:
@@ -254,6 +255,35 @@ def main() -> int:
             "local_model_direct_records": len(model_records),
             "local_model_submodels": expected_names,
         }
+
+    model_inputs = [
+        r for r in records(args.log, MODEL_INPUT_PREFIX)
+        if r["frame"] == args.frame and r["view_call"] == 8
+        and r["model"] == local["model"]
+    ] if require_local else []
+    if model_inputs and (args.require_owner_calls or args.require_model_records):
+        assert len(model_inputs) == 31
+        assert {r["call"] for r in model_inputs} == {
+            r["call"] for r in model_calls
+        }
+        assert {r["direct_list"] for r in model_inputs} == {1}
+        slot_sources = {
+            tuple(r["slot_lists"]) for r in model_inputs
+        }
+        assert len(slot_sources) == 1
+        assert len(set(next(iter(slot_sources)))) == 1
+        assert next(iter(slot_sources))[0] != 0
+        assert all(r["flush_input"] == 1 for r in model_packets)
+        assert {r["owner_call"] for r in model_packets} == {
+            r["call"] for r in model_inputs
+        }
+        model_record_summary.update({
+            "local_model_field_32860": 1,
+            "local_model_shared_slot_source": next(iter(slot_sources))[0],
+            "local_model_scene_list_objects": len({
+                r["list_object"] for r in model_packets
+            }),
+        })
 
     backend_summary = {}
     if args.require_backend_join:

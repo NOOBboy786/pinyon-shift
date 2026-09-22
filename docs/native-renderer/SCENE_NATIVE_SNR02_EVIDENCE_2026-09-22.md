@@ -57,9 +57,9 @@ name pointers. The other two local model calls entered `sub_82419A30` and
 emitted four scene buffers each; they do not pass through this record lookup.
 The names identify title submodel slots, not draw material roles. Some selectors
 share shader pairs while using disjoint index ranges; shader identity cannot
-replace the title record. Next, join each record to the geometry, material and
-resource objects it passes into `sub_824399F8`, then prove lifetimes and the
-separate list path before SNR-02 can close.
+replace the title record. The selected record goes into `sub_824399F8` for
+transform preparation; geometry and material ownership still need a separate
+join before SNR-02 can close.
 
 ## Submodel to prepared-draw partition
 
@@ -87,3 +87,33 @@ The latter reuses selector value 0, so grouping by selector alone would
 incorrectly label those 40 draws as `winga`. The local presentation accounts
 for the other 156 draws in the 268-draw car census. This is draw provenance,
 not proof that each backend execution is a distinct visible car part.
+
+## Static path after submodel selection
+
+The generated title code makes a useful boundary explicit. `sub_824399F8`
+reads the selected record's byte at +352 and its binding pointer at +356. It
+copies a 64-byte matrix from either the model at +800 or the binding at +176,
+optionally composes the record's matrix at +288, and calls `sub_82435F50` to
+publish transform state. It does not read a mesh or material pointer from the
+record. Back in `sub_82439960`, the title loads the model field at +32860
+and passes it as argument 5 to `sub_824167F8`. The latter emits the child
+scene-list packets, which already join exactly to the 72 prepared draws above.
+
+The separate `sub_82419A30` path instead iterates four model slots at
+`model + (3188 + slot) * 4`; it reaches the same scene-list flush but never
+selects a `CCarSubModel` record. A record name alone cannot serve as resource
+provenance.
+
+An instrumented replay exited normally with seven captures (executable SHA-256
+`F27A3F0A5DA31A1F0B81A789ED90E21CE4A2F1D1D1427C3EC4AC0E48CA5C8195`).
+Its full bounded log at `.local/native-renderer/snr02/model-inputs-run-a-full.log`
+has SHA-256
+`B263A4D20A830FC29533B3B32305C230449A6919C61A9DA901E403562FCA1753`.
+All 31 local model calls read **1** at `model + 32860`, and all 37 scene-list
+flushes received that same value as argument 5. It is not a geometry-list
+pointer. All four sampled model slots held the same nonzero source pointer in
+every call. The 37 flushes emitted 37 distinct transient list objects.
+`tools/verify-snr01-player-presentation.py --require-model-records
+--require-backend-join` checks these joins along with the 268-draw census.
+Next, follow the renderer state queues used by `sub_824167F8` and relate
+their entries to each packet's final geometry and material resources.
