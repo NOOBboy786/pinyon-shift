@@ -16,5 +16,7 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
 void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system);
 bool Snr03ProbeEnabled();
 void ObserveSnr03OutputFrame(uint64_t output_frame, void* device);
+bool Snr02ItemProbeEnabled();
+void ObserveSnr02ItemOutputFrame(uint64_t output_frame);
 
 }  // namespace pinyon_shift::native_renderer

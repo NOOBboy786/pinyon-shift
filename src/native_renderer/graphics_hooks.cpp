@@ -115,6 +115,8 @@ struct Snr01ProceduralScope {
   bool descriptor_seen = false;
   bool runtime_seen = false;
   bool submit_seen = false;
+  uint32_t snapshot_packet = 0;
+  uint32_t snapshot_packet_count = 0;
 };
 struct Snr01DispatchScope {
   uint32_t caller_lr;
@@ -337,6 +339,30 @@ struct Snr03OwnedScene {
   std::shared_ptr<const Snr03SceneSnapshot> title;
   std::vector<Snr03OwnedItem> items;
 };
+struct Snr02ItemSnapshot {
+  uint64_t call;
+  uint32_t packet;
+  uint32_t kind;
+  std::array<uint32_t, 23> descriptor;
+  std::array<uint32_t, 17> runtime;
+};
+struct Snr02ItemScene {
+  uint64_t source_frame;
+  std::array<uint32_t, 16> camera80;
+  std::array<uint32_t, 16> camera144;
+  std::vector<Snr02ItemSnapshot> items;
+};
+struct Snr02ItemPayload {
+  uint32_t base = 0;
+  uint32_t length = 0;
+  uint32_t draws = 0;
+  std::vector<uint8_t> vertex_bytes;
+};
+struct Snr02ItemPayloadState {
+  std::map<uint32_t, Snr02ItemPayload> by_packet;
+  size_t bytes = 0;
+  bool rejected = false;
+};
 std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
   std::vector<char> bytes;
   auto write = [&](const auto& value) {
@@ -377,10 +403,10 @@ std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
   }
   return bytes;
 }
-bool WriteSnr03Fixture(std::span<const char> bytes, uint64_t source_frame,
-                       const std::filesystem::path& directory) {
+bool WriteSceneFixture(std::span<const char> bytes, uint64_t source_frame,
+                       const std::filesystem::path& directory, const char* prefix) {
   const auto path = directory /
-      ("snr03-scene-" + std::to_string(source_frame) + ".bin");
+      (std::string(prefix) + std::to_string(source_frame) + ".bin");
   auto temporary = path;
   temporary += ".tmp";
   std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
@@ -406,6 +432,11 @@ thread_local bool snr03_scene_overflow = false;
 std::mutex snr03_scene_mutex;
 std::map<uint64_t, std::shared_ptr<const Snr03SceneSnapshot>> snr03_scenes;
 std::map<uint64_t, Snr03PayloadState> snr03_payloads;
+thread_local std::vector<Snr02ItemSnapshot> snr02_item_title_items;
+thread_local bool snr02_item_title_rejected = false;
+std::mutex snr02_item_scene_mutex;
+std::map<uint64_t, std::shared_ptr<const Snr02ItemScene>> snr02_item_scenes;
+std::map<uint64_t, Snr02ItemPayloadState> snr02_item_payloads;
 struct Snr01ItemNodeScope {
   uint32_t node;
   uint32_t list_head;
@@ -581,6 +612,13 @@ uint32_t SnrM02ReadU32(uint32_t address) {
 
 int32_t Snr03TargetFrame() {
   static const int32_t target = REXCVAR_GET(pinyon_shift_snr03_probe_frame);
+  return target;
+}
+
+int32_t Snr02ItemTargetFrame() {
+  static const int32_t target = REXCVAR_GET(pinyon_shift_snr02_item_payload_probe)
+                                    ? REXCVAR_GET(pinyon_shift_snr01_trace_source_frame)
+                                    : 0;
   return target;
 }
 
@@ -765,6 +803,15 @@ void RecordSnr01SemanticPacket(const char* path, uint32_t previous_word,
     return;
   }
   const uint32_t guest_address = previous_word + 4;
+  if (Snr02ItemTargetFrame() > 0 &&
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount) ==
+          uint64_t(Snr02ItemTargetFrame()) &&
+      !snr01_procedural_scopes.empty() && !snr01_view_scopes.empty() &&
+      snr01_view_scopes.back().ordinal == 8) {
+    auto& item = snr01_procedural_scopes.back();
+    item.snapshot_packet = guest_address & 0x1FFFFFFF;
+    ++item.snapshot_packet_count;
+  }
   if (Snr03TargetFrame() > 0 &&
       uint64_t(Snr03TargetFrame()) == uint64_t(rex::perf::GetTotalCounter(
           rex::perf::CounterId::kSourceFrameCount)) &&
@@ -997,8 +1044,65 @@ void ObserveSnr03FinalDrawState(
               fetch[0], fetch[1], fetch[2], fetch[3]);
 }
 
+void ObserveSnr02ItemVertexPayload(
+    const rex::system::GraphicsPreparedDrawObservation& observation) {
+  const int32_t target = Snr02ItemTargetFrame();
+  if (target <= 0 || observation.frame_sequence != uint64_t(target) + 1) return;
+  std::lock_guard lock(snr02_item_scene_mutex);
+  const auto scene = snr02_item_scenes.find(uint64_t(target));
+  if (scene == snr02_item_scenes.end()) return;
+  const auto item = std::find_if(scene->second->items.begin(),
+                                 scene->second->items.end(), [&](const auto& row) {
+    return row.packet == observation.draw_packet_physical_address;
+  });
+  if (item == scene->second->items.end()) return;
+  auto& state = snr02_item_payloads[uint64_t(target)];
+  if (observation.vertex_fetch_count != 1 || !observation.vertex_fetches ||
+      observation.index_buffer_type != 0 || observation.guest_primitive_type != 13) {
+    state.rejected = true;
+    return;
+  }
+  const auto& fetch = observation.vertex_fetches[0];
+  if (fetch.fetch_constant != 95 || fetch.stride_words != 10 ||
+      fetch.length != observation.index_count * 10 ||
+      fetch.cpu_snapshot_status != 1 || !fetch.cpu_snapshot_bytes) {
+    state.rejected = true;
+    return;
+  }
+  auto existing = state.by_packet.find(item->packet);
+  if (existing != state.by_packet.end()) {
+    auto& value = existing->second;
+    if (value.base != fetch.guest_base || value.length != fetch.length ||
+        !std::equal(value.vertex_bytes.begin(), value.vertex_bytes.end(),
+                    fetch.cpu_snapshot_bytes)) {
+      state.rejected = true;
+    } else {
+      ++value.draws;
+    }
+    return;
+  }
+  if (state.by_packet.size() >= 512 ||
+      fetch.length > 2 * 1024 * 1024 - state.bytes) {
+    state.rejected = true;
+    return;
+  }
+  Snr02ItemPayload value{};
+  value.base = fetch.guest_base;
+  value.length = fetch.length;
+  value.draws = 1;
+  value.vertex_bytes.assign(fetch.cpu_snapshot_bytes,
+                            fetch.cpu_snapshot_bytes + fetch.length);
+  if (Snr03HashBytes(value.vertex_bytes) != fetch.cpu_snapshot_hash) {
+    state.rejected = true;
+    return;
+  }
+  state.bytes += fetch.length;
+  state.by_packet.emplace(item->packet, std::move(value));
+}
+
 void ObservePreparedDraw(
     const rex::system::GraphicsPreparedDrawObservation& observation) {
+  ObserveSnr02ItemVertexPayload(observation);
   ObserveSnr03VertexPayload(observation);
   static const bool corpus_enabled =
       rex::cvar::GetFlagByName("pinyon_shift_fh1_gpu_corpus") == "true";
@@ -1314,9 +1418,79 @@ void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
     snr03_scenes.clear();
     snr03_payloads.clear();
   }
+  {
+    std::lock_guard lock(snr02_item_scene_mutex);
+    snr02_item_scenes.clear();
+    snr02_item_payloads.clear();
+  }
 }
 
 bool Snr03ProbeEnabled() { return Snr03TargetFrame() > 0; }
+bool Snr02ItemProbeEnabled() { return Snr02ItemTargetFrame() > 0; }
+
+void ObserveSnr02ItemOutputFrame(uint64_t output_frame) {
+  if (!Snr02ItemProbeEnabled() ||
+      output_frame != uint64_t(Snr02ItemTargetFrame()) + 1) return;
+  std::shared_ptr<const Snr02ItemScene> scene;
+  Snr02ItemPayloadState payload;
+  {
+    std::lock_guard lock(snr02_item_scene_mutex);
+    const auto source = output_frame - 1;
+    if (auto it = snr02_item_scenes.find(source); it != snr02_item_scenes.end()) {
+      scene = std::move(it->second);
+      snr02_item_scenes.erase(it);
+    }
+    if (auto it = snr02_item_payloads.find(source);
+        it != snr02_item_payloads.end()) {
+      payload = std::move(it->second);
+      snr02_item_payloads.erase(it);
+    }
+  }
+  if (!scene || payload.rejected ||
+      payload.by_packet.size() != scene->items.size()) {
+    REXGPU_INFO("FH1 SNR02 item owned scene rejected output_frame={} "
+                "items={} payloads={} unstable={}", output_frame,
+                scene ? scene->items.size() : 0, payload.by_packet.size(),
+                payload.rejected);
+    return;
+  }
+  std::vector<char> encoded;
+  auto write = [&](const auto& value) {
+    const auto* bytes = reinterpret_cast<const char*>(&value);
+    encoded.insert(encoded.end(), bytes, bytes + sizeof(value));
+  };
+  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '2', 'I', '1', '\0'};
+  write(magic);
+  write(scene->source_frame);
+  write(uint32_t(scene->items.size()));
+  write(scene->camera80);
+  write(scene->camera144);
+  uint32_t draws = 0;
+  for (const auto& item : scene->items) {
+    const auto it = payload.by_packet.find(item.packet);
+    if (it == payload.by_packet.end()) return;
+    const auto& geometry = it->second;
+    write(item.call);
+    write(item.packet);
+    write(item.kind);
+    write(item.descriptor);
+    write(item.runtime);
+    write(geometry.base);
+    write(geometry.length);
+    write(geometry.draws);
+    encoded.insert(encoded.end(), geometry.vertex_bytes.begin(),
+                   geometry.vertex_bytes.end());
+    draws += geometry.draws;
+  }
+  const auto directory = fh1_render_test::OutputDirectory();
+  const bool written = !directory.empty() &&
+      WriteSceneFixture(std::span<const char>(encoded), scene->source_frame,
+                        directory, "snr02-items-");
+  REXGPU_INFO("FH1 SNR02 item owned scene consumed output_frame={} "
+              "source_frame={} calls={} draws={} vertex_bytes={} "
+              "fixture_bytes={} written={}", output_frame, scene->source_frame,
+              scene->items.size(), draws, payload.bytes, encoded.size(), written);
+}
 
 void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {
   if (!Snr03ProbeEnabled() || output_frame != uint64_t(Snr03TargetFrame()) + 1) {
@@ -1413,8 +1587,9 @@ void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {
   if (!directory.empty()) {
     const auto encoded = EncodeSnr03Fixture(*owned);
     const auto begin = std::chrono::steady_clock::now();
-    const bool written = WriteSnr03Fixture(std::span<const char>(encoded),
-                                           owned->title->source_frame, directory);
+    const bool written = WriteSceneFixture(std::span<const char>(encoded),
+                                           owned->title->source_frame, directory,
+                                           "snr03-scene-");
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - begin).count();
     REXGPU_INFO("FH1 SNR03 fixture output_frame={} written={} write_us={}",
@@ -1729,6 +1904,10 @@ void PinyonShiftObservePresentationViewBegin(
   const uint64_t ordinal = ++snr01_view_begin_count;
   if (ordinal == 8) {
     snr01_view8_flush_owners.clear();
+    if (Snr02ItemTargetFrame() > 0 && frame == uint64_t(Snr02ItemTargetFrame())) {
+      snr02_item_title_items.clear();
+      snr02_item_title_rejected = false;
+    }
     if (Snr03TargetFrame() > 0 && frame == uint64_t(Snr03TargetFrame())) {
       snr03_vegetation_items.clear();
       snr03_scene_overflow = false;
@@ -1760,6 +1939,38 @@ void PinyonShiftObservePresentationViewEnd() {
   snr01_view_scopes.pop_back();
   const uint64_t frame = uint64_t(rex::perf::GetTotalCounter(
       rex::perf::CounterId::kSourceFrameCount));
+  if (scope.ordinal == 8 && Snr02ItemTargetFrame() > 0 &&
+      frame == uint64_t(Snr02ItemTargetFrame())) {
+    std::set<uint32_t> packets;
+    for (const auto& item : snr02_item_title_items) {
+      if (!packets.insert(item.packet).second) snr02_item_title_rejected = true;
+    }
+    if (snr02_item_title_rejected || snr02_item_title_items.empty() || !scope.camera) {
+      REXGPU_INFO("FH1 SNR02 item scene rejected frame={} items={} invalid={} camera={}",
+                  frame, snr02_item_title_items.size(), snr02_item_title_rejected,
+                  scope.camera);
+    } else {
+      Snr02ItemScene snapshot{};
+      snapshot.source_frame = frame;
+      for (uint32_t i = 0; i < 16; ++i) {
+        snapshot.camera80[i] = SnrM02ReadU32(scope.camera + 80 + i * 4);
+        snapshot.camera144[i] = SnrM02ReadU32(scope.camera + 144 + i * 4);
+      }
+      snapshot.items = std::move(snr02_item_title_items);
+      auto scene = std::make_shared<const Snr02ItemScene>(std::move(snapshot));
+      {
+        std::lock_guard lock(snr02_item_scene_mutex);
+        if (snr02_item_scenes.size() == 2) {
+          const auto old = snr02_item_scenes.begin()->first;
+          snr02_item_scenes.erase(snr02_item_scenes.begin());
+          snr02_item_payloads.erase(old);
+        }
+        snr02_item_scenes[frame] = scene;
+      }
+      REXGPU_INFO("FH1 SNR02 item scene published frame={} items={}",
+                  frame, scene->items.size());
+    }
+  }
   if (scope.ordinal == 8 && Snr03TargetFrame() > 0 &&
       frame == uint64_t(Snr03TargetFrame())) {
     if (snr03_scene_overflow || snr03_vegetation_items.empty() ||
@@ -3100,16 +3311,31 @@ void PinyonShiftObserveProceduralItemEnd() {
   }
   const auto scope = snr01_procedural_scopes.back();
   snr01_procedural_scopes.pop_back();
+  const bool snapshot_view = Snr02ItemTargetFrame() > 0 &&
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount) ==
+          uint64_t(Snr02ItemTargetFrame()) &&
+      !snr01_view_scopes.empty() && snr01_view_scopes.back().ordinal == 8;
+  if (snapshot_view && (scope.ordinal > 512 || !scope.descriptor_seen ||
+                        !scope.runtime_seen || !scope.descriptor_address ||
+                        !scope.runtime_address)) {
+    snr02_item_title_rejected = true;
+  }
   if (REXCVAR_GET(pinyon_shift_snr02_item_payload_probe) &&
       scope.ordinal <= 512 && scope.descriptor_seen && scope.runtime_seen &&
       scope.descriptor_address && scope.runtime_address &&
       !snr01_view_scopes.empty() && snr01_view_scopes.back().ordinal == 8) {
     std::string descriptor, runtime;
+    Snr02ItemSnapshot snapshot{};
+    snapshot.call = scope.ordinal;
+    snapshot.packet = scope.snapshot_packet;
+    snapshot.kind = scope.descriptor_kind;
     for (uint32_t word = 0; word < 23; ++word) {
-      descriptor += fmt::format("{:08X}", SnrM02ReadU32(scope.descriptor_address + word * 4));
+      snapshot.descriptor[word] = SnrM02ReadU32(scope.descriptor_address + word * 4);
+      descriptor += fmt::format("{:08X}", snapshot.descriptor[word]);
     }
     for (uint32_t word = 0; word < 17; ++word) {
-      runtime += fmt::format("{:08X}", SnrM02ReadU32(scope.runtime_address + word * 4));
+      snapshot.runtime[word] = SnrM02ReadU32(scope.runtime_address + word * 4);
+      runtime += fmt::format("{:08X}", snapshot.runtime[word]);
     }
     REXGPU_INFO("FH1 SNR02 item payload {{\"frame\":{},\"call\":{},"
                 "\"descriptor\":{},\"runtime\":{},\"kind\":{},"
@@ -3117,6 +3343,14 @@ void PinyonShiftObserveProceduralItemEnd() {
                 rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
                 scope.ordinal, scope.descriptor_address, scope.runtime_address,
                 scope.descriptor_kind, descriptor, runtime);
+    if (snapshot_view) {
+      if (!scope.submit_seen || scope.snapshot_packet_count != 1 ||
+          snr02_item_title_items.size() >= 512) {
+        snr02_item_title_rejected = true;
+      } else {
+        snr02_item_title_items.push_back(std::move(snapshot));
+      }
+    }
   }
   if (scope.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(

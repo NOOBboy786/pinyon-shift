@@ -812,3 +812,41 @@ callback. SNR-03 still needs to publish owned bytes with the exact title
 call, transform/constants and resource generation through consumption.
 One frame of equal hashes does not prove streaming lifetime, material roles
 or private-renderer coverage.
+
+### Owned procedural geometry at the output-frame handoff
+
+The opt-in probe now copies each view-8 title descriptor/runtime record and
+its one emitted packet into a source-frame scene. At prepared draw, it owns
+the first successful vertex snapshot per packet and compares every repeated
+draw byte-for-byte. The scene is bounded to 512 calls and 2 MiB of unique
+vertex bytes, rejects missing or unstable packets, and is consumed only by
+the immediately following output frame. It writes an `SNR02I1` fixture
+containing owned title records, camera matrices and vertex bytes; compatibility
+output remains unchanged.
+
+An AppData-backed sustained-race replay exited normally with seven
+compatibility captures. Its strict frame-wide ledger has 3,118 draws and
+passes the candidate-boundary and Gate A slice partition checks (1,779
+selected, 70 retained, 1,269 outside). The procedural family contributed
+277 selected draws from 167 title calls. All 277 draw-time snapshots passed;
+the output-frame scene retained 500,280 unique vertex bytes across 167
+packets. The independent fixture verifier matched every raw title record,
+packet, guest range and vertex-byte hash to the source and backend trace.
+
+| Evidence | Local path | SHA-256 |
+| --- | --- | --- |
+| Fixture | `.local/native-renderer/snr02/item-owned-scene-run-a/snr02-items-6000.bin` | `F55B18FE356694A8AC0B9305DB4BDB42395E63C6F2DAC03F1440642F07573117` |
+| Filtered log | `.local/native-renderer/snr02/item-owned-scene-run-a-filtered.log` | `6DDFE76E6E7E614C5191320211BFB32D0DDD18C3C351498F60901B3DE190BC3F` |
+| Strict ledger | `.local/native-renderer/snr02/item-owned-scene-run-a-ledger.json` | `0B90E5C7D65E6AD5658BE6E81919378946A6826F4F56B1450ADA8405892C1743` |
+
+```powershell
+python tools/verify-snr02-item-scene.py `
+  .local/native-renderer/snr02/item-owned-scene-run-a/snr02-items-6000.bin `
+  .local/native-renderer/snr02/item-owned-scene-run-a-filtered.log `
+  .local/native-renderer/snr02/item-owned-scene-run-a-ledger.json
+```
+
+This fixture proves title and geometry ownership through one output-frame
+handoff. It does not yet contain final per-draw constants, state variants,
+texture contents or generations, so it cannot drive the SNR-04 private
+renderer or qualify the full frozen slice.

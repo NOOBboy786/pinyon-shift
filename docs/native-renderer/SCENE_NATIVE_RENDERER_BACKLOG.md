@@ -13,8 +13,9 @@ title-to-GPU join gaps.
 The [SNR-02 evidence log](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md) records
 the local-car resource census, seven selected title submodels, a complete
 procedural descriptor/runtime join and all 308 selected prepared vertex
-snapshots in one replay. Mesh/material roles and resource generations remain
-open.
+snapshots in one replay. A later replay owns every selected procedural
+packet's title records and vertex bytes through its output-frame handoff.
+Final draw state, material roles and resource generations remain open.
 The [SNR-03 evidence log](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md) records
 bounded same-frame vegetation metadata, guarded vertex bytes and a private
 same-frame identity/depth diagnostic; full-slice coverage remains open.
