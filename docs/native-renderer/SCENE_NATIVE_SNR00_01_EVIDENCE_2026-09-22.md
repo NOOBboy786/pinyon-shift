@@ -2696,3 +2696,15 @@ python tools/summarize-snr01-frame-wide-census.py `
 The same build with all probes off also completed the saved route normally
 with seven compatibility captures; this is a smoke check, not a visual or
 performance equivalence claim.
+
+Of this clear-trace replay's 795 candidate direct draws, 415 have a joined
+direct-family record, 134 a procedural item/node, and 130 a vegetation
+second-draw bound record. The remaining 116 have a title view-8 packet but
+no instance/record join. Their largest family is 89 draws from return site
+`0x824131F4` (84 secondary and five primary packet stores). Generated
+`sub_824131B8` owns that return site, computes a draw argument from its
+entry `r4`/`r7`, and calls `sub_82416380` to submit. Its entry caller and
+input object are the next bounded provenance target. The other gaps are
+nine each from `0x823F59C8` and `0x82412E1C`, plus three each from
+`0x82401258`, `0x8244F070` and `0x82D0735C`. This partitions the remaining
+direct-draw ownership work without guessing their mesh or material roles.
