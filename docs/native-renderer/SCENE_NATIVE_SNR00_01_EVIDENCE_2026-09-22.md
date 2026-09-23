@@ -3622,6 +3622,7 @@ replays give:
 | --- | ---: | ---: | ---: | ---: |
 | Final resource/animated join | 3,639 | 1,852 | 67 | 1,720 |
 | Independent clear-complete/animated join | 4,605 | 2,644 | 61 | 1,900 |
+| Procedural payload probe | 3,241 | 1,638 | 70 | 1,533 |
 
 | Required family | 3,639-draw replay | 4,605-draw replay |
 | --- | ---: | ---: |
@@ -3632,6 +3633,16 @@ replays give:
 | Vegetation bound records | 166 | 138 |
 | Animated-scene scalar packets | 15 | 43 |
 | Car-presentation scalar packets | 36 | 72 |
+
+The third normal-exit replay independently passed the same fail-closed
+partition over both candidate groups and all other targets. Its strict ledger
+is `.local/native-renderer/snr02/item-payload-run-a-ledger.json` (SHA-256
+`D2F2655F6C846DCBAE83FBF576D7EDE542D004C1C338185E23488FBB327FE5E9`);
+its partition is `.local/native-renderer/snr02/item-payload-run-a-slice.json`
+(SHA-256 `248205347F6A73FB7890069B57D2E117C8B52BD63D00C12FA806DFC50309761C`).
+This frame's 308 procedural-item candidate draws join 174 exact title calls;
+the selected descriptor/runtime payload evidence is in the
+[SNR-02 log](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md#selected-procedural-descriptor-and-runtime-payloads).
 
 The required set is every view-8 scene-list draw plus exact character-manager,
 procedural item/node, vegetation bound-record, animated-scene scalar and

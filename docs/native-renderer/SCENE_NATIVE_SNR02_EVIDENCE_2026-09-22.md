@@ -704,3 +704,46 @@ python tools/summarize-snr01-frame-wide-census.py `
   --require-candidate-boundary `
   --output .local/native-renderer/snr02/car-texture-descriptor-run-a-ledger.json
 ```
+
+## Selected procedural descriptor and runtime payloads
+
+The revised Gate A slice includes procedural item/node packets beyond the
+vegetation pilot. A bounded, default-off title hook now copies the 92-byte
+selected descriptor and 68-byte runtime record at each view-8 procedural
+item call in source frames 6000–6001. It records raw words at the title's
+selection boundary, before relying on any later pointer. The hook does not
+reinterpret those words as a mesh, material or allocation generation.
+
+The AppData-backed sustained-race replay exited normally with seven
+compatibility captures. Its process-filtered log is
+`.local/native-renderer/snr02/item-payload-run-a-filtered.log` (SHA-256
+`59B5AA85CED26C077EF5F78676B50BDB830CC42790AA7A1B426B250B1678322A`).
+The strict frame-wide ledger and revised pilot-slice verifier passed all
+3,241 prepared draws. The selected slice contains 308 procedural-item
+backend draws from 174 exact title calls. `tools/verify-snr02-item-payload.py`
+joins **all 174** calls to their selected descriptor and runtime payloads,
+validates each descriptor's kind at offset 36, and confirms the already
+observed title addresses and submit calls. Selected descriptor kinds are
+0:155, 1:6, 4:8 and 5:5; these are raw enums, not material roles.
+
+The probe also observed the same 174 runtime addresses in both source
+frames. Four records changed **word 15 (offset 60)** from `0x00000008` to
+`0x00000028` while retaining the same address; the 92-byte descriptor
+payloads at those selected addresses did not change in this capture. This
+is direct evidence that a runtime address is not an immutable per-frame
+payload identity. The meaning of the changed word and the upstream
+generation rule remain unproved. A later SNR-03 scene must own the selected
+words or pin a validated immutable resource through consumption, and SNR-02
+must still connect them to mesh ranges, material roles and lifetime.
+
+Reproduce the join with:
+
+```powershell
+python tools/verify-snr02-item-payload.py `
+  .local/native-renderer/snr02/item-payload-run-a-filtered.log `
+  .local/native-renderer/snr02/item-payload-run-a-ledger.json
+```
+
+The result is a complete bounded **title record payload join** for one
+selected family, not yet its GPU geometry/material map or admission to the
+private renderer.

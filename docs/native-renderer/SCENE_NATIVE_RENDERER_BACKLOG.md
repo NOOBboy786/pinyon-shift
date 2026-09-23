@@ -11,7 +11,9 @@ The [SNR-00/01 evidence log](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md)
 records the first clean controls, the procedural packet probe and the current
 title-to-GPU join gaps.
 The [SNR-02 evidence log](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md) records
-the local-car resource census and seven selected title submodels.
+the local-car resource census, seven selected title submodels and a complete
+bounded procedural item descriptor/runtime payload join. Mesh/material roles
+and resource generations remain open.
 The [SNR-03 evidence log](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md) records
 bounded same-frame vegetation metadata, guarded vertex bytes and a private
 same-frame identity/depth diagnostic; full-slice coverage remains open.

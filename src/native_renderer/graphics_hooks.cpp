@@ -63,6 +63,9 @@ REXCVAR_DEFINE_INT32(pinyon_shift_snr_m02_trace_source_frame, 0, "Pinyon Shift",
 REXCVAR_DEFINE_INT32(pinyon_shift_snr03_probe_frame, 0, "Pinyon Shift",
                      "Publish one read-only view-8 vegetation scene snapshot")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_BOOL(pinyon_shift_snr02_item_payload_probe, false,
+                    "Pinyon Shift", "Read selected procedural descriptor/runtime records")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
 namespace {
 
@@ -3097,6 +3100,24 @@ void PinyonShiftObserveProceduralItemEnd() {
   }
   const auto scope = snr01_procedural_scopes.back();
   snr01_procedural_scopes.pop_back();
+  if (REXCVAR_GET(pinyon_shift_snr02_item_payload_probe) &&
+      scope.ordinal <= 512 && scope.descriptor_seen && scope.runtime_seen &&
+      scope.descriptor_address && scope.runtime_address &&
+      !snr01_view_scopes.empty() && snr01_view_scopes.back().ordinal == 8) {
+    std::string descriptor, runtime;
+    for (uint32_t word = 0; word < 23; ++word) {
+      descriptor += fmt::format("{:08X}", SnrM02ReadU32(scope.descriptor_address + word * 4));
+    }
+    for (uint32_t word = 0; word < 17; ++word) {
+      runtime += fmt::format("{:08X}", SnrM02ReadU32(scope.runtime_address + word * 4));
+    }
+    REXGPU_INFO("FH1 SNR02 item payload {{\"frame\":{},\"call\":{},"
+                "\"descriptor\":{},\"runtime\":{},\"kind\":{},"
+                "\"descriptor_words\":\"{}\",\"runtime_words\":\"{}\"}}",
+                rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+                scope.ordinal, scope.descriptor_address, scope.runtime_address,
+                scope.descriptor_kind, descriptor, runtime);
+  }
   if (scope.ordinal <= kSnr01ProceduralLimit) {
     REXGPU_INFO(
         "FH1 SNR01 procedural item {{\"frame\":{},\"call\":{},"
