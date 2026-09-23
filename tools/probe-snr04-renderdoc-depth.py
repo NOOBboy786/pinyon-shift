@@ -1,4 +1,4 @@
-"""Read a selected draw's depth before/after through qrenderdoc --python."""
+"""Read all depth samples before/after one draw through qrenderdoc --python."""
 
 import hashlib
 import json
@@ -46,22 +46,40 @@ try:
     subresource = rd.Subresource()
     subresource.mip = target.firstMip
     subresource.slice = target.firstSlice
-    subresource.sample = 0
-    data = []
-    for label, frame_event in (('before', event - 1), ('after', event)):
-        replay.SetFrameEvent(frame_event, True)
-        value = bytes(replay.GetTextureData(target.resource, subresource))
-        assert len(value) == texture.width * texture.height * 8
-        (out.parent / f'{out.stem}-{label}.depth').write_bytes(value)
-        state[label] = {'bytes': len(value),
-                        'sha256': hashlib.sha256(value).hexdigest()}
-        data.append(value)
-    changes = [i for i in range(texture.width * texture.height)
-               if data[0][i * 8:i * 8 + 8] != data[1][i * 8:i * 8 + 8]]
-    state['changed_texels_sample0'] = len(changes)
-    state['changed_depth_range_sample0'] = [
-        min(struct.unpack_from('<f', data[1], i * 8)[0] for i in changes),
-        max(struct.unpack_from('<f', data[1], i * 8)[0] for i in changes)] if changes else []
+    state['sample_details'] = []
+    coverage = bytearray(texture.width * texture.height)
+    for sample in range(texture.msSamp):
+        subresource.sample = sample
+        data = []
+        detail = {'sample': sample}
+        for label, frame_event in (('before', event - 1), ('after', event)):
+            replay.SetFrameEvent(frame_event, True)
+            value = bytes(replay.GetTextureData(target.resource, subresource))
+            assert len(value) == texture.width * texture.height * 8
+            suffix = '' if sample == 0 else f'-s{sample}'
+            (out.parent / f'{out.stem}-{label}{suffix}.depth').write_bytes(value)
+            detail[label] = {'bytes': len(value),
+                             'sha256': hashlib.sha256(value).hexdigest()}
+            data.append(value)
+        changes = [i for i in range(texture.width * texture.height)
+                   if data[0][i * 8:i * 8 + 4] != data[1][i * 8:i * 8 + 4]]
+        for pixel in changes:
+            coverage[pixel] |= 1 << sample
+        detail['changed_depth_samples'] = len(changes)
+        detail['changed_depth_range'] = [
+            min(struct.unpack_from('<f', data[1], i * 8)[0] for i in changes),
+            max(struct.unpack_from('<f', data[1], i * 8)[0] for i in changes)] if changes else []
+        state['sample_details'].append(detail)
+        if sample == 0:
+            state['before'], state['after'] = detail['before'], detail['after']
+            state['changed_texels_sample0'] = len(changes)
+            state['changed_depth_range_sample0'] = detail['changed_depth_range']
+    coverage_path = out.parent / f'{out.stem}-coverage.u8'
+    coverage_path.write_bytes(coverage)
+    state['coverage'] = {'bytes': len(coverage),
+                         'sha256': hashlib.sha256(coverage).hexdigest(),
+                         'pixels': sum(bool(mask) for mask in coverage),
+                         'samples': sum(bin(mask).count('1') for mask in coverage)}
     state['stage'] = 'done'
     save()
 except Exception:

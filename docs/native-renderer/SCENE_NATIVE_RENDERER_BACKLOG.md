@@ -349,6 +349,10 @@ sampler requires the full mip chain for a faithful alpha diagnostic.
 At the matched event ordinary alpha discard is inactive and the pixel shader
 emits a four-bit sample mask. The one-sample private target cannot establish
 coverage parity; the next bounded check needs 4× private coverage/depth.
+The RenderDoc side now has a repeatable four-sample before/after depth mask
+for matched event 11206: 134,885 changed depth samples in 60,654 pixels of
+one 1280×512 EDRAM tile. This is a single-draw reference, not a full-view
+or full-slice comparison; see the SNR-03/04 evidence.
 The `SNR03F3` fixture now retains the SDK draw sequence for every selected
 final-state execution. A same-frame replay verified 135 ordered private raster
 draws from 67 packets, while the diagnostic remains unmasked and its post-VS

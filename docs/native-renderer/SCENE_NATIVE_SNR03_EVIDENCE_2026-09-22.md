@@ -968,3 +968,35 @@ does not sample these resources. The next coverage check must bind the
 captured shader inputs in a four-sample private diagnostic and compare
 same-frame per-sample alpha and depth against compatibility; this byte proof
 alone is not that check.
+
+## Four-sample compatibility depth reference for one vegetation draw
+
+`tools/probe-snr04-renderdoc-depth.py` now reads all four samples of the
+matched draw's `D32S8_TYPELESS` depth target immediately before and after
+event 11206. The target is a 1280×512 EDRAM tile under a 1280×720 viewport;
+this is one draw and one tile, not the complete scene. It preserves the
+earlier sample-0 files and writes a per-pixel four-bit changed-depth mask.
+Samples 0–3 changed 27,072, 55,441, 44,013 and 8,359 depths respectively:
+134,885 changed samples across 60,654 pixels. Two independent RenderDoc
+replays produced the same mask SHA-256,
+`05AED9CFD909BFDA637EFBE7FE4D334855FAE47324C27B12BB659DF109D8982A`.
+The result is in
+`.local/native-renderer/snr04/item27-depth-four-sample.json` and its
+`-coverage.u8` companion. A depth change requires coverage and a passing
+depth/stencil write, so it is a useful reference but not the raw pixel-shader
+sample mask alone.
+
+Recheck with `SNR04_CAPTURE` set to
+`.local/native-renderer/snr04/extended-capture_frame6000.rdc`,
+`SNR04_EVENT=11206` and `SNR04_OUTPUT` set to the JSON path above:
+
+```powershell
+& .local/tools/renderdoc-1.46/RenderDoc_1.46_64/qrenderdoc.exe `
+  --python tools/probe-snr04-renderdoc-depth.py
+```
+
+The earlier sample-0 overlap check still runs against these files, but its
+20,390 overlapping pixels and 0 depths within `1e-4` are not parity: the
+private image comes from a separate live frame and still has one sample and
+no alpha mask. The next private diagnostic needs four-sample color/depth
+readback and the captured BC3 alpha path before same-frame comparison.
