@@ -3412,3 +3412,64 @@ assert not [r for r in other if r['classification'] == 'direct_root'
             and r['title_packet_view_call'] is None]
 '@ | python -
 ```
+
+### Candidate-target membership is narrower than its attachment tuple
+
+The corrected final replay's 1,919 candidate-target draws partition without
+overlap. **1,801** belong to title-linked scene families: 608 car-model or
+presentation scene-list draws, 596 selected track-model resource draws,
+220 character-manager direct-record draws, 211 procedural item/node draws,
+and 166 vegetation bound-record draws. These are *proposed scene members*,
+not admitted native items: their complete mesh/material/transform and
+generation records are still missing.
+
+The remaining **57** scalar-wrapper draws have exact title packets but
+uncertain slice roles. Thirty-six join four `CCarPresentation + 2016`
+subobjects; the other 21 have no nonzero outer-object join in this replay
+(15 at caller `0x82415A28`, three each at `0x823FDDFC` and `0x823FDE2C`).
+The outer join proves presentation ownership for 36, not that their
+color/depth work is replaceable by the proposed opaque scene.
+
+The last **61** must remain outside native scene admission here: 18
+`CRealtimeSky` draws (nine second-path semantic and nine graphics-device
+wrapper), 12 `CParticleSystemNew` draws, three race-line draws, three
+depth-tested presentation-strip draws, one title clear and 24 no-attachment-
+write indirect draws. In particular, the nine second-path draws without a
+vegetation bound record have caller sites `0x823FA8DC`, `0x82447C08` and
+`0x823FB7D4`, three executions each. The separately verified
+[`CRealtimeSky` parent join](#shared-second-path-parent-is-crealtimesky)
+names those exact sites; their missing vegetation record is intentional.
+This partition resolves an apparent SNR-01 ownership gap but does not prove
+the retained sky/particle composition bridge or freeze the slice. The next
+owner work is the 21 scalar draws and complete resource/material/lifetime
+joins for all proposed scene members, including the 36 car-presentation
+scalar draws if their role places them in the slice.
+
+Recheck the disjoint accounting from the corrected ledger:
+
+```powershell
+@'
+import json
+from pathlib import Path
+rows = json.loads(Path(
+    '.local/native-renderer/snr01/state-resource-final-run-a-clear-joined-ledger.json'
+).read_text(encoding='utf8'))['draws']
+rows = [r for r in rows if r['target'].startswith('14020500/')]
+scene = [r for r in rows if r['classification'] == 'view_owner'
+         or r['title_direct_record'] or r['title_item_node']
+         or r['title_second_draw_bound_record']]
+scalar = [r for r in rows if r['title_packet_caller_lr'] == 0x824131F4]
+retained = [r for r in rows if r['title_second_path_caller_lr'] in (
+    0x823FA8DC, 0x82447C08, 0x823FB7D4)
+    or r['title_packet_caller_lr'] in (
+        0x823F59C8, 0x82D07200, 0x82D0735C, 0x82401258, 0x8244F070)
+    or r['classification'] in ('title_clear', 'unmatched_indirect')]
+assert (len(rows), len(scene), len(scalar), len(retained)) == (1919, 1801, 57, 61)
+assert len({id(r) for r in scene + scalar + retained}) == len(rows)
+assert sum(bool(r['title_scalar_outer_object']) for r in scalar) == 36
+assert sum(r['title_second_path_caller_lr'] in (
+    0x823FA8DC, 0x82447C08, 0x823FB7D4) for r in retained) == 9
+assert sum(r['title_dynamic_quad_parent_first_word'] == 0x82235F94
+           for r in retained) == 12
+'@ | python -
+```
