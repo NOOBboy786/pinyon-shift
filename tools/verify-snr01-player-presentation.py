@@ -41,6 +41,7 @@ def main() -> int:
     parser.add_argument("--frame", type=int, default=6000)
     parser.add_argument("--require-local-presentation", action="store_true")
     parser.add_argument("--require-local-model", action="store_true")
+    parser.add_argument("--require-list-owner", action="store_true")
     parser.add_argument("--require-owner-calls", action="store_true")
     parser.add_argument("--require-backend-join", action="store_true")
     parser.add_argument("--require-model-records", action="store_true")
@@ -94,6 +95,7 @@ def main() -> int:
     require_local = (
         args.require_local_presentation
         or args.require_local_model
+        or args.require_list_owner
         or args.require_owner_calls
         or args.require_backend_join
         or args.require_model_records
@@ -116,7 +118,7 @@ def main() -> int:
         assert {r["flush_owner_first_word"] for r in local_packets} == {0x82003A54}
         assert len({r["target_physical"] for r in local_packets}) == 12
     model_packets = []
-    if (args.require_local_model or args.require_owner_calls
+    if (args.require_local_model or args.require_list_owner or args.require_owner_calls
             or args.require_backend_join or args.require_model_records):
         assert local["model_vtable"] == 0x82001618
         model_packets = [
@@ -124,12 +126,53 @@ def main() -> int:
             if r["frame"] == args.frame
             and r["view_call"] == 8
             and r["flush_owner"] == local["model"]
+            and r["flush_caller_lr"] in (0x824399F0, 0x8241A2A4)
         ]
         assert len(model_packets) == 37
         assert sum(r["flush_caller_lr"] == 0x824399F0 for r in model_packets) == 29
         assert sum(r["flush_caller_lr"] == 0x8241A2A4 for r in model_packets) == 8
         assert {r["flush_owner_first_word"] for r in model_packets} == {0x82001618}
         assert len({r["target_physical"] for r in model_packets}) == 37
+
+    list_owner_summary = {}
+    if args.require_list_owner:
+        callers = {0x8244CBF4, 0x8244DD5C, 0x8244E2A8}
+        packets = [
+            r for r in scene_packets
+            if r["frame"] == args.frame and r["view_call"] == 8
+            and r["flush_caller_lr"] in callers
+        ]
+        assert Counter(r["flush_caller_lr"] for r in packets) == {
+            0x8244CBF4: 4, 0x8244DD5C: 2, 0x8244E2A8: 2,
+        }
+        assert all(r["flush_owner"] == local["model"]
+                   and r["flush_owner_first_word"] == 0x82001618
+                   and r["flush_input"] == 1 for r in packets)
+        pairs = {(r["header_physical"], r["target_physical"]) for r in packets}
+        assert len(pairs) == len(packets)
+        assert sum(r["frame"] == args.frame and r["view_call"] == 8
+                   and r["flush_owner"] == local["model"]
+                   for r in scene_packets) == len(model_packets) + len(packets)
+        executions = [
+            r for r in records(args.log, INDIRECT_BUFFER_PREFIX)
+            if r["frame"] == args.frame + 1
+            and (r["dispatch_packet_physical"], r["command_buffer"]) in pairs
+        ]
+        execution_ids = {r["execution"] for r in executions}
+        assert len(executions) == len(execution_ids) == 16
+        assert Counter((r["dispatch_packet_physical"], r["command_buffer"])
+                       for r in executions) == {pair: 2 for pair in pairs}
+        draws = [
+            r for r in records(args.log, PREPARED_DRAW_PREFIX)
+            if r["frame"] == args.frame + 1
+            and r["indirect_execution"] in execution_ids
+        ]
+        assert len(draws) == 24
+        assert all(r["surface_info"] == 0x14020500
+                   and r["color_info"][0] == 0xC0000
+                   and r["depth_info"] == 0x10400 for r in draws)
+        list_owner_summary = {"local_model_list_owner_packets": len(packets),
+                              "local_model_list_owner_draws": len(draws)}
 
     owner_call_summary = {}
     if args.require_owner_calls or args.require_model_records:
@@ -504,6 +547,7 @@ def main() -> int:
         "reverse_links": reverse_links,
     }
     summary.update(owner_call_summary)
+    summary.update(list_owner_summary)
     summary.update(model_record_summary)
     summary.update(backend_summary)
     print(json.dumps(summary, indent=2))

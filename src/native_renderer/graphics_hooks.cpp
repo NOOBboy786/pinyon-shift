@@ -2756,9 +2756,18 @@ void PinyonShiftObserveClearProducerEnd(PPCRegister& r31, PPCRegister& r1) {
 }
 
 void PinyonShiftObserveSceneListFlushBegin(
-    PPCRegister& r12, PPCRegister& r31, PPCRegister& r30, PPCRegister& r5) {
+    PPCRegister& r12, PPCRegister& r31, PPCRegister& r30,
+    PPCRegister& r27, PPCRegister& r28, PPCRegister& r5) {
   if (Snr01TraceCurrentFrame()) {
-    const uint32_t owner = r12.u32 == 0x8241A2A4 ? r30.u32 :
+    const uint32_t list_owner = r12.u32 == 0x8244CBF4 ? r28.u32 :
+                                r12.u32 == 0x8244DD5C ||
+                                        r12.u32 == 0x8244E2A8
+                                    ? r27.u32
+                                    : 0;
+    const uint32_t owner =
+        list_owner && SnrM02ReadU32(list_owner + 32860) == r5.u32
+            ? list_owner
+            : r12.u32 == 0x8241A2A4 ? r30.u32 :
                            r12.u32 == 0x824399F0 ||
                                    r12.u32 == 0x8243CE0C ||
                                    r12.u32 == 0x824170BC

@@ -358,6 +358,7 @@ def main():
     parser.add_argument("--require-direct-family-record", action="store_true")
     parser.add_argument("--require-semantic-item-node", action="store_true")
     parser.add_argument("--require-second-path", action="store_true")
+    parser.add_argument("--require-candidate-boundary", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     frames = [args.source_frame, args.source_frame + 1]
@@ -371,6 +372,22 @@ def main():
     if args.require_second_path:
         assert records["second_path"], "no second-path records"
     result = summarize(records, frames, args.source_frame + 1)
+    if args.require_candidate_boundary:
+        targets = {
+            "14020500/00030000/00010400/00000003",
+            "14020500/000C0000/00010400/00000003",
+        }
+        candidate = [row for row in result["draws"] if row["target"] in targets]
+        assert candidate and {row["target"] for row in candidate} == targets
+        assert all(
+            (row["classification"] == "view_owner" and row["view_call"] == 8)
+            or (row["classification"] == "direct_root"
+                and row["title_packet_view_call"] == 8)
+            or row["classification"] == "title_clear"
+            or (row["classification"] == "unmatched_indirect"
+                and row["no_attachment_write"])
+            for row in candidate
+        ), "candidate draw lacks proven boundary or no-write state"
     result["log_sha256"] = hashlib.sha256(args.log.read_bytes()).hexdigest().upper()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",

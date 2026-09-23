@@ -2618,3 +2618,81 @@ this and the prior character-record replay. The nine other second-path
 callbacks have original call sites but no enclosing second-draw record in
 this capture. They and the remaining candidate direct packets still need
 semantic ownership before the slice can be frozen.
+
+### The local car model owns the remaining view-8 scene-list flushes
+
+The three previously unowned flush return sites `0x8244CBF4`, `0x8244DD5C`
+and `0x8244E2A8` occur in the generated car-model path. The first submits
+the list in the entry `r28` object's offset-32860 field; the latter two use
+the same field on the entry `r27` object. The bounded hook now records that
+object only when its field exactly matches the submitted list argument.
+
+A normal-exit saved-race replay at source frame 6000 produced seven captures.
+The executable SHA-256 was
+`6D38BD3AC48010B16A7EB361C1FFFA0E30168A822184766E60A6CA037D1796A5`.
+Its filtered ordered log is
+`.local/native-renderer/snr01/list-owner-run-a-filtered.log` (SHA-256
+`D2732D08C9DF9D70C4DAC7BBB950EA7B06E5B50177501E58B93BDC70BD5658DB`)
+and the frame-wide ledger is
+`.local/native-renderer/snr01/list-owner-run-a-ledger.json` (SHA-256
+`5030D731E178A622339722EBFC06C2009DABAC87BD587DA80CA0B0066A3E8EC7`).
+The exact local player → car → presentation → model link identifies the
+newly joined owner as the local `CCarModel`, with vtable `0x82001618`.
+Eight title packets (four, two and two from the respective call sites)
+each execute twice, producing 24 candidate scene-color draws. The updated
+player-presentation verifier retains its original 37 model-owner packets
+and checks these eight additional packets and their 24 draws separately:
+
+```powershell
+python tools/verify-snr01-player-presentation.py `
+  .local/native-renderer/snr01/list-owner-run-a-filtered.log `
+  --frame 6000 --require-local-model --require-list-owner
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/list-owner-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path `
+  --output .local/native-renderer/snr01/list-owner-run-a-ledger.json
+```
+
+The ledger accounts for all 5,109 prepared draws and has zero
+`view_unowned` classifications. The two candidate scene-color groups have
+3,188 draws: 2,162 scene-list draws with exact view-8 owner, 1,001 direct
+draws with a title view-8 packet, 24 unmatched indirect draws with no
+attachment writes, and one direct draw with no captured title writer.
+This is a stronger boundary census, not a frozen native slice: direct-draw
+mesh/material owners, the one writer gap, resource generations, and the
+other frame classifications still need resolution.
+
+The follow-up replay enabled the existing clear-producer trace, exited
+normally and produced seven captures. Its ordered log is
+`.local/native-renderer/snr01/list-owner-clear-run-a-filtered.log` (SHA-256
+`5A50358AAC2E8E9B6C5F094C4D34A392E66883D295D7DD3AF9BF5B425E03034D`)
+and its ledger is
+`.local/native-renderer/snr01/list-owner-clear-run-a-ledger.json` (SHA-256
+`E21B4180A8FFF976A6EBB2B7B26741A37CB560D662B2A09B667B93BF7A529C34`).
+The local-model verifier above passes on this log as well. The frame-wide
+verifier passes with `--require-candidate-boundary`, which rejects any
+candidate draw without a view-8 owner, a view-8 direct title packet, an
+exact title clear, or a proven no-write state. The ledger
+accounts for all 4,350 draws, including ten exact title-clear joins and
+zero `view_unowned` draws. The candidate groups contain 2,576 draws:
+1,756 view-8 scene-owner draws, 795 direct draws with a title view-8 packet,
+one retained title-clear draw and 24 unmatched indirect draws with no
+attachment writes. The clear draw's packet lies wholly in producer record
+62238's captured command-cursor range. Counts differ between replays, so
+the two ledgers are separate observations rather than additive totals.
+Recheck the boundary with:
+
+```powershell
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/list-owner-clear-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-candidate-boundary `
+  --output .local/native-renderer/snr01/list-owner-clear-run-a-ledger.json
+```
+
+The same build with all probes off also completed the saved route normally
+with seven compatibility captures; this is a smoke check, not a visual or
+performance equivalence claim.
