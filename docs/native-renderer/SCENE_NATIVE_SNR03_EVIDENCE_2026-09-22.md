@@ -772,3 +772,43 @@ $env:SNR04_OUTPUT = (Join-Path (Get-Location) `
 & .local/tools/renderdoc-1.46/RenderDoc_1.46_64/qrenderdoc.exe `
   --python tools/probe-snr04-vegetation-pixel-census.py
 ```
+
+## Same-frame final pixel descriptor join
+
+A bounded SDK log at `D3D12CommandProcessor::UpdateBindings` records the
+bindless pixel SRV indices for the selected vertex/pixel shader pair at output
+frame 6001. The AppData-backed sustained-race replay exited normally with
+seven compatibility captures. Its `SNR03F2` fixture contains 67 selected
+packets and 142 final variants; the fixture verifier joined all 67 packets to
+their same-frame prepared draw bindings. The process-bounded signal log is
+`.local/native-renderer/snr04/bound-pixel-run-b-signal.log` (SHA-256
+`00E4DC64731F8BC8F083DA7706E85178A68FD6BC9E8FF0850C416A7F61A09830`);
+the fixture SHA-256 is
+`BD22F79496156724C8325635C94A54F396D883069547E88AA9BC749630A74DE5`.
+
+All 67 selected packet addresses join the `FH1 scene binding` log to final
+pixel bindings. There are 142 binding updates, one per final variant, and four
+entries per update: unsigned and signed views at fetch 0 and 13. The signed
+views both resolve to relative index 0. The unsigned fetch-0 views resolve
+one-to-one from the five recorded title fetch descriptors to relative SRV
+indices 79, 193, 382, 416 and 627. The single fetch-13 descriptor resolves
+to relative index 737 for every update. These indices are live descriptor
+heap positions in this replay, not persistent resource identities or owned
+texture bytes. They establish the exact descriptor join needed to copy the
+five current BC3 images into owned resources for a bounded alpha diagnostic.
+
+Recheck the fixture with:
+
+```powershell
+python tools/verify-snr03-scene-fixture.py `
+  .local/native-renderer/snr04/bound-pixel-run-b/snr03-scene-6000.bin `
+  .local/native-renderer/snr04/bound-pixel-run-b-signal.log
+```
+
+The existing output callback executes before the SDK closes and signals the
+guest D3D12 submission. A texture bridge therefore cannot synchronously wait
+for that submission inside the callback. The next diagnostic cut must make an
+owned copy on the guest command stream, preserve the source's lifetime until
+the copy is submitted, and order private sampling after the guest fence
+without blocking the callback. Neither this descriptor census nor the
+identity shader proves alpha-coverage or depth parity.

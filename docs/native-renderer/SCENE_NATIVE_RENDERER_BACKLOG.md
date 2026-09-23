@@ -336,6 +336,11 @@ The matched RenderDoc frame partitions 189 vegetation executions into 135
 zero-pixel-texture draws and 54 two-texture color draws. The latter use five
 BC3 images, one shared full-view image and one pixel shader; the BC3 alpha
 path is the next bounded coverage input to bridge.
+The live binding join maps all 67 selected packets to five BC3 SRV positions
+and one shared full-view SRV position in the same output frame. The guest
+submission is signaled after the output callback, so the texture copy and
+private-queue wait must be ordered without blocking that callback; see the
+[SNR-03/04 evidence](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md#same-frame-final-pixel-descriptor-join).
 Full compatibility
 coverage/depth parity, unload/reload and complete main-view ownership remain
 open.
