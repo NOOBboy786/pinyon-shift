@@ -2632,6 +2632,22 @@ void PinyonShiftObserveSnr01SecondPathEnd() {
       scope.first_semantic + 1, snr01_semantic_packet_count);
 }
 
+void PinyonShiftObserveSnr01SharedCaller(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4,
+    PPCRegister& r5, PPCRegister& r6, PPCRegister& r7) {
+  if (!Snr01TraceCurrentFrame() || snr01_view_scopes.empty() ||
+      snr01_view_scopes.back().ordinal != 8) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 shared caller {{\"frame\":{},\"view_call\":8,"
+      "\"caller_lr\":{},\"parent\":{},\"parent_word0\":{},"
+      "\"arg4\":{},\"arg5\":{},\"arg6\":{},\"arg7\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      r12.u32, r3.u32, SnrM02ReadU32(r3.u32), r4.u32, r5.u32,
+      r6.u32, r7.u32);
+}
+
 void PinyonShiftObserveProceduralEmitterBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
     PPCRegister& r6) {

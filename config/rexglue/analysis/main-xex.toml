@@ -325,6 +325,11 @@ name = "PinyonShiftObserveSnr01SecondPathBegin"
 registers = ["r12", "r3", "r4", "r5", "r6", "r30"]
 
 [[midasm_hook]]
+address = 0x82D756AC
+name = "PinyonShiftObserveSnr01SharedCaller"
+registers = ["r12", "r3", "r4", "r5", "r6", "r7"]
+
+[[midasm_hook]]
 address = 0x82412E1C
 name = "PinyonShiftObserveSnr01SecondPathEnd"
 

@@ -2864,9 +2864,12 @@ calls each emitted exactly one semantic packet:
 | `0x82447C08` | 390 | `0x40934B60` | `0x3EFF6B07` | 13, 1 |
 | `0x823FB7D4` | 391 | `0x40934B00` | `0x3CF30D15` | 13, 128 |
 
-The addresses are adjacent input records with float-like first words, not
-RTTI vtables. They establish distinct caller-held inputs but do **not**
-identify persistent scene owners, geometry or material roles. The executable
+Generated `sub_82D756A8` calls the three functions with `r3` set to its
+entry object plus 1408, 1280 and 1184 respectively. Subtracting those
+offsets from the observed caller inputs gives the **same parent address,
+`0x40934660`**, for all three packets. Their first words are float-like,
+not RTTI vtables. This proves a shared title parent → three input records
+→ semantic packets; the parent's class was still unknown at this step. The executable
 SHA-256 was
 `6FF1AD1AD68B635B3306604AF639EE290113A51A0CC90DD8B0E3064E449355F8`;
 the ordered filtered log is
@@ -2884,6 +2887,9 @@ found = [r for r in rows if r['frame'] == 6000 and r['view_call'] == 8
          and r['caller_lr'] in (0x823FA8DC, 0x82447C08, 0x823FB7D4)]
 assert len(found) == 3 and len({r['caller_object'] for r in found}) == 3
 assert all(r['caller_object_word0'] and r['first_semantic'] == r['last_semantic'] for r in found)
+assert {r['caller_object'] - {0x823FA8DC: 1408, 0x82447C08: 1280,
+                              0x823FB7D4: 1184}[r['caller_lr']]
+        for r in found} == {0x40934660}
 '@ | python -
 ```
 
@@ -2893,3 +2899,60 @@ had 6,869 prepared draws, and the verifier reported root
 3,206-draw replay remains the last passing full-frame ledger. This new run
 qualifies only the bounded second-path call join; it cannot revise the
 frame-wide slice boundary or Gate A status.
+
+### Shared second-path parent is `CRealtimeSky`
+
+A read-only entry hook on generated `sub_82D756A8` records the parent before
+it dispatches the three child calls. A subsequent normal-exit saved-race
+replay produced seven compatibility captures and the following exact
+source-frame-6000 view-8 relationship:
+
+| Parent | Vtable | Child offset and caller | Semantic packet |
+| --- | --- | --- | ---: |
+| `0x430FE8B0` | `0x8223A694` | `+1408`, `0x823FA8DC` | 367 |
+| same | same | `+1280`, `0x82447C08` | 368 |
+| same | same | `+1184`, `0x823FB7D4` | 369 |
+
+The verified title image's RTTI locator for `0x8223A694` names
+`.?AVCRealtimeSky@@`. Each observed child address equals the same parent
+plus its static call-site offset. This establishes the title
+`CRealtimeSky` → three subrecords → second-path semantic packets chain.
+The earlier passing backend ledger joined the same return-site family to
+**nine candidate-attachment prepared draws** (three each), so these are a
+sky producer to retain across the proposed opaque-scene cut. Their actual
+color/depth blending and downstream consumers still require SNR-05 proof;
+this identification alone does not qualify suppression.
+This leaves 15 of that earlier ledger's 24 direct draws without a semantic
+owner: nine from `0x823F59C8` and three each from `0x82401258` and
+`0x8244F070`.
+
+The executable SHA-256 was
+`34E68725CD136C2F3BC838B46462DA369E53C155F67E824073950F10AFFD21EE`.
+The four-record filtered trace is
+`.local/native-renderer/snr01/shared-parent-run-a-filtered.log` (SHA-256
+`586E97EE02FCCC3E1228F13BC4329D7DACD657DFD98F95843589292EA9F6D9EB`);
+the title image SHA-256 was
+`6014727FA7B0B79727FD5F32A2E2377533DC8E29679E8D2462BD764D331FA305`.
+Recheck the pointer/packet relationship and RTTI with:
+
+```powershell
+@'
+import json, struct
+from pathlib import Path
+rows = [json.loads(line[line.index('{'):]) for line in Path(
+    '.local/native-renderer/snr01/shared-parent-run-a-filtered.log'
+).read_text(encoding='utf-8').splitlines()]
+parent, = [r for r in rows if 'parent' in r]
+children = [r for r in rows if 'caller_object' in r]
+offset = {0x823FA8DC: 1408, 0x82447C08: 1280, 0x823FB7D4: 1184}
+assert len(children) == 3 and {r['caller_lr'] for r in children} == set(offset)
+assert all(r['caller_object'] == parent['parent'] + offset[r['caller_lr']]
+           and r['first_semantic'] == r['last_semantic'] for r in children)
+image = Path('.local/ui-verify/default-image.bin').read_bytes()
+word = lambda address: struct.unpack_from('>I', image, address - 0x82000000)[0]
+locator = word(parent['parent_word0'] - 4)
+descriptor = word(locator + 12)
+start = descriptor + 8 - 0x82000000
+assert image[start:image.index(0, start)] == b'.?AVCRealtimeSky@@'
+'@ | python -
+```
