@@ -263,7 +263,12 @@ registers = ["r1", "r25", "r27", "r28", "r30", "r31"]
 [[midasm_hook]]
 address = 0x82436AE0
 name = "PinyonShiftObserveSnr02TrackSelectedRecord"
-registers = ["r1", "r19", "r25", "r26", "r30", "r31"]
+registers = ["r1", "r19", "r25", "r26", "r28", "r30", "r31"]
+
+[[midasm_hook]]
+address = 0x82436AD0
+name = "PinyonShiftObserveSnr02TrackRecordResource"
+registers = ["r4", "r11", "r27", "r30", "r31"]
 
 [[midasm_hook]]
 address = 0x82437048

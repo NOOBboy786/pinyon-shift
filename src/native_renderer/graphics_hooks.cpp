@@ -525,6 +525,7 @@ thread_local std::vector<SnrM02WaitScope> snr_m02_wait_scopes;
 thread_local uint64_t snr_m02_wait_count = 0;
 thread_local uint64_t snr_m02_writer_count = 0;
 std::atomic<uint64_t> snr02_rebuild_capture{0};
+std::atomic<uint32_t> snr02_rebuild_flags_address{0};
 std::atomic<uint32_t> snr02_rebuild_draw_count{0};
 thread_local uint64_t snr02_view_frame = 0;
 thread_local uint32_t snr02_view_count = 0;
@@ -2573,6 +2574,7 @@ void PinyonShiftObserveSnr02TrackRebuildGate(
       if (snr02_rebuild_capture.compare_exchange_strong(
               empty, (frame << 32) | command_target,
               std::memory_order_acq_rel)) {
+        snr02_rebuild_flags_address.store(r30.u32, std::memory_order_release);
         REXGPU_INFO("FH1 SNR02 rebuild capture {{\"frame\":{},"
                     "\"view_call\":{},"
                     "\"instance\":{},\"parent\":{},"
@@ -2606,9 +2608,30 @@ void PinyonShiftObserveSnr02TrackRebuildGate(
               SnrM02ReadU32(r27.u32 + 56), r31.u32);
 }
 
+void PinyonShiftObserveSnr02TrackRecordResource(
+    PPCRegister& r4, PPCRegister& r11, PPCRegister& r27,
+    PPCRegister& r30, PPCRegister& r31) {
+  if (!Snr02TraceCapturedFrame() ||
+      r30.u32 != snr02_rebuild_flags_address.load(std::memory_order_acquire)) {
+    return;
+  }
+  const uint32_t index = SnrM02ReadU32(r31.u32);
+  const uint32_t table = SnrM02ReadU32(r27.u32 + 16);
+  REXGPU_INFO("FH1 SNR02 selected resource lookup {{\"frame\":{},"
+              "\"record\":{},\"index\":{},\"table\":{},"
+              "\"table_entry\":{},\"resource\":{},"
+              "\"field60\":{},\"argument\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              r31.u32, index, table,
+              table ? SnrM02ReadU32(table + 4 * index) : 0,
+              r11.u32, SnrM02ReadU32(r11.u32 + 60), r4.u32);
+}
+
 void PinyonShiftObserveSnr02TrackSelectedRecord(
     PPCRegister& r1, PPCRegister& r19, PPCRegister& r25,
-    PPCRegister& r26, PPCRegister& r30, PPCRegister& r31) {
+    PPCRegister& r26, PPCRegister& r28, PPCRegister& r30,
+    PPCRegister& r31) {
   if (!Snr01TraceCurrentFrame() && !Snr02TraceCapturedFrame()) {
     return;
   }
@@ -2622,17 +2645,44 @@ void PinyonShiftObserveSnr02TrackSelectedRecord(
   REXGPU_INFO("FH1 SNR01 track selected record {{\"frame\":{},"
               "\"flags_address\":{},\"container\":{},\"submodel\":{},"
               "\"entry\":{},\"entry_index\":{},"
+              "\"mask\":{},\"resource_skip_flag\":{},"
+              "\"range_skip_flag\":{},"
               "\"record_root\":{},\"record_base\":{},\"record\":{},"
               "\"words\":[{},{},{},{},{},{},{},{},{},{},{},{},{},{}]}}",
               rex::perf::GetTotalCounter(
                   rex::perf::CounterId::kSourceFrameCount),
               r30.u32, r19.u32, r26.u32, r25.u32,
-              SnrM02ReadU32(r25.u32 + 40), record_root,
+              SnrM02ReadU32(r25.u32 + 40), r28.u32,
+              (SnrM02ReadU32(r30.u32 + 8) & r28.u32) != 0,
+              (SnrM02ReadU32(r30.u32 + 16) & r28.u32) != 0,
+              record_root,
               SnrM02ReadU32(record_root), r31.u32,
               words[0], words[1], words[2], words[3],
               words[4], words[5], words[6], words[7],
               words[8], words[9], words[10], words[11],
               words[12], words[13]);
+  if (Snr02TraceCapturedFrame() && r31.u32 &&
+      r30.u32 == snr02_rebuild_flags_address.load(std::memory_order_acquire)) {
+    const uint32_t start = words[10];
+    const uint32_t end = words[11];
+    const uint32_t count = end >= start && (end - start) % 4 == 0
+                               ? (end - start) / 4
+                               : 0;
+    const uint32_t word140 = SnrM02ReadU32(r25.u32 + 140);
+    REXGPU_INFO("FH1 SNR02 selected mesh range {{\"frame\":{},"
+                "\"entry\":{},\"record\":{},\"range_start\":{},"
+                "\"range_end\":{},\"range_count\":{},\"word140\":{}}}",
+                rex::perf::GetTotalCounter(
+                    rex::perf::CounterId::kSourceFrameCount),
+                r25.u32, r31.u32, start, end, count, word140);
+    if (count <= 20) {
+      for (uint32_t i = 0; i < count; ++i) {
+        REXGPU_INFO("FH1 SNR02 selected range word {{\"record\":{},"
+                    "\"index\":{},\"value\":{}}}",
+                    r31.u32, i, SnrM02ReadU32(start + 4 * i));
+      }
+    }
+  }
 }
 
 void PinyonShiftObserveSnr01TrackModelEnd() {

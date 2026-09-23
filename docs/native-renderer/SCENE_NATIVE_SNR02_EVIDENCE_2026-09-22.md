@@ -504,3 +504,42 @@ scene-color groups. The indexed buffer starts at guest `0x11C63560` and is
 4,120 bytes. This is a concrete color-writing main-view track contribution,
 not a semantic material map: the selected record's fields, texture roles,
 transform and allocation/payload generations remain to be established.
+
+### The selected record is a control path, not yet a material key
+
+Generated `sub_824365B0` first tests the selected bit at `parent + 56`.
+For a selected 56-byte record, its word 0 can index the table at the traversal
+object +16 and pass that entry's field +60 to `sub_82C24168`, but the bit at
+`flags_address + 8` can skip the lookup. Independently, record words 10–11
+bound a four-byte control range, capped by the title at 20 entries; the bit
+at `flags_address + 16` can skip that range. The path passes the selected
+`CTrackMesh` to `sub_82450440` and then flushes the command list. These are
+observed control relationships, not decoded geometry or material roles.
+
+A bounded view-8 replay exited normally with seven compatibility captures.
+Its RelWithDebInfo executable SHA-256 was
+`A082202D58B7CE16CCD7ECB00C7ACFA3FBF9C91ADBA5CD5CCF16CB01D642B09D`;
+the process-filtered log at
+`.local/native-renderer/snr02/track-record-flags-view8-run-a-filtered.log`
+has SHA-256
+`D32FC3CF2D898C5E8FA320C3BA383A6A88FF33AF469F545CBFD41153AB98523E`.
+It passes:
+
+```powershell
+python tools/verify-snr02-rebuild-execution.py `
+  .local/native-renderer/snr02/track-record-flags-view8-run-a-filtered.log `
+  --view-call 8 --require-color --require-record-control
+```
+
+Source frame 4830 selected one track record with a valid word-0 index, but
+`resource_skip_flag=true`: the resource-table lookup did not run in this
+call. `range_skip_flag=false`, and its six control words were
+`[0, -2, -2, -2, -2, 1]`; the `-2` values take a distinct control branch,
+not a resource-pointer dereference. The title flushed `0x17577E60`, and
+backend frame 4831 used it for the same color-writing, three-texture-fetch
+draw family as the prior replay. The cached resource path means this capture
+does **not** establish material ownership or freshness. An exploratory probe
+that dereferenced the mesh's raw +140 word crashed; the final probe records
+that word without dereferencing it. The next lookup must follow the title's
+actual producer and resource-allocation paths, including the earlier point
+that populated the cached command list.
