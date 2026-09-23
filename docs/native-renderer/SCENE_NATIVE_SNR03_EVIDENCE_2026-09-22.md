@@ -573,9 +573,14 @@ RenderDoc reports two pixel-stage images in that order: 256×256 BC3_UNORM
 `ResourceId::7915` and 1280×720 R8G8B8A8_TYPELESS `ResourceId::8416`.
 The latter's latest captured copy before this draw is event 9232 from the
 16 MiB buffer `ResourceId::1600`; the buffer's latest prior compute
-read/write use is event 9230. This is a bounded resource-level producer
-chain. It does not establish the copied buffer byte range, the original
-title-side resource owner, or the full-view image's semantic role. The
+read/write use is event 9230. The repeatable probe compares actual bytes:
+the copied 3,686,400-byte image equals source-buffer bytes
+`[0, 3,686,400)` after event 9230 and is unchanged at draw 11206 (SHA-256
+`F63E6DC567A4D93D42EEA9CDEE53D5E1C04FFF9CFECABCE7539FAC3AC01E063E`).
+This proves the captured same-frame payload bridge from the compute-used
+buffer to the sampled image. It does not establish which compute inputs
+produced those bytes, the original title-side resource owner, or the
+full-view image's semantic role. The
 private diagnostic samples neither image, so visible alpha coverage and
 the full-view pixel dependency remain unresolved.
 
@@ -595,4 +600,4 @@ $env:SNR04_EVENT = '11206'
 ```
 
 The checked JSON has SHA-256
-`ADEF67288CD687407C4968395B2325BBCB655874619CA4600347B9AED584C55D`.
+`2CE8E4D7E6C660C95B40733FB74C25C458AB9011CE30A6DA0713F45D026E49AC`.

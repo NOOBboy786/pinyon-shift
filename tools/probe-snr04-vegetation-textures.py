@@ -4,6 +4,7 @@ Run with qrenderdoc --python and SNR04_CAPTURE, SNR04_OUTPUT, SNR04_EVENT.
 """
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import traceback
@@ -76,6 +77,21 @@ try:
         "copy_source": str(source),
         "copy_source_buffer_bytes": buffer.length,
         "last_compute_write_event": max(writes),
+    }
+    replay.SetFrameEvent(max(writes), True)
+    source_bytes = bytes(replay.GetBufferData(source, 0, 0))
+    subresource = rd.Subresource()
+    subresource.mip = subresource.slice = subresource.sample = 0
+    replay.SetFrameEvent(copy_event, True)
+    copied_bytes = bytes(replay.GetTextureData(target, subresource))
+    replay.SetFrameEvent(event, True)
+    sampled_bytes = bytes(replay.GetTextureData(target, subresource))
+    assert source_bytes.startswith(copied_bytes) and sampled_bytes == copied_bytes
+    state["full_view_payload"] = {
+        "source_offset": 0,
+        "bytes": len(copied_bytes),
+        "sha256": hashlib.sha256(copied_bytes).hexdigest(),
+        "unchanged_at_draw": True,
     }
     state["stage"] = "done"
 except Exception:
