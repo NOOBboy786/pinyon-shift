@@ -22,9 +22,12 @@ def main():
     parser.add_argument("log", type=Path)
     parser.add_argument("ledger", type=Path)
     parser.add_argument("--source-frame", type=int, required=True)
+    parser.add_argument("--require-track-descriptor", action="store_true")
     args = parser.parse_args()
 
     model, track, packets = {}, {}, {}
+    track_descriptors = {}
+    selected_descriptors = set()
     resources = collections.defaultdict(set)
     for line in args.log.open(encoding="utf-8"):
         if "FH1 SNR01 " not in line or "{" not in line:
@@ -58,8 +61,21 @@ def main():
             assert row["vtable"] == 0x820019CC and row["ready"] == 1
             cached_version(row)
             track[thread] = (scope, row)
+        elif "FH1 SNR01 track descriptor " in line:
+            scope, selected = track[thread]
+            assert selected is not None and thread not in track_descriptors
+            assert row["resource"] == selected["resource"]
+            assert row["parent"] == selected["parent"]
+            assert row["model_root"] and row["container"] == row["model_root"] + 128
+            gate_word8 = row.get("gate_word8", row.get("count"))
+            assert gate_word8 > 0 and row["table"] and row["descriptor"]
+            assert row["index"] == row["selector_a"] * 3 + row["selector_b"]
+            assert row["state"] == scope["state_base"] + 0xE940
+            assert row["descriptor"] == row["state_descriptor"]
+            track_descriptors[thread] = row["descriptor"]
         elif "FH1 SNR01 track model end " in line:
             track.pop(thread)
+            track_descriptors.pop(thread, None)
         elif ("FH1 SNR01 scene indirect packet " in line and
               row["view_call"] == 8 and row["flush_caller_lr"] == 0x824170BC):
             track_selected = thread in track and track[thread][1]
@@ -70,6 +86,8 @@ def main():
             if track_selected:
                 scope, selected = track[thread]
                 path, state = "track", scope["state_base"]
+                if args.require_track_descriptor:
+                    selected_descriptors.add(track_descriptors[thread])
             else:
                 scope, selected = model[thread]
                 path, state = "model", scope["arg6"]
@@ -77,9 +95,10 @@ def main():
             key = row["header_physical"], row["target_physical"]
             assert key not in packets
             packets[key] = (path, selected["resource"], row,
-                            cached_version(selected))
+                            cached_version(selected),
+                            track_descriptors.get(thread) if path == "track" else None)
             resources[path].add(selected["resource"])
-    assert not model and not track and packets
+    assert not model and not track and not track_descriptors and packets
 
     ledger = json.loads(args.ledger.read_text(encoding="utf-8"))
     assert ledger["backend_frame"] == args.source_frame + 1
@@ -89,23 +108,31 @@ def main():
              and row["flush_caller_lr"] == 0x824170BC]
     joined = collections.Counter()
     versions = collections.Counter()
+    descriptor_draws = 0
     seen = set()
     for row in draws:
         key = row["execution_dispatch_packet_physical"], row["execution_command_buffer"]
-        path, resource, packet, version = packets[key]
+        path, resource, packet, version, descriptor = packets[key]
         assert row["scene_source_frame"] == packet["frame"] == args.source_frame
         assert row["owner"] == packet["flush_owner"]
         joined[(path, row["target"].split("/")[1])] += 1
         if version is not None:
             versions[(path, version)] += 1
+        if descriptor is not None:
+            descriptor_draws += 1
         seen.add(key)
     assert seen == set(packets)
+    if args.require_track_descriptor:
+        assert descriptor_draws == sum(count for (path, _), count in joined.items()
+                                       if path == "track")
     print(json.dumps({
         "source_frame": args.source_frame,
         "scene_packets": len(packets),
         "candidate_draws": len(draws),
-        "packets_by_path": dict(collections.Counter(path for path, _, _, _ in packets.values())),
+        "packets_by_path": dict(collections.Counter(path for path, *_ in packets.values())),
         "resources_by_path": {path: len(values) for path, values in resources.items()},
+        "selected_track_descriptors": len(selected_descriptors),
+        "draws_with_track_descriptor": descriptor_draws,
         "draws_by_path_and_color": {f"{path}:{color}": count
                                     for (path, color), count in sorted(joined.items())},
         "draws_by_path_and_cached_version": {

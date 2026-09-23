@@ -246,6 +246,11 @@ name = "PinyonShiftObserveSnr01TrackModelReady"
 registers = ["r3", "r29", "r30"]
 
 [[midasm_hook]]
+address = 0x8243669C
+name = "PinyonShiftObserveSnr01TrackDescriptor"
+registers = ["r19", "r24", "r25", "r26", "r28", "r30"]
+
+[[midasm_hook]]
 address = 0x82437048
 name = "PinyonShiftObserveSnr01TrackModelEnd"
 

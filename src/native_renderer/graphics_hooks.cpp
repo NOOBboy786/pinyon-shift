@@ -2387,6 +2387,31 @@ void PinyonShiftObserveSnr01TrackModelReady(PPCRegister& r3,
       SnrM02ReadU32(runtime));
 }
 
+void PinyonShiftObserveSnr01TrackDescriptor(
+    PPCRegister& r19, PPCRegister& r24, PPCRegister& r25,
+    PPCRegister& r26, PPCRegister& r28, PPCRegister& r30) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      !Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint32_t parent = SnrM02ReadU32(r30.u32 + 4);
+  const uint32_t model_root = parent ? SnrM02ReadU32(parent + 48) : 0;
+  const uint32_t table = SnrM02ReadU32(r19.u32 + 40);
+  REXGPU_INFO("FH1 SNR01 track descriptor {{\"frame\":{},"
+              "\"resource\":{},\"parent\":{},\"model_root\":{},"
+              "\"container\":{},\"gate_word8\":{},\"table\":{},"
+              "\"selector_a\":{},\"selector_b\":{},\"index\":{},"
+              "\"state\":{},\"descriptor\":{},"
+              "\"state_descriptor\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              r30.u32, parent, model_root, r19.u32,
+              SnrM02ReadU32(r19.u32 + 8) >> 16, table,
+              r24.u32, r26.u32, r28.u32, r25.u32,
+              table ? SnrM02ReadU32(table + 4 * r28.u32) : 0,
+              SnrM02ReadU32(r25.u32 + 1200));
+}
+
 void PinyonShiftObserveSnr01TrackModelEnd() {
   if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0 &&
       Snr01TraceCurrentFrame()) {

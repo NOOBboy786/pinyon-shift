@@ -312,3 +312,45 @@ The next SNR-02 trace must identify the parent/runtime object's mesh and
 material choice at the resulting draw, and establish a true generation or
 allocation lifetime across release and reload. Until then, pointer plus
 cached version is a diagnostic identity only, not an immutable-scene key.
+
+## Track-model descriptor selection reaches selected draws
+
+Generated `sub_824365B0` reads the selected instance's parent at offset 4,
+then the parent's model root at offset 48. Its container is model root +128.
+After a nonzero halfword check at container +8, it calculates the table index
+as `selector_a * 3 + selector_b`, reads the descriptor pointer from the table
+at container +40, and passes that pointer to `sub_82439868`. The latter
+writes it to the render-state object at offset 1200. The halfword is only a
+nonzero gate: it was 1 on all 312 observed calls while indices reached 18,
+so it is not the table length.
+
+A default-off hook at `0x8243669C`, immediately after that state write, logs
+the parent, model root, table, selectors, index, descriptor and state field
+for the selected source frame. The first RelWithDebInfo capture used executable
+SHA-256 `819DBE39AF136AC0556DBD87A5126048E2B3AC292172FA66CDE98B9AB893A05E`
+and the saved sustained-race route exited normally with seven compatibility
+captures. The process-filtered log at
+`.local/native-renderer/snr02/track-descriptor-run-a-filtered.log` has SHA-256
+`71566B1A275D67BCB93D2482960ED1D74CC0C1B9D780762A38D9D04C49C3F801`;
+its strict frame-wide ledger has SHA-256
+`CBE3AAAE40E50EA5642D37E29B770CF507FAE7BFF34E4ECDE3B96B751205C729`.
+The log calls the nonzero gate `count`; the hook now names it `gate_word8`
+after the observed indices disproved the count interpretation. The verifier
+accepts both field names and the corrected source builds with executable
+SHA-256 `A1B775FAF18FD64D7BDDB3077315BF4DDA1C5FA96996A70478FF2D9D3DE3ACAF`.
+
+For source frame 6000, the strict frame-wide census and the
+`--require-track-descriptor` resource join pass. All 312 track-descriptor
+events match the parent at the ready check, the calculated selector index,
+the parent-root/container relationship and the state field. The 119 selected
+track packets carry 86 distinct descriptor pointers and join all 580 track
+candidate draws (550 on color `00030000`, 30 on `000C0000`). The other 46
+shared-state packets and 138 candidate draws use the procedural-model caller;
+this descriptor hook does not cover that caller.
+
+This establishes a title-owned selected descriptor *pointer* for this track
+caller and its exact packet/draw join. It does not yet identify the
+descriptor's mesh ranges, material/texture roles, transform or resource
+generation. The next trace must follow the descriptor through its submission
+routine to authoritative geometry and material objects, and independently
+resolve the procedural-model caller.
