@@ -2,21 +2,18 @@ diff --git a/src/graphics/d3d12/command_processor.cpp b/src/graphics/d3d12/comma
 index 2916251..bb34190 100644
 --- a/src/graphics/d3d12/command_processor.cpp
 +++ b/src/graphics/d3d12/command_processor.cpp
-@@ -2745,6 +2745,18 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
+@@ -2721,8 +2721,14 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
        if (memexport_total_size != 0) {
          PROFILE_MEMEXPORT_BYTES(memexport_total_size);
          if (REXCVAR_GET(readback_memexport_fast)) {
-+          // On AMD RDNA and Intel Arc hardware, insert an explicit UAV execution
-+          // barrier on shared memory before fast-path readback to ensure pipeline
-+          // write-visibility without forcing a full CPU synchronous fallback.
-+          const uint32_t vendor_id = GetGpuVendorId();
-+          if (vendor_id == 0x1002 /* AMD */ || vendor_id == 0x8086 /* Intel */) {
-+            D3D12_RESOURCE_BARRIER uav_barrier = {};
-+            uav_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-+            uav_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-+            uav_barrier.UAV.pResource = GetSharedMemoryResource();
-+            command_list->ResourceBarrier(1, &uav_barrier);
++          const auto vendor_id = GetD3D12Provider().GetAdapterVendorID();
++          if (vendor_id == ui::GraphicsProvider::GpuVendorID::kAMD ||
++              vendor_id == ui::GraphicsProvider::GpuVendorID::kIntel) {
++            PushUAVBarrier(shared_memory_->GetBuffer());
++            SubmitBarriers();
 +          }
            IssueDraw_MemexportReadbackFastPath(memexport_total_size);
          } else {
            IssueDraw_MemexportReadbackFullPath(memexport_total_size);
+         }
+       }
