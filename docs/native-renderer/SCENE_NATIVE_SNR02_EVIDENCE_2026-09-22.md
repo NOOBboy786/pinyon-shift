@@ -747,3 +747,28 @@ python tools/verify-snr02-item-payload.py `
 The result is a complete bounded **title record payload join** for one
 selected family, not yet its GPU geometry/material map or admission to the
 private renderer.
+
+The same process log also contains prepared vertex and texture fetches for
+backend frame 6001. The verifier now joins every one of the 308 selected
+draws by ordinal, execution and packet to those fetches and to its title
+item call. Each draw has one fetch-95 vertex stream, 10 words per vertex,
+with a reported length equal to its draw vertex count times 10 words. The
+174 calls resolve to 174 distinct guest base/length ranges; repeated draws
+of a call use one range. All selected draws have no explicit index buffer
+and use guest primitive 13. The observed raw kind-to-prepared-footprint map
+is:
+
+| Title kind | Draws | Vertex shader | Pixel shader | Texture fetches (slot, raw format) |
+| --- | ---: | --- | --- | --- |
+| 0 | 272 | `3BC346726C1C2535` | `9584B309533EF6C9` | (0, 20) |
+| 1 | 6 | `BDFD2AD68464101A` | `9584B309533EF6C9` | (0, 20) |
+| 4 | 17 | `CB8AC98467C0C283` | `F2A369E97366ADFA` | (0, 20), (13, 6) |
+| 5 | 13 | `A715C815EDB8EEE8` | `F2A369E97366ADFA` | (0, 20), (13, 6) |
+
+This is a title call → prepared geometry/fetch relationship, not a semantic
+material map. The prepared vertex records have no CPU byte snapshot for
+these draws. The existing SDK `geometry_range` helper bounds an owned GPU
+geometry import for the kind-0 shader when its layered-root conditions hold,
+but this capture does not prove those conditions or immutable bytes for all
+four kinds. Texture bytes, source material ownership and resource generations
+remain open.
