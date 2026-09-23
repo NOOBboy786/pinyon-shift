@@ -21,7 +21,9 @@ def verify(path, log_path):
         position += size
         return value
 
-    assert take("<8s")[0] == b"SNR03F1\0"
+    magic = take("<8s")[0]
+    assert magic in (b"SNR03F1\0", b"SNR03F2\0")
+    extended = magic == b"SNR03F2\0"
     source_frame, view, camera, count = take("<QIII")
     assert 0 < count <= 512
     camera80 = take("<16I")
@@ -38,13 +40,17 @@ def verify(path, log_path):
         assert guest_count * 4 == byte_count
         constants = take("<96I")
         assert len(constants) == 96
+        pixel_registers = take("<3I") if extended else ()
+        pixel_constants = take("<12I") if extended else ()
+        if extended:
+            assert 0 <= pixel_registers[0] < pixel_registers[1] < pixel_registers[2] < 256
         assert position + byte_count <= len(data), "truncated vertex bytes"
         vertices = data[position:position + byte_count]
         position += byte_count
         variants = {}
         for _ in range(variant_count):
             dynamic = take("<Q")[0]
-            system = take("<40I")
+            system = take("<64I" if extended else "<40I")
             fetch = take("<4I")
             assert dynamic not in variants
             assert fetch[2] & 0x1FFFFFFC == address & 0x1FFFFFFC
@@ -55,7 +61,9 @@ def verify(path, log_path):
                           vertex_descriptor=descriptor, vertex_address=address,
                           vertex_size=size, packet_physical=packet,
                           bucket_entry=bucket, vertex_sha256=hashlib.sha256(vertices).hexdigest(),
-                          variants=len(variants), constants=constants))
+                          variants=len(variants), constants=constants,
+                          pixel_registers=pixel_registers,
+                          pixel_constants=pixel_constants))
         total_bytes += byte_count
         total_variants += variant_count
     assert position == len(data), "trailing fixture bytes"
@@ -86,6 +94,27 @@ def verify(path, log_path):
             raw = constants[0x4000 + register * 4]
             assert words[index * 4:index * 4 + 4] == tuple(
                 int(raw[i:i + 8], 16) for i in range(0, 32, 8))
+        if extended:
+            item = by_packet[row["packet_physical"]]
+            for index, register in enumerate(item["pixel_registers"]):
+                raw = constants[0x4000 + (256 + register) * 4]
+                assert item["pixel_constants"][index * 4:index * 4 + 4] == tuple(
+                    int(raw[i:i + 8], 16) for i in range(0, 32, 8))
+    if extended:
+        pixel_rows = [json.loads(line.split("FH1 SNR03 pixel constant ", 1)[1])
+                      for line in lines if "FH1 SNR03 pixel constant {" in line]
+        expected_pixels = {
+            (item["packet_physical"], register):
+            item["pixel_constants"][index * 4:index * 4 + 4]
+            for item in items
+            for index, register in enumerate(item["pixel_registers"])
+        }
+        assert len(pixel_rows) == len(expected_pixels) == 3 * count
+        for row in pixel_rows:
+            assert row["frame"] == source_frame + 1
+            assert tuple(row["words"]) == expected_pixels.pop(
+                (row["packet"], row["register"]))
+        assert not expected_pixels
     final = [json.loads(line.split("FH1 SNR03 final draw state ", 1)[1])
              for line in lines if "FH1 SNR03 final draw state {" in line]
     assert len(final) == len(states)
@@ -94,6 +123,8 @@ def verify(path, log_path):
         system, fetch = states[row["packet"], row["dynamic"]]
         assert system[:8] == tuple(row["system0"] + row["system1"])
         assert system[32:40] == tuple(row["system8"] + row["system9"])
+        if extended:
+            assert system[56:64] == tuple(row["system14"] + row["system15"])
         assert fetch == tuple(row["fetch47"])
     rows = [json.loads(line.split("FH1 SNR03 camera row ", 1)[1])
             for line in lines if "FH1 SNR03 camera row {" in line]
@@ -109,7 +140,8 @@ def verify(path, log_path):
         f"bytes={total_bytes}", f"final_variants={total_variants}"))
     assert any(f"FH1 SNR03 fixture output_frame={source_frame + 1} written=true"
                in line for line in lines)
-    return dict(source_frame=source_frame, view=view, camera=camera,
+    return dict(schema=magic.decode("ascii").rstrip("\0"),
+                source_frame=source_frame, view=view, camera=camera,
                 items=count, vertex_bytes=total_bytes,
                 final_variants=total_variants,
                 fixture_sha256=hashlib.sha256(data).hexdigest())

@@ -7,6 +7,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import re
 import struct
 import traceback
 
@@ -46,6 +47,15 @@ try:
         "resource": str(pipeline.GetShader(rd.ShaderStage.Pixel)),
         "descriptor_indices": [cb3_words[2], cb3_words[5]],
         "disassembly_sha256": hashlib.sha256(disassembly.encode()).hexdigest(),
+    }
+    vertex_disassembly = replay.DisassembleShader(
+        pipeline.GetGraphicsPipelineObject(),
+        pipeline.GetShaderReflection(rd.ShaderStage.Vertex), "")
+    state["vertex_shader"] = {
+        "resource": str(pipeline.GetShader(rd.ShaderStage.Vertex)),
+        "system_vectors_read": sorted({int(index) for line in vertex_disassembly.splitlines()
+                                       if "dcl_constantbuffer" not in line
+                                       for index in re.findall(r"CB0\[(\d+)\]", line)}),
     }
     textures = {texture.resourceId: texture for texture in replay.GetTextures()}
     state["pixel_textures"] = []

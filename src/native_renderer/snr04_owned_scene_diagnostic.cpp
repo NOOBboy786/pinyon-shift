@@ -89,8 +89,10 @@ struct Item {
   uint32_t packet = 0;
   uint32_t vertex_count = 0;
   std::array<uint32_t, 96> constants{};
-  std::array<uint32_t, 40> system{};
-  std::array<uint32_t, 40> original_system{};
+  std::array<uint32_t, 3> pixel_registers{};
+  std::array<uint32_t, 12> pixel_constants{};
+  std::array<uint32_t, 64> system{};
+  std::array<uint32_t, 64> original_system{};
   std::array<uint32_t, 4> fetch{};
   std::vector<char> vertices;
 };
@@ -101,7 +103,10 @@ struct Scene {
 };
 Scene load_scene(std::span<const char> file) {
   Reader reader{file};
-  require(reader.take<std::array<char, 8>>() ==
+  const auto magic = reader.take<std::array<char, 8>>();
+  const bool extended = magic ==
+      std::array<char, 8>{'S', 'N', 'R', '0', '3', 'F', '2', '\0'};
+  require(extended || magic ==
               std::array<char, 8>{'S', 'N', 'R', '0', '3', 'F', '1', '\0'},
           "wrong fixture magic");
   Scene scene;
@@ -130,10 +135,24 @@ Scene load_scene(std::span<const char> file) {
                 (metadata[4] & 0x03FFFFFC) == byte_count,
             "unsupported owned geometry");
     item.constants = reader.take<std::array<uint32_t, 96>>();
+    if (extended) {
+      item.pixel_registers = reader.take<std::array<uint32_t, 3>>();
+      item.pixel_constants = reader.take<std::array<uint32_t, 12>>();
+      require(item.pixel_registers[0] < item.pixel_registers[1] &&
+                  item.pixel_registers[1] < item.pixel_registers[2] &&
+                  item.pixel_registers[2] < 256,
+              "invalid pixel constant registers");
+    }
     item.vertices = reader.bytes(byte_count);
     for (uint32_t variant = 0; variant < variant_count; ++variant) {
       reader.take<uint64_t>();  // Dynamic-state identity.
-      auto system = reader.take<std::array<uint32_t, 40>>();
+      std::array<uint32_t, 64> system{};
+      if (extended) {
+        system = reader.take<std::array<uint32_t, 64>>();
+      } else {
+        const auto old = reader.take<std::array<uint32_t, 40>>();
+        std::copy(old.begin(), old.end(), system.begin());
+      }
       auto fetch = reader.take<std::array<uint32_t, 4>>();
       require(!(system[0] & 1) && system[4] == 0 && system[5] == 0 &&
                   (fetch[2] & 0x1FFFFFFC) == (metadata[3] & 0x1FFFFFFC) &&
@@ -145,8 +164,9 @@ Scene load_scene(std::span<const char> file) {
       } else {
         require(fetch == item.fetch, "fetch changes across variants");
         for (size_t word = 0; word < system.size(); ++word)
-          require(system[word] == item.system[word] || word == 33 || word == 37,
-                  "non-viewport variant change");
+          require(system[word] == item.system[word] || word == 33 || word == 37 ||
+                      (extended && word >= 42 && word <= 45),
+                  "non-diagnostic variant change");
       }
     }
     auto bits = [](uint32_t word) { return std::bit_cast<float>(word); };

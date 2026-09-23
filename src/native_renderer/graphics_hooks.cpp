@@ -299,7 +299,7 @@ struct Snr03SceneSnapshot {
   std::vector<Snr03VegetationItem> items;
 };
 struct Snr03FinalState {
-  std::array<uint32_t, 40> system_constants;
+  std::array<uint32_t, 64> system_constants;
   std::array<uint32_t, 4> fetch_47;
   bool operator==(const Snr03FinalState&) const = default;
 };
@@ -307,6 +307,8 @@ struct Snr03PayloadState {
   struct Draw {
     std::vector<uint8_t> vertex_bytes;
     std::array<std::array<uint32_t, 4>, 24> vertex_constants;
+    std::array<uint32_t, 3> pixel_registers;
+    std::array<std::array<uint32_t, 4>, 3> pixel_constants;
     uint32_t guest_vertex_count;
     std::map<uint64_t, Snr03FinalState> final_states;
   };
@@ -318,6 +320,8 @@ struct Snr03OwnedItem {
   Snr03VegetationItem metadata;
   std::vector<uint8_t> vertex_bytes;
   std::array<std::array<uint32_t, 4>, 24> vertex_constants;
+  std::array<uint32_t, 3> pixel_registers;
+  std::array<std::array<uint32_t, 4>, 3> pixel_constants;
   uint32_t guest_vertex_count;
   std::map<uint64_t, Snr03FinalState> final_states;
 };
@@ -331,7 +335,7 @@ std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
     const auto* data = reinterpret_cast<const char*>(&value);
     bytes.insert(bytes.end(), data, data + sizeof(value));
   };
-  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '3', 'F', '1', '\0'};
+  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '3', 'F', '2', '\0'};
   write(magic);
   write(scene.title->source_frame);
   write(scene.title->view);
@@ -353,6 +357,8 @@ std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
     write(uint32_t(item.vertex_constants.size()));
     write(uint32_t(item.final_states.size()));
     write(item.vertex_constants);
+    write(item.pixel_registers);
+    write(item.pixel_constants);
     bytes.insert(bytes.end(), item.vertex_bytes.begin(), item.vertex_bytes.end());
     for (const auto& [dynamic, state] : item.final_states) {
       write(dynamic);
@@ -852,6 +858,8 @@ void ObserveSnr03VertexPayload(
       observation.index_count == 0 || observation.index_count % 4 != 0 ||
       observation.index_count * 4 != (item_it->vertex_size & 0x03FFFFFC) ||
       !observation.vertex_float_constant_words ||
+      !observation.pixel_float_constant_bitmap ||
+      observation.pixel_float_constant_count != 3 ||
       fetch[0].fetch_constant != 95 || fetch[0].stride_words != 4 ||
       fetch[0].guest_base != (item_it->vertex_address & 0x1FFFFFFC) ||
       fetch[0].length != (item_it->vertex_size & 0x03FFFFFC) ||
@@ -868,12 +876,33 @@ void ObserveSnr03VertexPayload(
                         kVertexConstants[i] * 4;
     std::copy_n(words, 4, draw.vertex_constants[i].begin());
   }
+  size_t pixel_count = 0;
+  for (uint32_t reg = 0; reg < 256; ++reg) {
+    if (!(observation.pixel_float_constant_bitmap[reg / 64] &
+          (uint64_t(1) << (reg % 64)))) {
+      continue;
+    }
+    if (pixel_count == draw.pixel_registers.size()) {
+      payload.rejected = true;
+      return;
+    }
+    draw.pixel_registers[pixel_count] = reg;
+    std::copy_n(observation.vertex_float_constant_words + (256 + reg) * 4, 4,
+                draw.pixel_constants[pixel_count].begin());
+    ++pixel_count;
+  }
+  if (pixel_count != draw.pixel_registers.size()) {
+    payload.rejected = true;
+    return;
+  }
   auto existing = payload.by_packet.find(packet);
   if (existing != payload.by_packet.end()) {
     if (existing->second.vertex_bytes.size() != fetch[0].length ||
         !std::equal(existing->second.vertex_bytes.begin(),
                     existing->second.vertex_bytes.end(), begin) ||
         existing->second.vertex_constants != draw.vertex_constants ||
+        existing->second.pixel_registers != draw.pixel_registers ||
+        existing->second.pixel_constants != draw.pixel_constants ||
         existing->second.guest_vertex_count != draw.guest_vertex_count) {
       payload.rejected = true;
     }
@@ -886,7 +915,14 @@ void ObserveSnr03VertexPayload(
   }
   payload.bytes += fetch[0].length;
   draw.vertex_bytes.assign(begin, begin + fetch[0].length);
-  payload.by_packet.emplace(packet, std::move(draw));
+  const auto& stored = payload.by_packet.emplace(packet, std::move(draw)).first->second;
+  for (size_t i = 0; i < stored.pixel_registers.size(); ++i) {
+    const auto& words = stored.pixel_constants[i];
+    REXGPU_INFO("FH1 SNR03 pixel constant {{\"frame\":{},\"packet\":{},"
+                "\"register\":{},\"words\":[{},{},{},{}]}}",
+                observation.frame_sequence, packet, stored.pixel_registers[i],
+                words[0], words[1], words[2], words[3]);
+  }
 }
 
 void ObserveSnr03FinalDrawState(
@@ -910,7 +946,7 @@ void ObserveSnr03FinalDrawState(
   auto& payload = snr03_payloads[uint64_t(target)];
   const auto draw = payload.by_packet.find(item->packet_physical);
   if (draw == payload.by_packet.end() || !observation.system_constant_words ||
-      observation.system_constant_word_count < 40 ||
+      observation.system_constant_word_count < 64 ||
       !observation.fetch_47_words) {
     payload.rejected = true;
     return;
@@ -939,6 +975,7 @@ void ObserveSnr03FinalDrawState(
               "\"dynamic\":\"{:016X}\","
               "\"system0\":[{},{},{},{}],\"system1\":[{},{},{},{}],"
               "\"system8\":[{},{},{},{}],\"system9\":[{},{},{},{}],"
+              "\"system14\":[{},{},{},{}],\"system15\":[{},{},{},{}],"
               "\"fetch47\":[{},{},{},{}]}}",
               observation.frame_sequence, item->packet_physical,
               observation.dynamic_state,
@@ -946,6 +983,8 @@ void ObserveSnr03FinalDrawState(
               system[4], system[5], system[6], system[7],
               system[32], system[33], system[34], system[35],
               system[36], system[37], system[38], system[39],
+              system[56], system[57], system[58], system[59],
+              system[60], system[61], system[62], system[63],
               fetch[0], fetch[1], fetch[2], fetch[3]);
 }
 
@@ -1328,6 +1367,13 @@ void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {
         fingerprint = (fingerprint ^ word) * 1099511628211ull;
       }
     }
+    for (size_t i = 0; i < it->second.pixel_registers.size(); ++i) {
+      fingerprint = (fingerprint ^ it->second.pixel_registers[i]) *
+                    1099511628211ull;
+      for (const uint32_t word : it->second.pixel_constants[i]) {
+        fingerprint = (fingerprint ^ word) * 1099511628211ull;
+      }
+    }
     fingerprint = (fingerprint ^ it->second.guest_vertex_count) * 1099511628211ull;
     final_variants += it->second.final_states.size();
     for (const auto& [dynamic, state] : it->second.final_states) {
@@ -1341,13 +1387,16 @@ void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {
     }
     owned_builder.items.push_back({item, std::move(it->second.vertex_bytes),
                                    it->second.vertex_constants,
+                                   it->second.pixel_registers,
+                                   it->second.pixel_constants,
                                    it->second.guest_vertex_count,
                                    std::move(it->second.final_states)});
   }
   std::shared_ptr<const Snr03OwnedScene> owned =
       std::make_shared<Snr03OwnedScene>(std::move(owned_builder));
   REXGPU_INFO("FH1 SNR03 geometry consumed output_frame={} source_frame={} "
-              "items={} bytes={} draw_constants=24 system_words=40 "
+              "items={} bytes={} vertex_constants=24 pixel_constants=3 "
+              "system_words=64 "
               "fetch_words=4 final_variants={} fingerprint={}", output_frame,
               owned->title->source_frame, owned->items.size(), payload.bytes,
               final_variants, fingerprint);

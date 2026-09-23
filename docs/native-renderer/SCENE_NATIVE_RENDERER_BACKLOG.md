@@ -329,7 +329,10 @@ The captured 0–0.5 viewport depth range is now reproduced in the private
 raster, and one draw has a bounded sample-0 before/after depth comparison.
 The private diagnostic now runs on the exact output-frame callback and writes
 identity/depth readbacks without changing compatibility output; two replays
-exited with all seven compatibility captures. Full compatibility
+exited with all seven compatibility captures. A later `SNR03F2` replay also
+owned three shader-selected pixel float registers and 64 final system words
+per variant; its fixture and live/private outputs passed the bounded checks.
+Full compatibility
 coverage/depth parity, unload/reload and complete main-view ownership remain
 open.
 

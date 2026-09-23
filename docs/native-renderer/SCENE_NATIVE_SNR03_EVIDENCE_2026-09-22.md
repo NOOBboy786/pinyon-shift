@@ -187,8 +187,8 @@ native identity/depth output and full-resolution comparisons remain open.
 
 The prepared-draw callback precedes `UpdateSystemConstantValues`, so its
 vertex constant copy cannot own the SDK's final clip/viewport state. A second
-read-only callback now runs immediately after that update. For the selected
-vegetation packets it copies the first 40 system words and the four fetch-47
+read-only callback now runs immediately after that update. The initial
+vegetation probe copied the first 40 system words and the four fetch-47
 words into the bounded output-frame scene. The words are borrowed only during
 the callback; the scene holds its own copies and includes them in its
 fingerprint.
@@ -519,7 +519,7 @@ diagnostic costs, not a production bridge or suppression path.
 
 The output callback now serializes its immutable `Snr03OwnedScene` once and
 passes those bytes directly to the private renderer. The same bytes are
-written as a separate `SNR03F1` fixture for verification; the fixture-write
+written as a separate fixture for verification; the fixture-write
 result no longer gates the in-memory diagnostic call.
 The standalone executable retains its file-path entry point. Neither path
 rereads mutable guest state at the later output callback.
@@ -652,7 +652,7 @@ shader constants and the sampled depth state.
 
 The expanded probe result is
 `.local/native-renderer/snr04/vegetation-texture-shader-11206.json`
-(SHA-256 `F2B8D2FD7DC6AEDB6CF5D53C9363DE09DEDF97B4EC7C78F1A328F7FF5B755600`)
+(SHA-256 `7FE0C6D4E4DCB33C70B67F32CA8227B5737D0EAAC0137A20A7E275D9255D251A`)
 with sibling `.dxbc.txt`.
 
 Recheck the binding census and capture chain:
@@ -671,4 +671,59 @@ $env:SNR04_EVENT = '11206'
 ```
 
 The checked JSON has SHA-256
-`2CE8E4D7E6C660C95B40733FB74C25C458AB9011CE30A6DA0713F45D026E49AC`.
+`7FE0C6D4E4DCB33C70B67F32CA8227B5737D0EAAC0137A20A7E275D9255D251A`.
+
+## Same-frame pixel constants and extended final state
+
+The selected prepared-draw observer now exposes the pixel shader's float
+register bitmap without copying guest state after the callback. For this
+shader it selects exactly three pixel registers: 0, 221 and 255. SNR-03 owns
+their 12 words per packet, rejects a repeat with different values, and joins
+the values to the independent `FH1 scene binding` register log. The final
+draw-state callback owns 64 system words per dynamic variant, including
+pixel-system vectors 14 and 15. `SNR03F2` serializes those fields; the
+standalone diagnostic and fixture verifier still read historical `SNR03F1`.
+
+In the first `SNR03F2` replay, the private identity diagnostic rejected
+variants that also differ at system words 42–45. Those values are retained
+for every variant in the fixture. The current unmasked identity pass accepts
+that bounded difference because the matched vertex shader disassembly reads
+only system vectors 0, 1, 8 and 9, as the probe result above records; it
+still rejects changes outside words 33, 37 and 42–45.
+This acceptance applies only to the identity diagnostic, not a future pixel
+shader or coverage-parity result.
+
+With RelWithDebInfo executable SHA-256
+`51D3F22A54750D45EB52776ECE813192BE7A9EA3253E2D842B5E96AAA4ABB964`,
+the next AppData-backed sustained-race replay exited normally with seven
+compatibility captures. At output frame 6001 it consumed source frame 6000,
+wrote a 67-item, 122-variant `SNR03F2` fixture (SHA-256
+`B770E2B9006582085B203ED1EBA1BCF83B1F1C31A41920CB47E97CB107814F35`)
+and rendered 405,631 unmasked private identity pixels. The fixture verifier
+passed all 67 packet joins, all three pixel registers against prepared draw
+bindings, and all final-state words logged for vectors 14 and 15. The local
+ordered signal log is
+`.local/native-renderer/snr04/pixel-constants-run-b-signal.log` (SHA-256
+`53869EB45C28FFDD583EC44651B39520F5ED0E3614333A651A9A989E80C6C38F`).
+A standalone replay of that exact fixture produced byte-identical identity,
+depth and post-VS files, with SHA-256 respectively
+`D7F94D8920A758BA06A457C18D3491146DDC8142A34B8A0C7D0FCC39265A4249`,
+`06620ED19ADB21AB295FFF9BBF81A6EB40511E06F059E0431D258F93A88EA966`,
+and `E14585444AEF1DA75C55938A403E469298685DD34D202FE3D23322B266F8DCD1`.
+The older `SNR03F1` fixture also replays with the previous identity hash.
+
+Recheck the new fixture and standalone renderer with:
+
+```powershell
+python tools/verify-snr03-scene-fixture.py `
+  .local/native-renderer/snr04/pixel-constants-run-b/snr03-scene-6000.bin `
+  .local/native-renderer/snr04/pixel-constants-run-b-signal.log
+.\out\build\win-amd64-relwithdebinfo\pinyon_shift_snr04_owned_scene_diagnostic.exe `
+  .local/native-renderer/snr04/pixel-constants-run-b/snr03-scene-6000.bin `
+  .local/native-renderer/seeded-probe/translation/dxil/vertex_5834939992FFC765_000000000000001F.dxil `
+  .local/native-renderer/snr04/pixel-constants-run-b-standalone-verify
+```
+
+The private raster still uses an identity pixel shader and samples neither
+texture. These captured constants are required input for a later pixel/depth
+comparison, not evidence of alpha coverage or full selected-slice ownership.
