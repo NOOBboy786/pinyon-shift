@@ -109,7 +109,7 @@ composable passes.
 | Joined source in this frame | Prepared draws | Color word(s) | Cut status |
 | --- | ---: | --- | --- |
 | View-8 scene lists with `CCarPresentation` / `CCarModel` owner | 636 / 431 | `000C0000` | Candidate, pending per-item geometry/material/lifetime |
-| View-8 scene lists with one untyped retained state owner | 893 | 865 on `00030000`, 28 on `000C0000` | Candidate boundary only; owner semantics open |
+| View-8 scene lists with one shared procedural state | 893 | 865 on `00030000`, 28 on `000C0000` | Candidate boundary only; per-list model/material ownership open |
 | Character-manager direct records / procedural item-node packets | 261 / 170 | `000C0000` / `00030000` | Candidate, pending material/resource generations |
 | Other semantic / scalar direct packets | 147 / 121 | `000C0000` / both | Mixed, cannot assign wholly to native slice |
 | `CRealtimeSky` / `CStandardParticleRenderer` / race-line / view strip | 9 / 6 / 3 / 3 | Both / `000C0000` | Retain pending exact bridge and composition |
@@ -127,9 +127,12 @@ handoff or native replacement at each required point before any suppression.
 The table is a draw provenance and ordering check, not a removable-cost
 estimate: it provides no GPU duration per semantic family and does not
 establish the untyped owner's material or the scalar packets' contents.
-All 893 untyped-owner draws share one captured owner pointer, first word
-`0xBF0C2E94`, and flush return site `0x824170BC`; resolving that state
-object and its selected list entries is the largest remaining owner join.
+All 893 draws share one state pointer, first word `0xBF0C2E94`, and flush
+return site `0x824170BC`. Its address equals the argument to the
+`CProceduralModels` dispatch plus the title-code offset `0xE940` in this
+frame. The 95 distinct list objects under that state still need exact
+model, geometry and material joins; see the
+[state provenance](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#shared-procedural-state-behind-the-largest-view-8-scene-list-family).
 Recompute it from
 `.local/native-renderer/snr01/clear-complete-run-a-ledger.json` using
 `classification`, `owner_first_word`, `title_packet_caller_lr`, `target`

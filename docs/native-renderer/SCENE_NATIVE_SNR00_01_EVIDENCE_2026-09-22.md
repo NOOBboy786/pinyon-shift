@@ -3124,3 +3124,58 @@ python tools/summarize-snr01-frame-wide-census.py `
 The candidate view/pass boundary is stronger now, but SNR-00/01 remain open:
 the complete selected-slice owner → geometry/material/lifetime joins,
 retained-pass consumers and full same-frame diagnostic are not yet proved.
+
+### Shared procedural state behind the largest view-8 scene-list family
+
+The same process-bounded replay already contains `second track dispatch`
+records. In source frame 6000, 69 calls target `sub_82417BC0`, the verified
+slot-41 method of `proceduralGeometry::CProceduralModels`. Every call passes
+`0x42030010` in `r6`. The generated method stores entry `r6`, forms
+`r24 = r6 + 0xE940`, then calls `sub_82417060` with `r24` at return sites
+`0x82418A28` and `0x82418ECC`. The helper's scene-list flush has return
+site `0x824170BC`. This is a title-code relationship, not a guessed
+offset from nearby allocations.
+
+In the frame-wide ledger, all 893 candidate scene-list draws with that
+flush return site have owner `0x4203E950`, exactly
+`0x42030010 + 0xE940`. They derive from 226 source-frame-6000 title scene
+packets on 95 distinct list objects, each with a one-node indirect list.
+The retained owner's first word `0xBF0C2E94` is not a vtable; it varies
+in other views.
+This identifies the common procedural *state* behind the largest untyped
+draw family. It does not assign those 95 lists to model instances or prove
+that every state user is a `CProceduralModels` object: other generated
+functions also call `sub_82417060`. The next required join is the writer
+of each list and its selected model/geometry/material generation.
+
+Recheck the same-frame runtime relationship from the saved log and ledger:
+
+```powershell
+@'
+import json
+from pathlib import Path
+log = Path('.local/native-renderer/snr01/clear-complete-run-a-session-filtered.log')
+ledger = json.loads(Path('.local/native-renderer/snr01/clear-complete-run-a-ledger.json').read_text())
+model = []
+packets = []
+for line in log.open(encoding='utf8'):
+    if 'FH1 SNR01 second track dispatch ' in line:
+        row = json.loads(line[line.index('{'):])
+        if row['frame'] == 6000 and row['target'] == 0x82417bc0:
+            model.append(row)
+    elif 'FH1 SNR01 scene indirect packet ' in line:
+        row = json.loads(line[line.index('{'):])
+        if row['frame'] == 6000 and row['view_call'] == 8 and row['flush_owner'] == 0x4203e950:
+            packets.append(row)
+draws = [row for row in ledger['draws'] if row['target'].startswith('14020500/')
+         and row['classification'] == 'view_owner' and row['flush_caller_lr'] == 0x824170bc]
+assert len(model) == 69 and len(packets) == 226 and len(draws) == 893
+assert {row['arg6'] for row in model} == {0x42030010}
+assert {row['owner'] for row in draws} == {0x4203e950}
+assert {row['owner'] for row in draws} == {row['arg6'] + 0xe940 for row in model}
+assert len({row['list_object'] for row in packets}) == 95
+assert {row['node_count'] for row in packets} == {1}
+assert {row['target_physical'] for row in packets} == {
+    row['execution_command_buffer'] for row in draws}
+'@ | python -
+```
