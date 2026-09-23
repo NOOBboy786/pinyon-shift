@@ -321,16 +321,60 @@ identical positions at all four vertices. The one nondegenerate quad (index
 32) maps to triangle indices `(0,1,3)` and `(1,2,3)` by exact post-VS/post-GS
 position bytes. The local output is
 `.local/native-renderer/snr04/quad-evidence.json` (SHA-256
-`080059C3196D8F60FB97BB57D979994467F6AAA0579C9DDE3AB07D5203C3DF79`).
+`11BFE090D48E1ED69D0FE35383A295820502B0FA35235DF19C5BD5AD80F803FE`).
 
 `tools/check-snr04-renderdoc-quad.py` reproduces the check when run through
 the bundled qrenderdoc Python host with `SNR04_CAPTURE` set to that capture,
 `SNR04_EVENT=27072`, and `SNR04_OUTPUT` set to a local JSON path. It checks
 the bytecode hash, topology, counts and every nondegenerate quad; event 495
-is rejected as a wrong shader. This establishes the compatibility renderer's
+is rejected as a wrong shader. The same draw has depth writes with
+`GreaterEqual`, so the private diagnostic clears depth to zero and uses that
+comparison. This establishes the compatibility renderer's
 quad decomposition for that shader. The old capture is at a different frame
 from source frame 6000, so it does not yet establish same-frame post-VS,
 coverage or depth parity for the owned fixture.
+
+## Offline full-resolution private diagnostic
+
+`pinyon_shift_snr04_owned_scene_diagnostic` replays the verified frame-6000
+fixture through the exact SHA-checked vertex shader into private 1280×720
+RGBA identity and D32 depth targets. It rebases fetch 95 onto each owned raw
+buffer, uploads the first 23 catalog-mapped float vectors, uses one system
+variant after validating that alternatives differ only in viewport Y words,
+normalizes that viewport to 1280×720, and indexes each guest quad as
+`(0,1,3)` and `(1,2,3)`. It waits for a GPU fence before readback. No game
+output, save, or compatibility command list is involved.
+
+```powershell
+. .\tools\release-common.ps1
+$toolchain = Enter-PinyonBuildEnvironment
+& $toolchain.CMake --build --preset win-amd64-relwithdebinfo `
+  --target pinyon_shift_snr04_owned_scene_diagnostic
+& .\out\build\win-amd64-relwithdebinfo\pinyon_shift_snr04_owned_scene_diagnostic.exe `
+  .local/native-renderer/snr03/scene-fixture-run-a/snr03-scene-6000.bin `
+  .local/native-renderer/seeded-probe/translation/dxil/vertex_5834939992FFC765_000000000000001F.dxil `
+  .local/native-renderer/snr04/offline-run-c
+```
+
+Two runs produced identical `identity.ppm` (SHA-256
+`25646AAA945A80247094F22A669AE0F491876929EE0BEEB7E59CC3CBBE545695`)
+and `depth.f32` (SHA-256
+`303BE45E177947B389844653FD01BE67155BD775AFB5704F8709FC1DF55E26B0`).
+All 67 packets were drawn; 410,331 pixels have a packet identity and 39
+packets own at least one pixel. The remaining 28 may be offscreen or occluded;
+zero final pixels is not evidence of unsupported geometry. The local summary
+records per-packet pixel counts and one run's extraction 3.6 ms, resource and
+pipeline build 290 ms, submit/fence/readback 55.7 ms and file write 44.3 ms.
+These are cold standalone diagnostic costs, not frame-time or FPS results.
+The executable rejects a truncated fixture and incorrect VS bytecode.
+
+The identity image covers large billboard rectangles over scene regions where
+the presented image is transparent. The diagnostic does not sample foliage
+alpha textures or reproduce the compatibility pixel shader, so its pixels
+cannot be compared directly to the presented color as visible foliage. This
+is a working GPU proof of owned vertex/state binding and private full-size
+identity/depth readback, not same-frame parity, live callback integration, or
+complete selected-slice coverage. Those SNR-04 admission gates remain open.
 
 ## Title camera to selected draw-state join
 

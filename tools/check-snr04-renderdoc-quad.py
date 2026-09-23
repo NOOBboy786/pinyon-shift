@@ -36,6 +36,9 @@ def inspect(capture, event):
         vs_hash = hashlib.sha256(bytes(shader.rawBytes)).hexdigest()
         assert vs_hash == EXPECTED_VS, vs_hash
         assert pipeline.GetPrimitiveTopology() == rd.Topology.LineList_Adj
+        depth_state = pipeline.GetDepthTestState()
+        assert depth_state.depthEnable and depth_state.depthWrites
+        assert depth_state.depthFunction == rd.CompareFunction.GreaterEqual
 
         positions = {}
         counts = {}
@@ -73,6 +76,7 @@ def inspect(capture, event):
                        for value in positions["vs"][quad * 4:quad * 4 + 4]]
         return dict(valid=True, event=event, vs_sha256=vs_hash,
                     topology=str(pipeline.GetPrimitiveTopology()),
+                    depth_test=str(depth_state.depthFunction),
                     vs_vertices=counts["vs"], gs_vertices=counts["gs"],
                     degenerate_quads=40 - len(observed),
                     nondegenerate_quads=[quad for quad, _ in observed],

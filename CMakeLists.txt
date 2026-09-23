@@ -78,6 +78,10 @@ if(WIN32)
     add_executable(pinyon_shift_fh1_owned_geometry_tests EXCLUDE_FROM_ALL
         tests/native_renderer/fh1_owned_geometry_test.cpp)
     target_link_libraries(pinyon_shift_fh1_owned_geometry_tests PRIVATE d3d12 dxgi)
+    add_executable(pinyon_shift_snr04_owned_scene_diagnostic EXCLUDE_FROM_ALL
+        tests/native_renderer/snr04_owned_scene_diagnostic.cpp)
+    target_link_libraries(pinyon_shift_snr04_owned_scene_diagnostic PRIVATE
+        bcrypt d3d12 d3dcompiler dxgi)
 endif()
 
 add_executable(pinyon_shift_fh1_archive_extract EXCLUDE_FROM_ALL
