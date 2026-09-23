@@ -23,11 +23,13 @@ def main():
     parser.add_argument("ledger", type=Path)
     parser.add_argument("--source-frame", type=int, required=True)
     parser.add_argument("--require-track-descriptor", action="store_true")
+    parser.add_argument("--require-track-descriptor-words", action="store_true")
     args = parser.parse_args()
 
     model, track, packets = {}, {}, {}
     track_descriptors = {}
     selected_descriptors = set()
+    matched_track_targets = 0
     resources = collections.defaultdict(set)
     for line in args.log.open(encoding="utf-8"):
         if "FH1 SNR01 " not in line or "{" not in line:
@@ -72,7 +74,7 @@ def main():
             assert row["index"] == row["selector_a"] * 3 + row["selector_b"]
             assert row["state"] == scope["state_base"] + 0xE940
             assert row["descriptor"] == row["state_descriptor"]
-            track_descriptors[thread] = row["descriptor"]
+            track_descriptors[thread] = row
         elif "FH1 SNR01 track model end " in line:
             track.pop(thread)
             track_descriptors.pop(thread, None)
@@ -86,8 +88,13 @@ def main():
             if track_selected:
                 scope, selected = track[thread]
                 path, state = "track", scope["state_base"]
-                if args.require_track_descriptor:
-                    selected_descriptors.add(track_descriptors[thread])
+                if args.require_track_descriptor or args.require_track_descriptor_words:
+                    selected_descriptors.add(track_descriptors[thread]["descriptor"])
+                if args.require_track_descriptor_words:
+                    words = track_descriptors[thread]["words"]
+                    assert len(words) == 8
+                    assert words[4] & 0x1FFFFFFF == row["target_physical"]
+                    matched_track_targets += 1
             else:
                 scope, selected = model[thread]
                 path, state = "model", scope["arg6"]
@@ -96,7 +103,8 @@ def main():
             assert key not in packets
             packets[key] = (path, selected["resource"], row,
                             cached_version(selected),
-                            track_descriptors.get(thread) if path == "track" else None)
+                            track_descriptors[thread]["descriptor"]
+                            if path == "track" and thread in track_descriptors else None)
             resources[path].add(selected["resource"])
     assert not model and not track and not track_descriptors and packets
 
@@ -122,7 +130,7 @@ def main():
             descriptor_draws += 1
         seen.add(key)
     assert seen == set(packets)
-    if args.require_track_descriptor:
+    if args.require_track_descriptor or args.require_track_descriptor_words:
         assert descriptor_draws == sum(count for (path, _), count in joined.items()
                                        if path == "track")
     print(json.dumps({
@@ -132,6 +140,7 @@ def main():
         "packets_by_path": dict(collections.Counter(path for path, *_ in packets.values())),
         "resources_by_path": {path: len(values) for path, values in resources.items()},
         "selected_track_descriptors": len(selected_descriptors),
+        "track_packets_with_matched_command_target": matched_track_targets,
         "draws_with_track_descriptor": descriptor_draws,
         "draws_by_path_and_color": {f"{path}:{color}": count
                                     for (path, color), count in sorted(joined.items())},

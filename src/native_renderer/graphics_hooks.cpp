@@ -2397,19 +2397,27 @@ void PinyonShiftObserveSnr01TrackDescriptor(
   const uint32_t parent = SnrM02ReadU32(r30.u32 + 4);
   const uint32_t model_root = parent ? SnrM02ReadU32(parent + 48) : 0;
   const uint32_t table = SnrM02ReadU32(r19.u32 + 40);
+  const uint32_t descriptor = table ? SnrM02ReadU32(table + 4 * r28.u32) : 0;
+  uint32_t words[8] = {};
+  if (descriptor) {
+    for (uint32_t i = 0; i < 8; ++i) {
+      words[i] = SnrM02ReadU32(descriptor + 4 * i);
+    }
+  }
   REXGPU_INFO("FH1 SNR01 track descriptor {{\"frame\":{},"
               "\"resource\":{},\"parent\":{},\"model_root\":{},"
               "\"container\":{},\"gate_word8\":{},\"table\":{},"
               "\"selector_a\":{},\"selector_b\":{},\"index\":{},"
               "\"state\":{},\"descriptor\":{},"
-              "\"state_descriptor\":{}}}",
+              "\"state_descriptor\":{},\"words\":[{},{},{},{},{},{},{},{}]}}",
               rex::perf::GetTotalCounter(
                   rex::perf::CounterId::kSourceFrameCount),
               r30.u32, parent, model_root, r19.u32,
               SnrM02ReadU32(r19.u32 + 8) >> 16, table,
               r24.u32, r26.u32, r28.u32, r25.u32,
-              table ? SnrM02ReadU32(table + 4 * r28.u32) : 0,
-              SnrM02ReadU32(r25.u32 + 1200));
+              descriptor, SnrM02ReadU32(r25.u32 + 1200),
+              words[0], words[1], words[2], words[3],
+              words[4], words[5], words[6], words[7]);
 }
 
 void PinyonShiftObserveSnr01TrackModelEnd() {

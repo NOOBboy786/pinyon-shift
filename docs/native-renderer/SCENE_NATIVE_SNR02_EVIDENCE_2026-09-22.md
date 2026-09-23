@@ -354,3 +354,33 @@ descriptor's mesh ranges, material/texture roles, transform or resource
 generation. The next trace must follow the descriptor through its submission
 routine to authoritative geometry and material objects, and independently
 resolve the procedural-model caller.
+
+### Descriptor is a command-list container
+
+The static consumer corrects the next-hop interpretation. At flush,
+`sub_82417060` reads state offset 1200, loads word 0 from that selected
+record and passes it to `sub_824167F8`. A source-frame-only extension of the
+descriptor probe captured its first eight words. The RelWithDebInfo executable
+SHA-256 was `0E794DA8594509CE045A9EA134141307C4BCD7208C921C43AD9A5046BFD31DE2`.
+The saved sustained-race route exited normally with seven compatibility
+captures. The process-filtered log at
+`.local/native-renderer/snr02/track-descriptor-words-run-a-filtered.log`
+has SHA-256
+`3D9AA9DBBCF927B3E95D636588CE83496B9BD2F92B8C6C0D02AA708075DCFCC3`;
+its strict source-frame-6000 ledger has SHA-256
+`D766EEC4098D06C3BDA1FE08BC84066F3E563B39C4AD66276E4B011C0F2E66C8`.
+
+The frame-wide census and
+`verify-snr01-state-resource-join.py --require-track-descriptor-words`
+pass. All 120 selected track packets have `descriptor.word4 & 0x1fffffff`
+equal to the packet's physical command-buffer target; those packets join all
+595 track candidate draws. They use 87 distinct selected descriptor pointers
+from 114 resource pointers. Across all 258 observed track-descriptor calls,
+word 0 equals word 3, words 1 and 5 are zero, and words 0, 2 and 4 are
+nonzero. These are observed layout facts, not field type declarations.
+
+The selected pointer is therefore a command-list container in this path,
+not an authoritative mesh/material identity. The next SNR-02 step must trace
+the nested traversal's geometry/material objects and command-list producer
+to the backend fetches and shaders. Treating this descriptor address as a
+mesh key would confuse submission storage with the underlying resource.
