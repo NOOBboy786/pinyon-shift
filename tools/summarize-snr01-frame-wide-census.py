@@ -404,6 +404,12 @@ def summarize(records, frames, backend_frame):
             "title_scalar_command": scalar_draw["command"] if scalar_draw else None,
             "title_scalar_outer_object": scalar_draw["outer_object"] if scalar_draw else None,
             "title_scalar_outer_first_word": scalar_draw["outer_first_word"] if scalar_draw else None,
+            "title_scalar_outer_field4": scalar_draw.get("outer_field4") if scalar_draw else None,
+            "title_scalar_outer_field12": scalar_draw.get("outer_field12") if scalar_draw else None,
+            "title_scalar_outer_field16": scalar_draw.get("outer_field16") if scalar_draw else None,
+            "title_scalar_field4_word0": scalar_draw.get("field4_word0") if scalar_draw else None,
+            "title_scalar_field12_word0": scalar_draw.get("field12_word0") if scalar_draw else None,
+            "title_scalar_field16_word0": scalar_draw.get("field16_word0") if scalar_draw else None,
             "title_scalar_selector": scalar_draw["selector"] if scalar_draw else None,
             "title_scalar_input_count": scalar_draw["input_count"] if scalar_draw else None,
             "title_scalar_bucket_entry": scalar_second_draw["bucket_entry"] if scalar_second_draw else None,
@@ -484,6 +490,7 @@ def main():
     parser.add_argument("--require-second-path", action="store_true")
     parser.add_argument("--require-scalar-draw", action="store_true")
     parser.add_argument("--require-animated-scalar", action="store_true")
+    parser.add_argument("--require-car-scalar-resources", action="store_true")
     parser.add_argument("--require-dynamic-quad", action="store_true")
     parser.add_argument("--title-image", type=Path)
     parser.add_argument("--require-candidate-boundary", action="store_true")
@@ -504,6 +511,8 @@ def main():
     if args.require_animated_scalar:
         assert records["scalar"] and records["second_draw"] and records["second_dispatch"], (
             "no animated scalar dispatch scopes")
+    if args.require_car_scalar_resources:
+        assert args.title_image and records["scalar"], "car resources need title image and scalar scopes"
     if args.require_dynamic_quad:
         assert (records["dynamic_quad"] and records["dynamic_quad_entry"]
                 and records["dynamic_quad_parent"]), (
@@ -524,6 +533,27 @@ def main():
                                 and r["title_scalar_dispatch_object"]
                                 and r["title_scalar_child_context"]
                                 for r in animated), "animated scalar draw lacks selected item"
+    if args.require_car_scalar_resources:
+        image = args.title_image.read_bytes()
+        car = [r for r in result["draws"]
+               if r["target"].startswith("14020500/")
+               and r["title_scalar_outer_object"]]
+        assert car, "no car scalar resource draws"
+        by_outer = collections.defaultdict(list)
+        for row in car:
+            assert row["title_scalar_outer_field4"] and row["title_scalar_outer_field12"]
+            assert title_rtti(image, row["title_scalar_field4_word0"])[0] == ".?AVCFXLShaderResource@@"
+            selected_word = (row["title_scalar_field16_word0"]
+                             if row["title_scalar_outer_field16"]
+                             else row["title_scalar_field12_word0"])
+            assert title_rtti(image, selected_word)[0] == ".?AVCTextureResource@@"
+            by_outer[row["title_scalar_outer_object"]].append(row)
+        expected_sites = {0x82443B98, 0x82443C40, 0x82444018}
+        for rows in by_outer.values():
+            assert {r["title_scalar_caller_lr"] for r in rows} == expected_sites
+            assert len({(r["title_scalar_outer_field4"],
+                         r["title_scalar_outer_field12"],
+                         r["title_scalar_outer_field16"]) for r in rows}) == 1
     if args.require_dynamic_quad:
         scoped = {(row["frame"], row["title_thread"], ordinal)
                   for row in records["dynamic_quad"]

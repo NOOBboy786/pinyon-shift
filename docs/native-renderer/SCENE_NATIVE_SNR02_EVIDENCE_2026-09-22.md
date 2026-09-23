@@ -581,3 +581,55 @@ contribution. It does not identify word 0's allocation owner, establish when
 the list was built or map material/texture roles. The next trace should
 follow the table entry that supplied this descriptor back to its constructor
 and stream/resource generation events.
+
+### Car-presentation scalar resource references
+
+The [frame-wide scalar join](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#car-presentation-scalar-packets-cross-both-candidate-color-groups)
+identifies three title packets per `CCarPresentation + 2016` subobject:
+two depth-only packets followed by a color-writing packet. Generated
+`sub_82443600` reads pointers at subobject offsets `+4` and `+12`. Before
+the color packet it checks `+16` and passes that reference to
+`sub_824AFB20` when nonzero; otherwise it passes the `+12` reference.
+This branch means the `+12` object alone does not prove the selected color
+texture in every car.
+
+A default-off scalar trace now snapshots those three pointer fields and
+their first words at the three known call sites. The bounded checker
+`--require-car-scalar-resources` joins the snapshots to prepared draws,
+resolves first-word RTTI against the title image, and requires a stable
+three-site packet group per observed subobject. Two saved-race replays with
+the final probe exited normally and each produced seven compatibility
+captures. Both passed the strict frame-wide census with this additional
+check:
+
+| Replay | Prepared draws | Joined car draws | Car subobjects | Filtered log SHA-256 | Ledger SHA-256 |
+| --- | ---: | ---: | ---: | --- | --- |
+| `car-scalar-field16-run-a` | 3,426 | 9 | 1 | `DF8769C228A36B733C47F8837BD0C43C4AE5E8B10A3264A1E5E46A00A4A5A09A` | `0CF9EC0C53E92183A6D535EBA4085E4F206642C2E23C05250294426C10CAF1B6` |
+| `car-scalar-field16-run-b` | 3,352 | 9 | 1 | `332E7F9AB5289A0D3E11C8C67F3EB6469C5D94E0AEDC6C42C4F65051FFFA3EBA` | `BCC9D794A1C338CF1AE844AAAFCA768F3F6BC252CA5688E5C1F7D626AB118394` |
+
+The RelWithDebInfo executable SHA-256 was
+`5A25D18068FB59177E1DCA4275486466EDEB2A360E8EB44FC086B6424DFDD583`.
+For each observed triple, `+4` resolves to `CFXLShaderResource` and `+12`
+to `CTextureResource`; `+16` was zero, so the color path selected `+12`.
+The three pointers were stable across repeated prepared executions of each
+packet. An earlier probe without `+16` covered six car subobjects and found
+the same `+4`/`+12` classes, but cannot establish their color selection.
+Object class and pointer identity still do not prove actual GPU payload,
+semantic texture role, generation, or submission lifetime. These remain
+SNR-02 blockers, and this evidence alone does not admit the car triple to
+the native slice.
+
+Rebuild either final ledger from its `.local/native-renderer/snr01` filtered
+log, changing `run-a` to `run-b` for the second replay:
+
+```powershell
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/car-scalar-field16-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw `
+  --require-animated-scalar --require-car-scalar-resources `
+  --require-dynamic-quad --title-image .local/ui-verify/default-image.bin `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr01/car-scalar-field16-run-a-ledger.json
+```

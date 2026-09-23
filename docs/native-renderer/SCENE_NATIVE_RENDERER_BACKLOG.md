@@ -177,7 +177,11 @@ and [Gate A preflight](SCENE_NATIVE_GATE_A_PREFLIGHT_2026-09-22.md#exact-view-8-
    but their geometry/material/generation fields remain unknown. Another 36
    car-presentation scalar draws form four same-owner depth/depth/color
    triples across both candidate groups; their native-versus-retained role
-   remains undecided. Six scalar draws have a retained skid-presentation
+   remains undecided. A bounded resource join now identifies the car
+   subobject's `CFXLShaderResource` and selected `CTextureResource` in two
+   further replays; GPU payload, texture role and resource generation remain
+   unproved (see [SNR-02 evidence](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md#car-presentation-scalar-resource-references)).
+   Six scalar draws have a retained skid-presentation
    path. Resolve scene membership and resource ownership before freezing
    the slice.
 2. **Diagnostic vertical slice (SNR-02–04):** recover the minimum authoritative

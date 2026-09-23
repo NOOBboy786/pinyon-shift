@@ -155,6 +155,12 @@ struct Snr01ScalarDrawScope {
   uint32_t command;
   uint32_t outer_object;
   uint32_t outer_first_word;
+  uint32_t outer_field4;
+  uint32_t outer_field12;
+  uint32_t outer_field16;
+  uint32_t field4_word0;
+  uint32_t field12_word0;
+  uint32_t field16_word0;
   uint32_t selector;
   uint32_t input_count;
 };
@@ -2714,6 +2720,9 @@ void PinyonShiftObserveScalarDrawBegin(
                           r12.u32 == 0x82443C40 ||
                           r12.u32 == 0x82444018;
   const uint32_t outer = outer_call ? r29.u32 : 0;
+  const uint32_t field4 = outer ? SnrM02ReadU32(outer + 4) : 0;
+  const uint32_t field12 = outer ? SnrM02ReadU32(outer + 12) : 0;
+  const uint32_t field16 = outer ? SnrM02ReadU32(outer + 16) : 0;
   snr01_scalar_draw_scopes.push_back({
       uint64_t(rex::perf::GetTotalCounter(
           rex::perf::CounterId::kSourceFrameCount)),
@@ -2722,6 +2731,8 @@ void PinyonShiftObserveScalarDrawBegin(
       snr01_direct_packet_count, r12.u32, r3.u32,
       SnrM02ReadU32(r3.u32), SnrM02ReadU32(r3.u32 + 20),
       outer, outer ? SnrM02ReadU32(outer) : 0,
+      field4, field12, field16, SnrM02ReadU32(field4),
+      SnrM02ReadU32(field12), SnrM02ReadU32(field16),
       r4.u32, r7.u32});
 }
 
@@ -2755,11 +2766,17 @@ void PinyonShiftObserveScalarDrawEnd() {
       "\"view_call\":{},\"caller_lr\":{},\"object\":{},"
       "\"object_first_word\":{},\"command\":{},"
       "\"outer_object\":{},\"outer_first_word\":{},"
+      "\"outer_field4\":{},\"outer_field12\":{},"
+      "\"outer_field16\":{},\"field4_word0\":{},"
+      "\"field12_word0\":{},\"field16_word0\":{},"
       "\"selector\":{},\"input_count\":{},"
       "\"first_direct\":{},\"last_direct\":{}}}",
       scope.frame, scope.ordinal, scope.view_call, scope.caller_lr,
       scope.object, scope.object_first_word, scope.command,
-      scope.outer_object, scope.outer_first_word, scope.selector,
+      scope.outer_object, scope.outer_first_word,
+      scope.outer_field4, scope.outer_field12, scope.outer_field16,
+      scope.field4_word0, scope.field12_word0, scope.field16_word0,
+      scope.selector,
       scope.input_count, scope.first_direct + 1, snr01_direct_packet_count);
 }
 
