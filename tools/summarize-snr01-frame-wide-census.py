@@ -6,6 +6,7 @@ import collections
 import hashlib
 import json
 import re
+import struct
 from pathlib import Path
 
 
@@ -23,10 +24,22 @@ PREFIXES = {
     "second_path": "FH1 SNR01 second path ",
     "second_draw": "FH1 SNR01 second draw call ",
     "scalar": "FH1 SNR01 scalar draw ",
+    "dynamic_quad": "FH1 SNR01 dynamic quad draw ",
+    "dynamic_quad_entry": "FH1 SNR01 dynamic quad entry ",
+    "dynamic_quad_parent": "FH1 SNR01 dynamic quad parent ",
     "family_record": "FH1 SNR01 direct family record ",
     "family": "FH1 SNR01 direct family ",
     "clear": "FH1 clear producer ",
 }
+
+
+def title_rtti(image, vtable):
+    word = lambda address: struct.unpack_from(">I", image, address - 0x82000000)[0]
+    locator = word(vtable - 4)
+    assert word(locator) == 0
+    descriptor = word(locator + 12)
+    start = descriptor + 8 - 0x82000000
+    return image[start:image.index(0, start)].decode("ascii"), word
 
 
 def read_records(path, frames, backend_frame):
@@ -39,16 +52,19 @@ def read_records(path, frames, backend_frame):
                     row = json.loads(line.split(prefix, 1)[1])
                     if row["frame"] in (frames if key not in ("execution", "draw")
                                         else {backend_frame}):
-                        if key in ("view_begin", "view_end", "direct", "semantic", "scalar"):
+                        if key in ("view_begin", "view_end", "direct", "semantic", "scalar",
+                                   "dynamic_quad", "dynamic_quad_entry",
+                                   "dynamic_quad_parent"):
                             thread = int(re.search(r"\[t(\d+)\]", line)[1])
-                            if key in ("direct", "semantic", "scalar"):
+                            if key in ("direct", "semantic", "scalar", "dynamic_quad",
+                                       "dynamic_quad_entry", "dynamic_quad_parent"):
                                 row["title_thread"] = thread
                             scope = view_scopes[thread]
                             if key == "view_begin":
                                 scope.append(row)
                             elif key == "view_end":
                                 assert scope and scope.pop()["call"] == row["call"]
-                            elif key != "scalar":
+                            elif key in ("direct", "semantic"):
                                 row["title_view_call"] = scope[-1]["call"] if scope else 0
                                 row["title_view"] = scope[-1]["view"] if scope else 0
                         records[key].append(row)
@@ -108,6 +124,18 @@ def summarize(records, frames, backend_frame):
             key = (scope["frame"], scope["title_thread"], ordinal)
             assert key not in scalar_draws, f"overlapping scalar draws: {key}"
             scalar_draws[key] = scope
+    dynamic_quads = {}
+    for scope in records["dynamic_quad"]:
+        for ordinal in range(scope["first_direct"], scope["last_direct"] + 1):
+            key = (scope["frame"], scope["title_thread"], ordinal)
+            assert key not in dynamic_quads, f"overlapping dynamic quads: {key}"
+            dynamic_quads[key] = scope
+    dynamic_quad_parents = {}
+    for scope in records["dynamic_quad_parent"]:
+        for ordinal in range(scope["first_direct"], scope["last_direct"] + 1):
+            key = (scope["frame"], scope["title_thread"], ordinal)
+            assert key not in dynamic_quad_parents, f"overlapping dynamic parents: {key}"
+            dynamic_quad_parents[key] = scope
     assert len(primary) == len(records["primary"])
     assert len(scene) == len(records["scene"])
     assert all(r["view_call"] == 0 or
@@ -195,6 +223,8 @@ def summarize(records, frames, backend_frame):
         second_path = None
         second_draw = None
         scalar_draw = None
+        dynamic_quad = None
+        dynamic_quad_parent = None
         if title_packet and title_packet[0] == "semantic":
             title_row = title_packet[1]
             key = (title_row["frame"], title_row["ordinal"])
@@ -233,6 +263,28 @@ def summarize(records, frames, backend_frame):
             title_row = title_packet[1]
             scalar_draw = scalar_draws.get((title_row["frame"], title_row["title_thread"],
                                             title_row["ordinal"]))
+            dynamic_quad = dynamic_quads.get((title_row["frame"],
+                                              title_row["title_thread"],
+                                              title_row["ordinal"]))
+            dynamic_quad_parent = dynamic_quad_parents.get((title_row["frame"],
+                                                             title_row["title_thread"],
+                                                             title_row["ordinal"]))
+            dynamic_caller = (title_row["indexed2_caller_lr"] or
+                              title_row["direct_caller_lr"])
+            if (records["dynamic_quad"] and dynamic_caller
+                    in (0x82D07200, 0x82D0735C)):
+                assert dynamic_quad, f"missing dynamic quad: {draw['ordinal']}"
+            if dynamic_quad:
+                assert {0x82D071EC: 0x82D07200,
+                        0x82D07348: 0x82D0735C}[dynamic_quad["callsite"]] == (
+                            dynamic_caller)
+                assert dynamic_quad["view_call"] == title_row["title_view_call"]
+                assert dynamic_quad["quad_count"] * 4 == draw["index_count"]
+            if records["dynamic_quad_parent"] and dynamic_quad:
+                assert dynamic_quad_parent, f"missing dynamic parent: {draw['ordinal']}"
+            if dynamic_quad_parent:
+                assert dynamic_quad and dynamic_quad_parent["input"] == dynamic_quad["object"]
+                assert dynamic_quad_parent["view_call"] == title_row["title_view_call"]
             if (records["scalar"] and
                     title_row["direct_caller_lr"] == 0x824131F4):
                 assert scalar_draw, f"missing scalar draw: {draw['ordinal']}"
@@ -324,6 +376,17 @@ def summarize(records, frames, backend_frame):
             "title_scalar_outer_first_word": scalar_draw["outer_first_word"] if scalar_draw else None,
             "title_scalar_selector": scalar_draw["selector"] if scalar_draw else None,
             "title_scalar_input_count": scalar_draw["input_count"] if scalar_draw else None,
+            "title_dynamic_quad_object": dynamic_quad["object"] if dynamic_quad else None,
+            "title_dynamic_quad_records": dynamic_quad["records"] if dynamic_quad else None,
+            "title_dynamic_quad_output": dynamic_quad["output"] if dynamic_quad else None,
+            "title_dynamic_quad_count": dynamic_quad["quad_count"] if dynamic_quad else None,
+            "title_dynamic_quad_parent_object": (dynamic_quad_parent["owner"]
+                                                 if dynamic_quad_parent else None),
+            "title_dynamic_quad_parent_first_word": (
+                dynamic_quad_parent["owner_first_word"]
+                if dynamic_quad_parent else None),
+            "title_dynamic_quad_receiver": (dynamic_quad_parent["receiver"]
+                                            if dynamic_quad_parent else None),
             "title_item_call": item["call"] if item else None,
             "title_item_receiver": item["receiver"] if item else None,
             "title_item_descriptor": item["descriptor_address"] if item else None,
@@ -385,6 +448,8 @@ def main():
     parser.add_argument("--require-semantic-item-node", action="store_true")
     parser.add_argument("--require-second-path", action="store_true")
     parser.add_argument("--require-scalar-draw", action="store_true")
+    parser.add_argument("--require-dynamic-quad", action="store_true")
+    parser.add_argument("--title-image", type=Path)
     parser.add_argument("--require-candidate-boundary", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -400,7 +465,31 @@ def main():
         assert records["second_path"], "no second-path records"
     if args.require_scalar_draw:
         assert records["scalar"], "no bounded scalar-draw scopes"
+    if args.require_dynamic_quad:
+        assert (records["dynamic_quad"] and records["dynamic_quad_entry"]
+                and records["dynamic_quad_parent"]), (
+            "no bounded dynamic-quad provenance")
+        assert args.title_image, "dynamic-quad RTTI needs the verified title image"
+        image = args.title_image.read_bytes()
+        source_name, word = title_rtti(image, 0x82235F94)
+        renderer_name, _ = title_rtti(image, 0x82236214)
+        assert source_name == ".?AVCParticleSystemNew@@"
+        assert renderer_name == ".?AVCStandardParticleRenderer@@"
+        assert word(0x82236214 + 3 * 4) == 0x82D06C28
     result = summarize(records, frames, args.source_frame + 1)
+    if args.require_dynamic_quad:
+        scoped = {(row["frame"], row["title_thread"], ordinal)
+                  for row in records["dynamic_quad"]
+                  if row["frame"] == args.source_frame
+                  for ordinal in range(row["first_direct"], row["last_direct"] + 1)}
+        joined = {(row["title_packet_source_frame"], row["title_packet_thread"],
+                   row["title_packet_ordinal"])
+                  for row in result["draws"] if row["title_dynamic_quad_parent_object"]}
+        assert scoped and scoped == joined, "dynamic quad packet has no prepared draw"
+        assert all(row["title_dynamic_quad_parent_first_word"] == 0x82235F94
+                   for row in result["draws"]
+                   if row["title_dynamic_quad_parent_object"]), (
+            "dynamic quad parent vtable differs from CParticleSystemNew")
     if args.require_candidate_boundary:
         targets = {
             "14020500/00030000/00010400/00000003",

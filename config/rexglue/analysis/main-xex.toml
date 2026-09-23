@@ -231,6 +231,42 @@ registers = ["r12", "r3", "r4", "r7", "r29"]
 address = 0x824131F4
 name = "PinyonShiftObserveScalarDrawEnd"
 
+# Dynamic 36-byte record builder: capture its input and both direct draw sites.
+[[midasm_hook]]
+address = 0x82D06C28
+name = "PinyonShiftObserveDynamicQuadEntry"
+registers = ["r3", "r4", "lr"]
+
+[[midasm_hook]]
+address = 0x82D071EC
+name = "PinyonShiftObserveDynamicQuadDrawBegin"
+registers = ["r30", "r26", "r25", "lr"]
+
+[[midasm_hook]]
+address = 0x82D07200
+name = "PinyonShiftObserveDynamicQuadDrawEnd"
+registers = ["r19"]
+
+[[midasm_hook]]
+address = 0x82D07348
+name = "PinyonShiftObserveDynamicQuadDrawBegin"
+registers = ["r30", "r26", "r25", "lr"]
+
+[[midasm_hook]]
+address = 0x82D0735C
+name = "PinyonShiftObserveDynamicQuadDrawEnd"
+registers = ["r19"]
+
+# The caller builds the helper input on its stack and retains its scene owner.
+[[midasm_hook]]
+address = 0x82CFDAF8
+name = "PinyonShiftObserveDynamicQuadParentBegin"
+registers = ["r1", "r31", "r30"]
+
+[[midasm_hook]]
+address = 0x82CFDB28
+name = "PinyonShiftObserveDynamicQuadParentEnd"
+
 [[midasm_hook]]
 address = 0x82413A0C
 name = "PinyonShiftObserveVegetationStateBind"

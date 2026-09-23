@@ -141,6 +141,23 @@ struct Snr01ScalarDrawScope {
   uint32_t selector;
   uint32_t input_count;
 };
+struct Snr01DynamicQuadScope {
+  uint64_t frame;
+  uint64_t first_direct;
+  uint64_t view_call;
+  uint32_t callsite;
+  uint32_t object;
+  uint32_t records;
+  uint32_t output;
+};
+struct Snr01DynamicQuadParentScope {
+  uint64_t frame;
+  uint64_t first_direct;
+  uint64_t view_call;
+  uint32_t input;
+  uint32_t owner;
+  uint32_t receiver;
+};
 struct Snr01DirectScope {
   uint32_t caller_lr;
   uint32_t owner;
@@ -297,6 +314,10 @@ struct Snr01ItemNodeScope {
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01SecondPathScope> snr01_second_path_scopes;
 thread_local std::vector<Snr01ScalarDrawScope> snr01_scalar_draw_scopes;
+thread_local std::vector<Snr01DynamicQuadScope> snr01_dynamic_quad_scopes;
+thread_local std::vector<Snr01DynamicQuadParentScope> snr01_dynamic_quad_parent_scopes;
+thread_local uint64_t snr01_dynamic_quad_entries = 0;
+thread_local uint64_t snr01_dynamic_quad_count = 0;
 thread_local uint64_t snr01_scalar_draw_count = 0;
 thread_local uint64_t snr01_second_path_count = 0;
 std::atomic<rex::memory::Memory*> snr01_memory{nullptr};
@@ -1149,6 +1170,8 @@ void PinyonShiftObserveGraphicsFrame() {
   snr01_track_bucket_scopes.clear();
   snr01_second_draw_scopes.clear();
   snr01_scalar_draw_scopes.clear();
+  snr01_dynamic_quad_scopes.clear();
+  snr01_dynamic_quad_parent_scopes.clear();
   snr01_item_node_scopes.clear();
   snr01_direct_scopes.clear();
   snr01_dispatch_scopes.clear();
@@ -1168,6 +1191,8 @@ void PinyonShiftObserveGraphicsFrame() {
       snr01_second_draw_skips =
       snr01_item_node_count = snr01_unmatched_item_node_exits =
       snr01_scalar_draw_count =
+      snr01_dynamic_quad_entries =
+      snr01_dynamic_quad_count =
       snr01_direct_call_count = snr01_direct_packet_count =
       snr01_unmatched_direct_exits = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
@@ -2123,6 +2148,87 @@ void PinyonShiftObserveScalarDrawEnd() {
       scope.object, scope.object_first_word, scope.command,
       scope.outer_object, scope.outer_first_word, scope.selector,
       scope.input_count, scope.first_direct + 1, snr01_direct_packet_count);
+}
+
+void PinyonShiftObserveDynamicQuadEntry(PPCRegister& r3, PPCRegister& r4,
+                                        uint64_t& lr) {
+  if (!Snr01TraceCurrentFrame() || ++snr01_dynamic_quad_entries > 256) {
+    return;
+  }
+  REXGPU_INFO("FH1 SNR01 dynamic quad entry {{\"frame\":{},"
+              "\"view_call\":{},\"caller_lr\":{},\"device\":{},"
+              "\"object\":{},\"state\":{},\"command\":{},"
+              "\"records\":{},\"flags\":{}}}",
+              rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+              snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+              uint32_t(lr), r3.u32, r4.u32, SnrM02ReadU32(r4.u32),
+              SnrM02ReadU32(r4.u32 + 4), SnrM02ReadU32(r4.u32 + 8),
+              SnrM02ReadU32(r4.u32 + 52));
+}
+
+void PinyonShiftObserveDynamicQuadDrawBegin(PPCRegister& r30,
+                                            PPCRegister& r26,
+                                            PPCRegister& r25,
+                                            uint64_t& lr) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  snr01_dynamic_quad_scopes.push_back({
+      uint64_t(rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount)),
+      snr01_direct_packet_count,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      uint32_t(lr), r30.u32, r26.u32, r25.u32});
+}
+
+void PinyonShiftObserveDynamicQuadDrawEnd(PPCRegister& r19) {
+  if (snr01_dynamic_quad_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr01_dynamic_quad_scopes.back();
+  snr01_dynamic_quad_scopes.pop_back();
+  if (++snr01_dynamic_quad_count > 256) {
+    return;
+  }
+  REXGPU_INFO("FH1 SNR01 dynamic quad draw {{\"frame\":{},"
+              "\"view_call\":{},\"callsite\":{},\"object\":{},"
+              "\"records\":{},\"output\":{},\"quad_count\":{},"
+              "\"first_direct\":{},\"last_direct\":{}}}",
+              scope.frame, scope.view_call, scope.callsite, scope.object,
+              scope.records, scope.output, r19.u32, scope.first_direct + 1,
+              snr01_direct_packet_count);
+}
+
+void PinyonShiftObserveDynamicQuadParentBegin(PPCRegister& r1,
+                                             PPCRegister& r31,
+                                             PPCRegister& r30) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  snr01_dynamic_quad_parent_scopes.push_back({
+      uint64_t(rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount)),
+      snr01_direct_packet_count,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      r1.u32 + 128, r31.u32, r30.u32});
+}
+
+void PinyonShiftObserveDynamicQuadParentEnd() {
+  if (snr01_dynamic_quad_parent_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr01_dynamic_quad_parent_scopes.back();
+  snr01_dynamic_quad_parent_scopes.pop_back();
+  if (scope.first_direct == snr01_direct_packet_count) {
+    return;
+  }
+  REXGPU_INFO("FH1 SNR01 dynamic quad parent {{\"frame\":{},"
+              "\"view_call\":{},\"input\":{},\"owner\":{},"
+              "\"owner_first_word\":{},\"receiver\":{},"
+              "\"first_direct\":{},\"last_direct\":{}}}",
+              scope.frame, scope.view_call, scope.input, scope.owner,
+              SnrM02ReadU32(scope.owner), scope.receiver,
+              scope.first_direct + 1, snr01_direct_packet_count);
 }
 
 void PinyonShiftObserveSecondDrawBegin(

@@ -2763,3 +2763,61 @@ complete the main-view slice.
 The same final build with the probes off exited normally with seven
 compatibility captures. This is a smoke check, not an image-equivalence or
 performance result.
+
+### Dynamic particle packets have a persistent title owner
+
+Read-only hooks bracket the two direct submissions in `sub_82D06C28` and its
+caller `sub_82CFDA58`. The caller builds the callee's input record on its
+stack, so that input address is not a persistent owner. It retains a separate
+object in `r31` and calls the renderer held at its `+36` field. The frame-wide
+ledger joins parent input, child input, direct packet and prepared draw by
+source frame, title thread and packet ordinal; it also checks four guest
+vertices per reported quad.
+
+The verified title image names parent-object vtable `0x82235F94` as
+`CParticleSystemNew` and renderer vtable `0x82236214` as
+`CStandardParticleRenderer`; slot 3 of the latter is `sub_82D06C28`.
+The image SHA-256 was
+`6014727FA7B0B79727FD5F32A2E2377533DC8E29679E8D2462BD764D331FA305`.
+In the normal-exit saved-race replay, six distinct `CParticleSystemNew`
+objects submitted six source-frame-6000 packets in title view 8. They
+produced 18 backend-frame-6001 prepared draws, all in the two candidate
+scene-color groups: 15 from return site `0x82D07200` and three from
+`0x82D0735C`. Every packet used the `indexed2_secondary` path and every
+prepared draw joined exactly one parent and child scope. The full ledger
+accounts for 3,206 prepared draws; its 1,733 candidate-group draws include
+1,062 view-8 scene-owner draws, 646 view-8 direct draws, one title clear and
+24 no-write indirect draws. The strict candidate-boundary check passed.
+
+These 18 draws are now identified as **retained particle-renderer work** in
+the provisional cut, despite using the candidate scene attachments. The
+native opaque/alpha-tested diagnostic must preserve their input/depth
+relationship; their presence cannot be used to claim complete selected-scene
+coverage or to suppress the particle path. Other candidate direct draws
+remain unresolved, so the complete slice is not frozen and SNR-01 stays open.
+
+The instrumented executable SHA-256 was
+`0D59CDB19A2FD0B36F5D9B95213208EBAD8042F2A219D98764369562387C612A`.
+The ordered filtered log is
+`.local/native-renderer/snr01/dynamic-quad-parent-run-a-filtered.log`
+(SHA-256 `22D75311C3E766E9D9B1741EB408A6593A02DF8168EA41DF68917BE4B9823CC4`)
+and the ledger is
+`.local/native-renderer/snr01/dynamic-quad-parent-run-a-ledger.json`
+(SHA-256 `5EE9D27B086850A5CF27D2FE4E39C44528484266F9F98A77D10D320EEB260328`).
+Recheck the title/command joins, RTTI and boundary with:
+
+```powershell
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/dynamic-quad-parent-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw `
+  --require-dynamic-quad --title-image .local/ui-verify/default-image.bin `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr01/dynamic-quad-parent-run-a-ledger.json
+```
+
+The same executable with the probes off also exited the saved route normally
+with seven compatibility captures. This is a smoke check, not a visual or
+performance equivalence claim. The updated summarizer also rechecked the
+earlier 4,598-draw scalar-wrapper ledger with its strict boundary flags.

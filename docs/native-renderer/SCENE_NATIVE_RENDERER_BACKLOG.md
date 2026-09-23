@@ -164,7 +164,10 @@ words alone do not prove view identity or separability. See the
    remaining draws to title views, owners and pass order. Record every
    unmatched draw and every producer/consumer crossing the proposed cut.
    Freeze the exact slice only after that census; the present slice is a
-   hypothesis.
+   hypothesis. Candidate attachments also carry proven
+   `CParticleSystemNew`/`CStandardParticleRenderer` draws; retain that path
+   across the cut (see SNR-00/01 evidence) rather than counting it as native
+   opaque-scene coverage.
 2. **Diagnostic vertical slice (SNR-02–04):** recover the minimum authoritative
    geometry, transform and lifetime fields for one bounded view contribution;
    publish and render same-frame identity/depth beside untouched compatibility
