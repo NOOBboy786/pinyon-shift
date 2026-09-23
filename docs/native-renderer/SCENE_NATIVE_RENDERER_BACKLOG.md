@@ -179,8 +179,10 @@ and [Gate A preflight](SCENE_NATIVE_GATE_A_PREFLIGHT_2026-09-22.md#exact-view-8-
    triples across both candidate groups; their native-versus-retained role
    remains undecided. A bounded resource join now identifies the car
    subobject's `CFXLShaderResource` and selected `CTextureResource` in two
-   further replays; GPU payload, texture role and resource generation remain
-   unproved (see [SNR-02 evidence](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md#car-presentation-scalar-resource-references)).
+   further replays. A later descriptor join maps the selected color texture
+   to its prepared fetch base, format and dimensions in two strict replays;
+   payload freshness, semantic role and lifetime remain unproved (see
+   [SNR-02 evidence](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md#car-color-texture-resolves-to-the-prepared-fetch-descriptor)).
    Six scalar draws have a retained skid-presentation
    path. Resolve scene membership and resource ownership before freezing
    the slice.

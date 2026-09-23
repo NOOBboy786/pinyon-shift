@@ -12,9 +12,40 @@ SCRIPT = runpy.run_path(
 )
 SUMMARIZE = SCRIPT["summarize"]
 READ_RECORDS = SCRIPT["read_records"]
+VERIFY_CAR_TEXTURE = SCRIPT["verify_car_texture_resolution"]
 
 
 class FrameWideCensusTest(unittest.TestCase):
+    def test_car_texture_resolution_joins_selected_resource_and_fetch(self):
+        records = {
+            "car_texture": [{"frame": 10, "next_direct": 5, "slot": 0,
+                             "resource": 100, "resolved": 200,
+                             "descriptor_words": [0, 0x1006,
+                                                  (63 << 13) | 63, 0, 0, 0]}],
+            "draw": [{"ordinal": i, "texture_fetch_count": 1} for i in (1, 2)],
+            "texture_fetch": [
+                {"draw": i, "packet_physical": 300, "fetch_constant": 0,
+                 "base_address": 0x1000, "mip_address": 0, "format": 6,
+                 "width": 64, "height": 64} for i in (1, 2)],
+        }
+        result = {"draws": [
+            {"target": "14020500/color", "title_scalar_caller_lr": 0x82444018,
+             "title_packet_ordinal": 5, "title_scalar_outer_field16": 0,
+             "title_scalar_outer_field12": 100, "ordinal": i,
+             "packet_physical": 300} for i in (1, 2)]}
+        VERIFY_CAR_TEXTURE(records, result, 10, True)
+        records["texture_fetch"][1]["base_address"] = 401
+        with self.assertRaises(AssertionError):
+            VERIFY_CAR_TEXTURE(records, result, 10, True)
+        records["texture_fetch"][1]["base_address"] = 0x1000
+        records["car_texture"][0]["descriptor_words"][1] = 0x1007
+        with self.assertRaises(AssertionError):
+            VERIFY_CAR_TEXTURE(records, result, 10, True)
+        records["car_texture"][0]["descriptor_words"][1] = 0x1006
+        records["car_texture"][0]["resource"] = 101
+        with self.assertRaises(AssertionError):
+            VERIFY_CAR_TEXTURE(records, result, 10, True)
+
     def test_direct_packet_inherits_only_its_thread_view_scope(self):
         events = (
             ("view begin", {"frame": 10, "call": 8, "view": 123}),

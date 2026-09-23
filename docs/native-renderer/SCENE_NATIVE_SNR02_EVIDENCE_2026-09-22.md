@@ -640,3 +640,67 @@ python tools/summarize-snr01-frame-wide-census.py `
   --require-candidate-boundary `
   --output .local/native-renderer/snr01/car-scalar-field16-run-a-ledger.json
 ```
+
+### Car color texture resolves to the prepared fetch descriptor
+
+The observed command-device vtable `0x8200306C` sends virtual slot `+92` to
+`sub_82444B18`. Called with the selected resource reference at color-pass
+setup, this method follows its `+168` member, calls virtual slot `+20`,
+and passes the returned descriptor and texture slot to `sub_82442528`.
+That writer reads descriptor words at offsets `+28` through `+48` and
+updates the title's fetch state. A default-off hook at `0x82444B68`
+records the resource and those already-read words before the state update.
+
+Two sustained-race replays with the final probe exited normally with seven
+compatibility captures each. Their RelWithDebInfo executable SHA-256 was
+`CC92F85820937887A6F8AF8E7BDD7210F29806E61F0EAC5BEF03EDB8FAB4A0F8`.
+Both used `fh1-race-sustained.fh1test` with
+`--pinyon_shift_fh1_gpu_corpus=true`,
+`--pinyon_shift_fh1_clear_producer_trace=true`,
+`--pinyon_shift_snr01_trace_source_frame=6000`, and
+`--pinyon_shift_snr01_trace_following_frame=true`; the filtered logs came
+from their process-scoped sessions through `extract-snr01-run-log.py`.
+The strict frame-wide candidate-boundary census and
+`--require-car-texture-descriptor` both passed:
+
+| Replay | Prepared draws | Filtered log SHA-256 | Ledger SHA-256 |
+| --- | ---: | --- | --- |
+| `car-texture-descriptor-run-a` | 2,794 | `FA30D808CD2299CE5780EC2F426F2B190221B51262CDC310C71AFEA2956D91D4` | `FD79AD7F5B1C815A8437B6A7CB4CE1DAEAD9760869541EB2F750884CF34B77A3` |
+| `car-texture-descriptor-run-b` | 3,313 | `26450160D08FCDC1D4BA863EE24BADB09EFCBD324430AC2297C7DB5B2E929F51` | `E98C58AF9DE8AE9F4A018C261092BD72549FC91015B9A3C8800A84BB36E883AA` |
+
+Each replay had one captured car subobject. Its color packet executed three
+times, each with exactly one slot-0 texture fetch. The source-frame
+resolution event named the exact selected `CTextureResource` pointer and
+the next direct packet ordinal. For run A, resource `0x2E09DB40`
+resolved to `0x2F1AB0B0`; descriptor word `+32` was `0xB5768086` and the
+prepared fetch base was `0x15768000`. For run B, resource `0x2E00B870`
+resolved to `0x2EEDB150`; descriptor word `+32` was `0xB5981086` and the
+prepared base was `0x15981000`. In both runs, the descriptor's `+32` word
+masked by `0x1FFFF000` equals the prepared base,
+its low six bits equal format 6, and its `+36` word decodes width and
+height as 64 each (`low 13 bits + 1`, `bits 13–25 + 1`). The verifier also
+requires an unchanged fetch descriptor across all three executions.
+
+This establishes the bounded title resource → resolved descriptor →
+prepared texture-fetch relationship for the observed car color packets.
+It does not establish the resource's semantic role, when its texture bytes
+were produced, their generation or a lifetime through a native GPU fence.
+The depth-only packets have no shader-used texture fetch. A separate
+exploratory replay omitted the clear-producer trace and therefore could
+not pass the full candidate-boundary check; it was not used for this
+boundary claim.
+
+Rebuild either final ledger, changing `run-a` to `run-b` for the repeat:
+
+```powershell
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr02/car-texture-descriptor-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw `
+  --require-animated-scalar --require-car-scalar-resources `
+  --require-car-texture-descriptor --require-dynamic-quad `
+  --title-image .local/ui-verify/default-image.bin `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr02/car-texture-descriptor-run-a-ledger.json
+```

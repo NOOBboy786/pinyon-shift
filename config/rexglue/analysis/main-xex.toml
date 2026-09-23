@@ -294,6 +294,12 @@ registers = ["r12", "r3", "r4", "r7", "r29"]
 address = 0x824131F4
 name = "PinyonShiftObserveScalarDrawEnd"
 
+# Car color texture resource resolution, before sub_82442528 binds it.
+[[midasm_hook]]
+address = 0x82444B68
+name = "PinyonShiftObserveCarTextureResolution"
+registers = ["r30", "r31", "r29", "r3"]
+
 # Dynamic 36-byte record builder: capture its input and both direct draw sites.
 [[midasm_hook]]
 address = 0x82D06C28

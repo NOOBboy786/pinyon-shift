@@ -2780,6 +2780,32 @@ void PinyonShiftObserveScalarDrawEnd() {
       scope.input_count, scope.first_direct + 1, snr01_direct_packet_count);
 }
 
+void PinyonShiftObserveCarTextureResolution(
+    PPCRegister& r30, PPCRegister& r31, PPCRegister& r29,
+    PPCRegister& r3) {
+  if (!Snr01TraceCurrentFrame() || snr01_view_scopes.empty() ||
+      snr01_view_scopes.back().ordinal != 8 ||
+      SnrM02ReadU32(r30.u32) != 0x8200306C) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR02 car texture resolution {{\"frame\":{},"
+      "\"view_call\":8,\"device\":{},\"slot\":{},"
+      "\"resource\":{},\"resolved\":{},"
+      "\"descriptor_words\":[{},{},{},{},{},{}],"
+      "\"next_direct\":{}}}",
+      rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount),
+      r30.u32, r31.u32, SnrM02ReadU32(r29.u32), r3.u32,
+      r3.u32 ? SnrM02ReadU32(r3.u32 + 28) : 0,
+      r3.u32 ? SnrM02ReadU32(r3.u32 + 32) : 0,
+      r3.u32 ? SnrM02ReadU32(r3.u32 + 36) : 0,
+      r3.u32 ? SnrM02ReadU32(r3.u32 + 40) : 0,
+      r3.u32 ? SnrM02ReadU32(r3.u32 + 44) : 0,
+      r3.u32 ? SnrM02ReadU32(r3.u32 + 48) : 0,
+      snr01_direct_packet_count + 1);
+}
+
 void PinyonShiftObserveDynamicQuadEntry(PPCRegister& r3, PPCRegister& r4,
                                         uint64_t& lr) {
   if (!Snr01TraceCurrentFrame() || ++snr01_dynamic_quad_entries > 256) {

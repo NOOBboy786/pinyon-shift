@@ -25,6 +25,8 @@ PREFIXES = {
     "second_draw": "FH1 SNR01 second draw call ",
     "second_dispatch": "FH1 SNR01 second track dispatch ",
     "scalar": "FH1 SNR01 scalar draw ",
+    "car_texture": "FH1 SNR02 car texture resolution ",
+    "texture_fetch": "FH1 SNR01 prepared texture fetch ",
     "dynamic_quad": "FH1 SNR01 dynamic quad draw ",
     "dynamic_quad_entry": "FH1 SNR01 dynamic quad entry ",
     "dynamic_quad_parent": "FH1 SNR01 dynamic quad parent ",
@@ -53,7 +55,7 @@ def read_records(path, frames, backend_frame):
                     row = json.loads(line.split(prefix, 1)[1])
                     if key in ("primary", "clear"):
                         row["_log_order"] = line_number
-                    if row["frame"] in (frames if key not in ("execution", "draw")
+                    if row["frame"] in (frames if key not in ("execution", "draw", "texture_fetch")
                                         else {backend_frame}):
                         if key in ("view_begin", "view_end", "direct", "semantic", "scalar",
                                    "second_draw",
@@ -480,6 +482,49 @@ def summarize(records, frames, backend_frame):
     }
 
 
+def verify_car_texture_resolution(records, result, source_frame,
+                                  require_descriptor=False):
+    color = [r for r in result["draws"]
+             if r["target"].startswith("14020500/")
+             and r["title_scalar_caller_lr"] == 0x82444018]
+    assert color, "no car color draws"
+    resolutions = collections.defaultdict(list)
+    for row in records["car_texture"]:
+        if row["frame"] == source_frame:
+            resolutions[row["next_direct"]].append(row)
+    draws = {r["ordinal"]: r for r in records["draw"]}
+    fetches = collections.defaultdict(list)
+    for row in records["texture_fetch"]:
+        fetches[row["draw"]].append(row)
+    by_packet = collections.defaultdict(set)
+    for row in color:
+        packet = row["title_packet_ordinal"]
+        selected = (row["title_scalar_outer_field16"]
+                    or row["title_scalar_outer_field12"])
+        matching = [r for r in resolutions[packet]
+                    if r["resource"] == selected and r["slot"] == 0]
+        assert len(matching) == 1 and matching[0]["resolved"], (
+            f"car packet {packet} lacks unique selected texture resolution")
+        draw = draws[row["ordinal"]]
+        assert draw["texture_fetch_count"] == 1
+        matching_fetch = [r for r in fetches[row["ordinal"]]
+                          if r["packet_physical"] == row["packet_physical"]
+                          and r["fetch_constant"] == 0]
+        assert len(matching_fetch) == 1, f"car draw {row['ordinal']} lacks texture fetch"
+        fetch = matching_fetch[0]
+        if require_descriptor:
+            words = matching[0].get("descriptor_words")
+            assert words and len(words) == 6
+            assert (words[1] & 0x1FFFF000) == fetch["base_address"]
+            assert (words[1] & 0x3F) == fetch["format"]
+            assert (words[2] & 0x1FFF) + 1 == fetch["width"]
+            assert ((words[2] >> 13) & 0x1FFF) + 1 == fetch["height"]
+        by_packet[packet].add((fetch["base_address"], fetch["mip_address"],
+                               fetch["format"], fetch["width"], fetch["height"]))
+    assert all(len(descriptors) == 1 for descriptors in by_packet.values()), (
+        "car texture fetch changed across repeated packet executions")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
@@ -491,6 +536,8 @@ def main():
     parser.add_argument("--require-scalar-draw", action="store_true")
     parser.add_argument("--require-animated-scalar", action="store_true")
     parser.add_argument("--require-car-scalar-resources", action="store_true")
+    parser.add_argument("--require-car-texture-resolution", action="store_true")
+    parser.add_argument("--require-car-texture-descriptor", action="store_true")
     parser.add_argument("--require-dynamic-quad", action="store_true")
     parser.add_argument("--title-image", type=Path)
     parser.add_argument("--require-candidate-boundary", action="store_true")
@@ -554,6 +601,9 @@ def main():
             assert len({(r["title_scalar_outer_field4"],
                          r["title_scalar_outer_field12"],
                          r["title_scalar_outer_field16"]) for r in rows}) == 1
+    if args.require_car_texture_resolution or args.require_car_texture_descriptor:
+        verify_car_texture_resolution(records, result, args.source_frame,
+                                      args.require_car_texture_descriptor)
     if args.require_dynamic_quad:
         scoped = {(row["frame"], row["title_thread"], ordinal)
                   for row in records["dynamic_quad"]
