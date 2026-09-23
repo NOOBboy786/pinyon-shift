@@ -1000,3 +1000,49 @@ The earlier sample-0 overlap check still runs against these files, but its
 private image comes from a separate live frame and still has one sample and
 no alpha mask. The next private diagnostic needs four-sample color/depth
 readback and the captured BC3 alpha path before same-frame comparison.
+
+## Same-frame four-sample private geometry diagnostic
+
+The private SNR-04 diagnostic now accepts `--msaa4` standalone or the opt-in
+`PINYON_SHIFT_SNR04_MSAA4=1` live setting alongside
+`PINYON_SHIFT_SNR04_VS`. It renders the owned vegetation fixture into private
+1280×720 four-sample color/depth targets and reads each sample through a
+private compute pass. `coverage.u8` holds one bit per covered sample;
+`identity.u16x4` and `depth.f32x4` retain per-sample values. The existing
+`identity.ppm` and `depth.f32` use sample 0. Compatibility output is untouched.
+This remains an **unmasked geometry diagnostic**: it does not bind BC3 or
+execute the vegetation pixel shader, and it does not include earlier scene
+depth or the rest of the candidate slice.
+
+An AppData-backed sustained-race replay exited normally with seven
+compatibility captures. The same-frame `SNR03F3` fixture verifier passed:
+67 owned packets, 127 ordered final-state executions, output frame 6001 from
+source frame 6000. The four-sample private output reported 394,608 covered
+sample-0 pixels, 399,441 pixels covered in any sample, and 1,578,297 covered
+samples. `tools/verify-snr04-msaa.py` checked the per-sample files against the
+summary. A standalone replay of the exact live fixture produced byte-identical
+coverage, per-sample depth, per-sample identity and post-VS files. Their
+SHA-256 values are respectively
+`BD31714FB1BF59DBF173397BB51D4C3D3164E0C79F5C30138A4E1C64002E5BC5`,
+`19066AFF6F0F9030E23ECED523DEFAFFD4926E8A54FE7D98EF14A13AE15AB1E7`,
+`4A66113FD94823A860807380484B3A5A838795B06D2EE04A738F3377C87028F6`,
+and `D83498187ADDA922E593F5C3041A70982A281225C810407C9231AE0ADEA56B98`.
+The earlier one-sample fixture still produces its previous identity, depth
+and post-VS hashes byte-for-byte.
+
+Recheck the live output and fixture with:
+
+```powershell
+python tools/verify-snr03-scene-fixture.py `
+  .local/native-renderer/snr04/f3-msaa4-live-a/snr03-scene-6000.bin `
+  .local/native-renderer/snr04/f3-msaa4-live-a-signal.log
+python tools/verify-snr04-msaa.py `
+  .local/native-renderer/snr04/f3-msaa4-live-a/snr04-private-6000
+```
+
+The RenderDoc four-sample reference is a different replay and includes the
+compatibility alpha sample mask, preceding depth and only a 1280×512 EDRAM
+tile. The private geometry totals must not be compared as parity counts. The
+next bounded diagnostic must bind each packet's captured BC3 chain and alpha
+state, then compare per-sample coverage and depth in the **same captured
+frame** before claiming SNR-04 coverage parity.

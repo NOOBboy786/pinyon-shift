@@ -214,7 +214,8 @@ Scene load_scene(std::span<const char> file) {
 }
 
 ComPtr<ID3D12Resource> buffer(ID3D12Device* device, uint64_t size,
-                              D3D12_HEAP_TYPE heap, D3D12_RESOURCE_STATES state) {
+                              D3D12_HEAP_TYPE heap, D3D12_RESOURCE_STATES state,
+                              D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE) {
   D3D12_HEAP_PROPERTIES properties{};
   properties.Type = heap;
   D3D12_RESOURCE_DESC description{};
@@ -223,6 +224,7 @@ ComPtr<ID3D12Resource> buffer(ID3D12Device* device, uint64_t size,
   description.Height = description.DepthOrArraySize = description.MipLevels = 1;
   description.SampleDesc.Count = 1;
   description.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  description.Flags = flags;
   ComPtr<ID3D12Resource> resource;
   check(device->CreateCommittedResource(&properties, D3D12_HEAP_FLAG_NONE,
                                         &description, state, nullptr,
@@ -242,7 +244,8 @@ ComPtr<ID3D12Resource> upload(ID3D12Device* device, const void* bytes, size_t si
 ComPtr<ID3D12Resource> texture(ID3D12Device* device, DXGI_FORMAT format,
                                D3D12_RESOURCE_FLAGS flags,
                                D3D12_RESOURCE_STATES initial,
-                               const D3D12_CLEAR_VALUE& clear) {
+                               const D3D12_CLEAR_VALUE& clear,
+                               uint32_t samples = 1) {
   D3D12_HEAP_PROPERTIES properties{};
   properties.Type = D3D12_HEAP_TYPE_DEFAULT;
   D3D12_RESOURCE_DESC description{};
@@ -250,8 +253,9 @@ ComPtr<ID3D12Resource> texture(ID3D12Device* device, DXGI_FORMAT format,
   description.Width = width;
   description.Height = height;
   description.DepthOrArraySize = description.MipLevels = 1;
-  description.Format = format;
-  description.SampleDesc.Count = 1;
+  description.Format = samples == 4 && format == DXGI_FORMAT_D32_FLOAT
+                           ? DXGI_FORMAT_R32_TYPELESS : format;
+  description.SampleDesc.Count = samples;
   description.Flags = flags;
   ComPtr<ID3D12Resource> resource;
   check(device->CreateCommittedResource(&properties, D3D12_HEAP_FLAG_NONE,
@@ -272,7 +276,8 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
     std::span<const char> fixture,
     const std::filesystem::path& vertex_shader,
     const std::filesystem::path& output_directory,
-    ID3D12Device* borrowed_device) {
+    ID3D12Device* borrowed_device, uint32_t samples) {
+  require(samples == 1 || samples == 4, "unsupported sample count");
   const auto begin = std::chrono::steady_clock::now();
   auto scene = load_scene(fixture);
   auto vs = read(vertex_shader);
@@ -344,7 +349,7 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
   pipeline_description.NumRenderTargets = 1;
   pipeline_description.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
   pipeline_description.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-  pipeline_description.SampleDesc.Count = 1;
+  pipeline_description.SampleDesc.Count = samples;
   ComPtr<ID3D12PipelineState> pipeline;
   auto pipeline_result = device->CreateGraphicsPipelineState(
       &pipeline_description, IID_PPV_ARGS(&pipeline));
@@ -373,6 +378,7 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
   stream_description.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
   stream_description.DSVFormat = DXGI_FORMAT_UNKNOWN;
   stream_description.DepthStencilState.DepthEnable = FALSE;
+  stream_description.SampleDesc.Count = 1;
   ComPtr<ID3D12PipelineState> stream_pipeline;
   auto stream_result = device->CreateGraphicsPipelineState(
       &stream_description, IID_PPV_ARGS(&stream_pipeline));
@@ -398,10 +404,10 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
   depth_clear.DepthStencil.Depth = 0;
   auto color = texture(device.Get(), color_clear.Format,
                        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
-                       D3D12_RESOURCE_STATE_RENDER_TARGET, color_clear);
+                       D3D12_RESOURCE_STATE_RENDER_TARGET, color_clear, samples);
   auto depth = texture(device.Get(), depth_clear.Format,
                        D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,
-                       D3D12_RESOURCE_STATE_DEPTH_WRITE, depth_clear);
+                       D3D12_RESOURCE_STATE_DEPTH_WRITE, depth_clear, samples);
   D3D12_DESCRIPTOR_HEAP_DESC rtv_description{};
   rtv_description.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
   rtv_description.NumDescriptors = 1;
@@ -413,7 +419,12 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
   dsv_description.NumDescriptors = 1;
   ComPtr<ID3D12DescriptorHeap> dsv;
   check(device->CreateDescriptorHeap(&dsv_description, IID_PPV_ARGS(&dsv)));
-  device->CreateDepthStencilView(depth.Get(), nullptr, dsv->GetCPUDescriptorHandleForHeapStart());
+  D3D12_DEPTH_STENCIL_VIEW_DESC depth_view{};
+  depth_view.Format = DXGI_FORMAT_D32_FLOAT;
+  depth_view.ViewDimension = samples == 4 ? D3D12_DSV_DIMENSION_TEXTURE2DMS
+                                          : D3D12_DSV_DIMENSION_TEXTURE2D;
+  device->CreateDepthStencilView(depth.Get(), &depth_view,
+                                 dsv->GetCPUDescriptorHandleForHeapStart());
 
   auto max_vertices = std::max_element(scene.items.begin(), scene.items.end(),
                                        [](const Item& a, const Item& b) {
@@ -455,15 +466,78 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
 
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT color_layout{}, depth_layout{};
   uint64_t color_bytes = 0, depth_bytes = 0;
-  auto color_description = color->GetDesc(), depth_description = depth->GetDesc();
-  device->GetCopyableFootprints(&color_description, 0, 1, 0, &color_layout,
-                                nullptr, nullptr, &color_bytes);
-  device->GetCopyableFootprints(&depth_description, 0, 1, 0, &depth_layout,
-                                nullptr, nullptr, &depth_bytes);
-  auto color_readback = buffer(device.Get(), color_bytes, D3D12_HEAP_TYPE_READBACK,
-                               D3D12_RESOURCE_STATE_COPY_DEST);
-  auto depth_readback = buffer(device.Get(), depth_bytes, D3D12_HEAP_TYPE_READBACK,
-                               D3D12_RESOURCE_STATE_COPY_DEST);
+  ComPtr<ID3D12Resource> color_readback, depth_readback;
+  ComPtr<ID3D12Resource> sample_output, sample_readback;
+  ComPtr<ID3D12DescriptorHeap> sample_heap;
+  ComPtr<ID3D12RootSignature> sample_root;
+  ComPtr<ID3D12PipelineState> sample_pipeline;
+  if (samples == 1) {
+    auto color_description = color->GetDesc(), depth_description = depth->GetDesc();
+    device->GetCopyableFootprints(&color_description, 0, 1, 0, &color_layout,
+                                  nullptr, nullptr, &color_bytes);
+    device->GetCopyableFootprints(&depth_description, 0, 1, 0, &depth_layout,
+                                  nullptr, nullptr, &depth_bytes);
+    color_readback = buffer(device.Get(), color_bytes, D3D12_HEAP_TYPE_READBACK,
+                            D3D12_RESOURCE_STATE_COPY_DEST);
+    depth_readback = buffer(device.Get(), depth_bytes, D3D12_HEAP_TYPE_READBACK,
+                            D3D12_RESOURCE_STATE_COPY_DEST);
+  } else {
+    constexpr char sample_source[] =
+        "Texture2DMS<float4> colors : register(t0);"
+        "Texture2DMS<float> depths : register(t1);"
+        "RWStructuredBuffer<uint2> result : register(u0);"
+        "[numthreads(8,8,1)] void main(uint3 p : SV_DispatchThreadID) {"
+        " if (p.x >= 1280 || p.y >= 720) return;"
+        " [unroll] for (uint s = 0; s < 4; ++s) {"
+        "  float4 c = colors.Load(p.xy, s);"
+        "  uint id = (uint)round(c.r * 255.0) | ((uint)round(c.g * 255.0) << 8);"
+        "  result[(p.y * 1280 + p.x) * 4 + s] = uint2(id, asuint(depths.Load(p.xy, s)));"
+        " } }";
+    ComPtr<ID3DBlob> shader;
+    check(D3DCompile(sample_source, sizeof(sample_source) - 1, nullptr,
+                     nullptr, nullptr, "main", "cs_5_1", 0, 0, &shader,
+                     &errors));
+    D3D12_DESCRIPTOR_RANGE range{};
+    range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    range.NumDescriptors = 2;
+    D3D12_ROOT_PARAMETER roots[2]{};
+    roots[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    roots[0].DescriptorTable = {1, &range};
+    roots[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+    D3D12_ROOT_SIGNATURE_DESC root_desc{2, roots};
+    ComPtr<ID3DBlob> serialized;
+    check(D3D12SerializeRootSignature(&root_desc, D3D_ROOT_SIGNATURE_VERSION_1,
+                                      &serialized, &errors));
+    check(device->CreateRootSignature(0, serialized->GetBufferPointer(),
+                                      serialized->GetBufferSize(),
+                                      IID_PPV_ARGS(&sample_root)));
+    D3D12_COMPUTE_PIPELINE_STATE_DESC compute_desc{};
+    compute_desc.pRootSignature = sample_root.Get();
+    compute_desc.CS = {shader->GetBufferPointer(), shader->GetBufferSize()};
+    check(device->CreateComputePipelineState(&compute_desc,
+                                              IID_PPV_ARGS(&sample_pipeline)));
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc{};
+    heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    heap_desc.NumDescriptors = 2;
+    heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    check(device->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&sample_heap)));
+    auto handle = sample_heap->GetCPUDescriptorHandleForHeapStart();
+    D3D12_SHADER_RESOURCE_VIEW_DESC view{};
+    view.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+    view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    device->CreateShaderResourceView(color.Get(), &view, handle);
+    handle.ptr += device->GetDescriptorHandleIncrementSize(
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    view.Format = DXGI_FORMAT_R32_FLOAT;
+    device->CreateShaderResourceView(depth.Get(), &view, handle);
+    constexpr uint64_t sample_bytes = uint64_t(width) * height * 4 * 8;
+    sample_output = buffer(device.Get(), sample_bytes, D3D12_HEAP_TYPE_DEFAULT,
+                           D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                           D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    sample_readback = buffer(device.Get(), sample_bytes, D3D12_HEAP_TYPE_READBACK,
+                             D3D12_RESOURCE_STATE_COPY_DEST);
+  }
   std::vector<uint64_t> position_offsets;
   uint64_t position_allocation = 0, position_bytes = 0;
   for (const auto& item : scene.items) {
@@ -550,22 +624,56 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
   transition(commands.Get(), position_output.Get(), D3D12_RESOURCE_STATE_STREAM_OUT,
              D3D12_RESOURCE_STATE_COPY_SOURCE);
   commands->CopyResource(position_readback.Get(), position_output.Get());
-  transition(commands.Get(), color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
-             D3D12_RESOURCE_STATE_COPY_SOURCE);
-  transition(commands.Get(), depth.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE,
-             D3D12_RESOURCE_STATE_COPY_SOURCE);
-  D3D12_TEXTURE_COPY_LOCATION source{}, destination{};
-  source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-  destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-  source.pResource = color.Get();
-  destination.pResource = color_readback.Get();
-  destination.PlacedFootprint = color_layout;
-  commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
-  source.pResource = depth.Get();
-  destination.pResource = depth_readback.Get();
-  destination.PlacedFootprint = depth_layout;
-  commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
-  check(commands->Close());
+  if (samples == 1) {
+    transition(commands.Get(), color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
+               D3D12_RESOURCE_STATE_COPY_SOURCE);
+    transition(commands.Get(), depth.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE,
+               D3D12_RESOURCE_STATE_COPY_SOURCE);
+    D3D12_TEXTURE_COPY_LOCATION source{}, destination{};
+    source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    source.pResource = color.Get();
+    destination.pResource = color_readback.Get();
+    destination.PlacedFootprint = color_layout;
+    commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+    source.pResource = depth.Get();
+    destination.pResource = depth_readback.Get();
+    destination.PlacedFootprint = depth_layout;
+    commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+  } else {
+    transition(commands.Get(), color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
+               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    transition(commands.Get(), depth.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE,
+               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    ID3D12DescriptorHeap* heaps[]{sample_heap.Get()};
+    commands->SetDescriptorHeaps(1, heaps);
+    commands->SetComputeRootSignature(sample_root.Get());
+    commands->SetPipelineState(sample_pipeline.Get());
+    commands->SetComputeRootDescriptorTable(
+        0, sample_heap->GetGPUDescriptorHandleForHeapStart());
+    commands->SetComputeRootUnorderedAccessView(
+        1, sample_output->GetGPUVirtualAddress());
+    commands->Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+    transition(commands.Get(), sample_output.Get(),
+               D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+               D3D12_RESOURCE_STATE_COPY_SOURCE);
+    commands->CopyResource(sample_readback.Get(), sample_output.Get());
+  }
+  const auto close_result = commands->Close();
+  if (FAILED(close_result)) {
+    ComPtr<ID3D12InfoQueue> messages;
+    if (SUCCEEDED(device.As(&messages))) {
+      for (UINT64 i = 0; i < messages->GetNumStoredMessages(); ++i) {
+        SIZE_T size = 0;
+        messages->GetMessage(i, nullptr, &size);
+        std::vector<char> storage(size);
+        auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+        if (SUCCEEDED(messages->GetMessage(i, message, &size)))
+          std::cerr << message->pDescription << '\n';
+      }
+    }
+  }
+  check(close_result);
   ID3D12CommandList* lists[]{commands.Get()};
   queue->ExecuteCommandLists(1, lists);
   ComPtr<ID3D12Fence> fence;
@@ -614,32 +722,79 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
   positions_file.close();
   require(bool(positions_file), "post-VS output write failed");
   uint32_t covered = 0;
+  uint32_t covered_any = 0, covered_samples = 0;
   std::vector<uint32_t> item_pixels(scene.items.size());
-  void *colors = nullptr, *depths = nullptr;
-  D3D12_RANGE color_range{0, SIZE_T(color_bytes)}, depth_range{0, SIZE_T(depth_bytes)};
-  check(color_readback->Map(0, &color_range, &colors));
-  check(depth_readback->Map(0, &depth_range, &depths));
-  for (uint32_t y = 0; y < height; ++y) {
-    auto* color_row = static_cast<const uint8_t*>(colors) + y * color_layout.Footprint.RowPitch;
-    auto* depth_row = reinterpret_cast<const float*>(
-        static_cast<const uint8_t*>(depths) + y * depth_layout.Footprint.RowPitch);
-    for (uint32_t x = 0; x < width; ++x) {
-      const auto* pixel = color_row + x * 4;
-      image.write(reinterpret_cast<const char*>(pixel), 3);
-      const auto id = uint32_t(pixel[0]) | (uint32_t(pixel[1]) << 8);
-      if (id) {
-        require(id <= scene.items.size() && std::isfinite(depth_row[x]) &&
-                    depth_row[x] > 0 && depth_row[x] <= 1,
-                "invalid covered pixel/depth");
-        ++covered;
-        ++item_pixels[id - 1];
-      }
-    }
-    depth_file.write(reinterpret_cast<const char*>(depth_row), width * sizeof(float));
-  }
   D3D12_RANGE empty{};
-  color_readback->Unmap(0, &empty);
-  depth_readback->Unmap(0, &empty);
+  if (samples == 1) {
+    void *colors = nullptr, *depths = nullptr;
+    D3D12_RANGE color_range{0, SIZE_T(color_bytes)}, depth_range{0, SIZE_T(depth_bytes)};
+    check(color_readback->Map(0, &color_range, &colors));
+    check(depth_readback->Map(0, &depth_range, &depths));
+    for (uint32_t y = 0; y < height; ++y) {
+      auto* color_row = static_cast<const uint8_t*>(colors) + y * color_layout.Footprint.RowPitch;
+      auto* depth_row = reinterpret_cast<const float*>(
+          static_cast<const uint8_t*>(depths) + y * depth_layout.Footprint.RowPitch);
+      for (uint32_t x = 0; x < width; ++x) {
+        const auto* pixel = color_row + x * 4;
+        image.write(reinterpret_cast<const char*>(pixel), 3);
+        const auto id = uint32_t(pixel[0]) | (uint32_t(pixel[1]) << 8);
+        if (id) {
+          require(id <= scene.items.size() && std::isfinite(depth_row[x]) &&
+                      depth_row[x] > 0 && depth_row[x] <= 1,
+                  "invalid covered pixel/depth");
+          ++covered;
+          ++item_pixels[id - 1];
+        }
+      }
+      depth_file.write(reinterpret_cast<const char*>(depth_row), width * sizeof(float));
+    }
+    color_readback->Unmap(0, &empty);
+    depth_readback->Unmap(0, &empty);
+    covered_any = covered_samples = covered;
+  } else {
+    constexpr size_t sample_bytes = size_t(width) * height * 4 * 8;
+    D3D12_RANGE range{0, sample_bytes};
+    void* mapped = nullptr;
+    check(sample_readback->Map(0, &range, &mapped));
+    const auto* words = static_cast<const uint32_t*>(mapped);
+    std::ofstream mask_file(directory / "coverage.u8", std::ios::binary);
+    std::ofstream sample_depths(directory / "depth.f32x4", std::ios::binary);
+    std::ofstream sample_ids(directory / "identity.u16x4", std::ios::binary);
+    for (size_t pixel = 0; pixel < size_t(width) * height; ++pixel) {
+      uint8_t mask = 0;
+      for (uint32_t sample = 0; sample < 4; ++sample) {
+        const auto id = words[(pixel * 4 + sample) * 2];
+        const float value = std::bit_cast<float>(words[(pixel * 4 + sample) * 2 + 1]);
+        require(id <= scene.items.size() && std::isfinite(value) &&
+                    value >= 0 && value <= 1 && (!id || value > 0),
+                "invalid four-sample identity/depth");
+        if (id) {
+          mask |= uint8_t(1u << sample);
+          ++covered_samples;
+        }
+        const auto short_id = uint16_t(id);
+        sample_ids.write(reinterpret_cast<const char*>(&short_id), sizeof(short_id));
+        sample_depths.write(reinterpret_cast<const char*>(&value), sizeof(value));
+        if (sample == 0) {
+          const char rgb[3]{char(id & 255), char((id >> 8) & 255), 0};
+          image.write(rgb, sizeof(rgb));
+          depth_file.write(reinterpret_cast<const char*>(&value), sizeof(value));
+          if (id) {
+            ++covered;
+            ++item_pixels[id - 1];
+          }
+        }
+      }
+      mask_file.write(reinterpret_cast<const char*>(&mask), sizeof(mask));
+      covered_any += mask != 0;
+    }
+    sample_readback->Unmap(0, &empty);
+    mask_file.close();
+    sample_depths.close();
+    sample_ids.close();
+    require(bool(mask_file) && bool(sample_depths) && bool(sample_ids),
+            "four-sample output write failed");
+  }
   image.close();
   depth_file.close();
   require(bool(image) && bool(depth_file), "diagnostic output write failed");
@@ -656,9 +811,12 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
           << "\"depth_test\":\"greater_equal\","
           << "\"depth_viewport\":[0,0.5],"
           << "\"width\":" << width << ",\"height\":" << height << ','
+          << "\"samples\":" << samples << ','
           << "\"items\":" << scene.items.size() << ','
           << "\"raster_draws\":" << draws.size() << ','
           << "\"covered_pixels\":" << covered << ','
+          << "\"covered_any_pixels\":" << covered_any << ','
+          << "\"covered_samples\":" << covered_samples << ','
           << "\"visible_items\":"
           << std::count_if(item_pixels.begin(), item_pixels.end(),
                            [](uint32_t value) { return value != 0; }) << ','
@@ -683,8 +841,8 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
     const std::filesystem::path& fixture,
     const std::filesystem::path& vertex_shader,
     const std::filesystem::path& output_directory,
-    ID3D12Device* device) {
+    ID3D12Device* device, uint32_t samples) {
   const auto bytes = read(fixture);
   return RunSnr04OwnedSceneDiagnostic(bytes, vertex_shader,
-                                      output_directory, device);
+                                     output_directory, device, samples);
 }

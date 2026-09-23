@@ -353,6 +353,11 @@ The RenderDoc side now has a repeatable four-sample before/after depth mask
 for matched event 11206: 134,885 changed depth samples in 60,654 pixels of
 one 1280×512 EDRAM tile. This is a single-draw reference, not a full-view
 or full-slice comparison; see the SNR-03/04 evidence.
+The private diagnostic now has opt-in 4× targets and per-sample identity,
+coverage and depth readback. A same-frame live fixture with 67 packets and
+127 ordered draws passed verification; its exact standalone replay produced
+byte-identical four-sample output. It is still unmasked and has no preceding
+scene depth, so it does not establish compatibility coverage or close SNR-04.
 The `SNR03F3` fixture now retains the SDK draw sequence for every selected
 final-state execution. A same-frame replay verified 135 ordered private raster
 draws from 67 packets, while the diagnostic remains unmasked and its post-VS

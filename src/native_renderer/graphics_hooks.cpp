@@ -16,6 +16,10 @@
 #include <thread>
 #include <vector>
 
+#if defined(_WIN32)
+#include <Windows.h>
+#endif
+
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/memory/utils.h>
@@ -1422,7 +1426,9 @@ void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {
         try {
           const auto covered = RunSnr04OwnedSceneDiagnostic(
               std::span<const char>(encoded), *shader, private_output,
-              static_cast<ID3D12Device*>(device));
+              static_cast<ID3D12Device*>(device),
+              GetEnvironmentVariableA("PINYON_SHIFT_SNR04_MSAA4", nullptr, 0)
+                  ? 4 : 1);
           const auto diagnostic_us = std::chrono::duration_cast<
               std::chrono::microseconds>(std::chrono::steady_clock::now() -
                                           diagnostic_begin).count();
