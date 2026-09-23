@@ -85,6 +85,7 @@ struct Item {
   uint32_t vertex_count = 0;
   std::array<uint32_t, 96> constants{};
   std::array<uint32_t, 40> system{};
+  std::array<uint32_t, 40> original_system{};
   std::array<uint32_t, 4> fetch{};
   std::vector<char> vertices;
 };
@@ -153,6 +154,7 @@ Scene load_scene(const std::filesystem::path& path) {
                 std::abs(bits(item.system[36]) - 1.f / width) < 1e-6f &&
                 bits(item.system[38]) == 1,
             "viewport remap does not normalize to reference resolution");
+    item.original_system = item.system;
     item.system[33] = std::bit_cast<uint32_t>(1.f);
     item.system[37] = std::bit_cast<uint32_t>(-1.f / height);
     item.fetch[2] &= 3;  // Rebase fetch 95 onto the private raw buffer.
@@ -260,7 +262,9 @@ int main(int argc, char** argv) try {
   parameters[5].Descriptor.ShaderRegister = 0;
   parameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
   D3D12_ROOT_SIGNATURE_DESC root_description{
-      6, parameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
+      6, parameters, 0, nullptr,
+      D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+          D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT};
   ComPtr<ID3DBlob> root_blob;
   check(D3D12SerializeRootSignature(&root_description, D3D_ROOT_SIGNATURE_VERSION_1,
                                     &root_blob, &errors));
@@ -302,6 +306,34 @@ int main(int argc, char** argv) try {
     }
     check(pipeline_result);
   }
+  D3D12_SO_DECLARATION_ENTRY position_declaration{0, "SV_Position", 0, 0, 4, 0};
+  UINT position_stride = 16;
+  auto stream_description = pipeline_description;
+  stream_description.PS = {};
+  stream_description.StreamOutput = {&position_declaration, 1, &position_stride, 1,
+                                     D3D12_SO_NO_RASTERIZED_STREAM};
+  stream_description.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+  stream_description.NumRenderTargets = 0;
+  stream_description.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
+  stream_description.DSVFormat = DXGI_FORMAT_UNKNOWN;
+  stream_description.DepthStencilState.DepthEnable = FALSE;
+  ComPtr<ID3D12PipelineState> stream_pipeline;
+  auto stream_result = device->CreateGraphicsPipelineState(
+      &stream_description, IID_PPV_ARGS(&stream_pipeline));
+  if (FAILED(stream_result)) {
+    ComPtr<ID3D12InfoQueue> messages;
+    if (SUCCEEDED(device.As(&messages))) {
+      for (UINT64 i = 0; i < messages->GetNumStoredMessages(); ++i) {
+        SIZE_T size = 0;
+        messages->GetMessage(i, nullptr, &size);
+        std::vector<char> storage(size);
+        auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+        if (SUCCEEDED(messages->GetMessage(i, message, &size)))
+          std::cerr << message->pDescription << '\n';
+      }
+    }
+    check(stream_result);
+  }
 
   D3D12_CLEAR_VALUE color_clear{};
   color_clear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -338,16 +370,20 @@ int main(int argc, char** argv) try {
     for (uint32_t corner : {0u, 1u, 3u, 1u, 2u, 3u})
       indices.push_back(uint16_t(first + corner));
   auto index_buffer = upload(device.Get(), indices.data(), indices.size() * sizeof(uint16_t));
-  struct Resources { ComPtr<ID3D12Resource> vertices, b0, b1, b3; };
+  struct Resources { ComPtr<ID3D12Resource> vertices, b0, b0_original, b1, b3; };
   std::vector<Resources> owned;
   owned.reserve(scene.items.size());
   for (const auto& item : scene.items) {
     std::array<uint32_t, 120> system{};
     std::copy(item.system.begin(), item.system.end(), system.begin());
+    std::array<uint32_t, 120> original_system{};
+    std::copy(item.original_system.begin(), item.original_system.end(),
+              original_system.begin());
     std::array<uint32_t, 192> fetch{};
     std::copy(item.fetch.begin(), item.fetch.end(), fetch.begin() + 188);
     owned.push_back({upload(device.Get(), item.vertices.data(), item.vertices.size()),
                      upload(device.Get(), system.data(), sizeof(system)),
+                     upload(device.Get(), original_system.data(), sizeof(original_system)),
                      upload(device.Get(), item.constants.data(), 23 * 16),
                      upload(device.Get(), fetch.data(), sizeof(fetch))});
   }
@@ -364,6 +400,20 @@ int main(int argc, char** argv) try {
                                D3D12_RESOURCE_STATE_COPY_DEST);
   auto depth_readback = buffer(device.Get(), depth_bytes, D3D12_HEAP_TYPE_READBACK,
                                D3D12_RESOURCE_STATE_COPY_DEST);
+  std::vector<uint64_t> position_offsets;
+  uint64_t position_allocation = 0, position_bytes = 0;
+  for (const auto& item : scene.items) {
+    position_offsets.push_back(position_allocation);
+    const auto bytes = uint64_t(item.vertex_count) * 16;
+    position_allocation += bytes + 8;
+    position_bytes += bytes;
+  }
+  auto position_output = buffer(device.Get(), position_allocation,
+                                D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST);
+  auto position_readback = buffer(device.Get(), position_allocation,
+                                  D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
+  const std::vector<char> zero_positions(position_allocation);
+  auto position_zero = upload(device.Get(), zero_positions.data(), zero_positions.size());
   ComPtr<ID3D12CommandQueue> queue;
   D3D12_COMMAND_QUEUE_DESC queue_description{};
   check(device->CreateCommandQueue(&queue_description, IID_PPV_ARGS(&queue)));
@@ -401,6 +451,27 @@ int main(int argc, char** argv) try {
     commands->SetGraphicsRoot32BitConstant(4, UINT(ordinal + 1), 0);
     commands->DrawIndexedInstanced(item.vertex_count / 4 * 6, 1, 0, 0, 0);
   }
+  commands->CopyBufferRegion(position_output.Get(), 0, position_zero.Get(), 0,
+                             position_allocation);
+  transition(commands.Get(), position_output.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
+             D3D12_RESOURCE_STATE_STREAM_OUT);
+  commands->SetPipelineState(stream_pipeline.Get());
+  commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
+  for (size_t ordinal = 0; ordinal < scene.items.size(); ++ordinal) {
+    const auto& resource = owned[ordinal];
+    const auto bytes = uint64_t(scene.items[ordinal].vertex_count) * 16;
+    const auto address = position_output->GetGPUVirtualAddress() + position_offsets[ordinal];
+    commands->SetGraphicsRootConstantBufferView(0, resource.b0_original->GetGPUVirtualAddress());
+    commands->SetGraphicsRootConstantBufferView(1, resource.b1->GetGPUVirtualAddress());
+    commands->SetGraphicsRootConstantBufferView(2, resource.b3->GetGPUVirtualAddress());
+    commands->SetGraphicsRootShaderResourceView(3, resource.vertices->GetGPUVirtualAddress());
+    D3D12_STREAM_OUTPUT_BUFFER_VIEW position_view{address, bytes, address + bytes};
+    commands->SOSetTargets(0, 1, &position_view);
+    commands->DrawInstanced(scene.items[ordinal].vertex_count, 1, 0, 0);
+  }
+  transition(commands.Get(), position_output.Get(), D3D12_RESOURCE_STATE_STREAM_OUT,
+             D3D12_RESOURCE_STATE_COPY_SOURCE);
+  commands->CopyResource(position_readback.Get(), position_output.Get());
   transition(commands.Get(), color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
              D3D12_RESOURCE_STATE_COPY_SOURCE);
   transition(commands.Get(), depth.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE,
@@ -449,6 +520,21 @@ int main(int argc, char** argv) try {
   std::ofstream image(directory / "identity.ppm", std::ios::binary);
   image << "P6\n" << width << ' ' << height << "\n255\n";
   std::ofstream depth_file(directory / "depth.f32", std::ios::binary);
+  std::ofstream positions_file(directory / "postvs.f32x4", std::ios::binary);
+  void* positions = nullptr;
+  D3D12_RANGE position_range{0, SIZE_T(position_allocation)};
+  check(position_readback->Map(0, &position_range, &positions));
+  for (size_t ordinal = 0; ordinal < scene.items.size(); ++ordinal) {
+    const auto bytes = uint64_t(scene.items[ordinal].vertex_count) * 16;
+    const auto* segment = static_cast<const char*>(positions) + position_offsets[ordinal];
+    uint64_t positions_written = 0;
+    std::memcpy(&positions_written, segment + bytes, 8);
+    require(positions_written == bytes, "incomplete post-VS stream output");
+    positions_file.write(segment, bytes);
+  }
+  position_readback->Unmap(0, nullptr);
+  positions_file.close();
+  require(bool(positions_file), "post-VS output write failed");
   uint32_t covered = 0;
   std::vector<uint32_t> item_pixels(scene.items.size());
   void *colors = nullptr, *depths = nullptr;
@@ -496,6 +582,7 @@ int main(int argc, char** argv) try {
           << "\"visible_items\":"
           << std::count_if(item_pixels.begin(), item_pixels.end(),
                            [](uint32_t value) { return value != 0; }) << ','
+          << "\"postvs_bytes\":" << position_bytes << ','
           << "\"extract_us\":" << us(begin, extracted) << ','
           << "\"build_us\":" << us(extracted, built) << ','
           << "\"draw_readback_us\":" << us(built, drawn) << ','

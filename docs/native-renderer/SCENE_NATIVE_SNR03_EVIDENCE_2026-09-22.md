@@ -371,10 +371,69 @@ The executable rejects a truncated fixture and incorrect VS bytecode.
 The identity image covers large billboard rectangles over scene regions where
 the presented image is transparent. The diagnostic does not sample foliage
 alpha textures or reproduce the compatibility pixel shader, so its pixels
-cannot be compared directly to the presented color as visible foliage. This
-is a working GPU proof of owned vertex/state binding and private full-size
-identity/depth readback, not same-frame parity, live callback integration, or
-complete selected-slice coverage. Those SNR-04 admission gates remain open.
+cannot be compared directly to the presented color as visible foliage.
+
+## Same-run RenderDoc post-VS comparison
+
+A visible RenderDoc-wrapped saved-race run produced a different but internally
+consistent frame-6000 fixture: 72 owned vegetation packets, 392,096 raw
+vertex bytes and 189 final draw variants. The fixture SHA-256 is
+`2FEEE3D8E83E5A807A6955B1E83809D323D504AEAA093360AF483D19659BB21D`.
+`tools/verify-snr03-scene-fixture.py` passed against the same run's ordered
+signal log. RenderDoc capture `extended-capture_frame6000.rdc` has SHA-256
+`60D849F461DA39961437D99FC6DE8DD0EFDD20860FA51FAA33EC8D73613E7E51`.
+Its selected draw count and per-vertex post-VS positions identify it as the
+matching reference, despite the game's fixture publication reporting output
+frame 6001. The separately captured RenderDoc frame 6001 contains only one
+draw and is not the selected scene reference.
+
+The private diagnostic now stream-outputs every item's VS positions using
+the fixture's original viewport system words, while retaining normalized
+1280×720 viewport words for its separate identity/depth raster pass. The
+1,568,384-byte `postvs.f32x4` has SHA-256
+`8D79C9C5BE3A346D45CBE742D0D0A1811C00DB1048A61D46504DB91E824F6466`.
+`tools/check-snr04-capture-slice.py` found a byte-identical captured post-VS
+stream for each of the 72 items. The capture contains exactly 189 draws with
+the selected shader and fixture vertex counts, matching the fixture's
+variant-weighted count distribution. This proves the owned geometry, fetch,
+constants, and original viewport state produce the same VS positions for
+every selected item in the captured frame. It does not identify each of the
+other 117 viewport variants by packet identity.
+
+To reproduce locally, copy `config/render-tests/fh1-race-sustained.fh1test`
+to `.local/native-renderer/snr04/renderdoc-extended.fh1test`, change only
+`stop 6920` to `stop 9000`, and launch the built preview visibly with the
+repository's AppData `-StateRoot` procedure:
+
+```powershell
+$stateRoot = Join-Path $env:LOCALAPPDATA 'PinyonShift\source\0.1.0\.local\preview'
+.\tools\launch-preview.ps1 -Configuration RelWithDebInfo -StateRoot $stateRoot `
+  -RenderTestScript .local/native-renderer/snr04/renderdoc-extended.fh1test `
+  -RenderTestOutput .local/native-renderer/snr04/renderdoc-extended-output `
+  -RenderTestTimeoutSeconds 360 `
+  -RenderDocCommand .local/tools/renderdoc-1.46/RenderDoc_1.46_64/renderdoccmd.exe `
+  -RenderDocCapturePrefix .local/native-renderer/snr04/extended-capture `
+  -GameArgumentsJson '["--pinyon_shift_fh1_gpu_corpus=true","--pinyon_shift_fh1_scene_dump=true","--pinyon_shift_snr01_trace_source_frame=6000","--pinyon_shift_snr03_probe_frame=6000"]' -Json
+```
+
+While that run is active, run `qrenderdoc.exe --python` with
+`tools/queue-snr04-renderdoc-capture.py` and `SNR04_OUTPUT` set to a local
+JSON path; its target control must connect and register D3D12 before it queues
+frames 6000–6002. Then set `SNR04_CAPTURE`, `SNR04_FIXTURE`, and
+`SNR04_OUTPUT` for `tools/probe-snr04-renderdoc-slice.py` in the same way and
+run it through `qrenderdoc.exe --python`. Run the private diagnostic on that
+fixture and exact VS bytecode, then compare with:
+
+```powershell
+python tools/check-snr04-capture-slice.py `
+  .local/native-renderer/snr04/renderdoc-extended-output/snr03-scene-6000.bin `
+  .local/native-renderer/snr04/offline-same-run/postvs.f32x4 `
+  .local/native-renderer/snr04/tracked-slice-probe.json
+```
+
+This post-VS result still does not test compatibility depth or visible
+coverage. The diagnostic uses unmasked identity pixels, and no native live
+callback or unload/reload path has been qualified. Gate A stays open.
 
 ## Title camera to selected draw-state join
 

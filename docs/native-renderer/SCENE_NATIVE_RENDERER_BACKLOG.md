@@ -303,6 +303,13 @@ First bounded implementation cut (not Gate A completion):
    readback timings. Only then expand SNR-03/SNR-04 to all selected main-view
    owners and dynamic geometry.
 
+Current evidence: the standalone private diagnostic matches captured post-VS
+positions byte-for-byte for all 72 vegetation items in one same-run frame;
+189 captured variants match the fixture's vertex-count distribution. See the
+[SNR-03/04 evidence](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md#same-run-renderdoc-post-vs-comparison).
+Same-frame compatibility coverage/depth, a live callback, unload/reload and
+complete main-view ownership remain open.
+
 **Done when / Gate A:** the selected main-view scene is complete and stable at
 reference resolution with no missing, duplicated, stale or misattributed objects.
 Unknown authoritative relationships stop this gate; adding more guessed offsets

@@ -9,6 +9,8 @@ param(
     [string]$DiscShaderCorpusDir,
     [string]$RenderTestScript,
     [string]$RenderTestOutput,
+    [string]$RenderDocCommand,
+    [string]$RenderDocCapturePrefix,
     [ValidateRange(1, 3600)]
     [int]$RenderTestTimeoutSeconds,
     [switch]$CollectFh1PassInventory,
@@ -129,7 +131,7 @@ try {
     }
     $normalizedGameArguments = @($GameArguments)
     if ($Hidden) {
-        $start.WindowStyle = 'Hidden'
+        if (-not $DirectChildProcess) { $start.WindowStyle = 'Hidden' }
         $normalizedGameArguments += '--audio_mute=true'
     }
     if ($GameArgumentsJson) {
@@ -147,6 +149,16 @@ try {
     }
     if ($normalizedGameArguments.Count -ne 0) {
         $start.ArgumentList = $normalizedGameArguments
+    }
+    if ($RenderDocCommand) {
+        if (-not $RenderDocCapturePrefix) {
+            throw '-RenderDocCapturePrefix is required with -RenderDocCommand.'
+        }
+        $start.FilePath = (Resolve-Path -LiteralPath $RenderDocCommand).Path
+        $start.ArgumentList = @('capture', '--wait-for-exit',
+            '-d', (Split-Path $executable -Parent), '-c',
+            [IO.Path]::GetFullPath($RenderDocCapturePrefix), $executable) +
+            $normalizedGameArguments
     }
     if ($DirectChildProcess) {
         # Keep capture/debugger child-process hooks on the launching process.
@@ -186,6 +198,17 @@ finally {
 
 if ($null -eq $process) { throw 'Windows did not start Pinyon Shift.' }
 $exitCode = [int64]$process.ExitCode
+if ($RenderDocCommand) {
+    $result = [ordered]@{
+        result = if ($exitCode -eq 0) { 'capture-wrapper-exit' } else { 'capture-wrapper-failed' }
+        process_id = $process.Id
+        exit_code = $exitCode
+        capture_prefix = [IO.Path]::GetFullPath($RenderDocCapturePrefix)
+    }
+    if ($Json) { $result | ConvertTo-Json -Compress } else { $result }
+    if ($exitCode -ne 0) { exit 1 }
+    return
+}
 if ($exitCode -ne 0) {
     $report = & (Join-Path $PSScriptRoot 'create-crash-report.ps1') `
         -StateRoot $resolvedStateRoot -Executable $executable `
