@@ -3557,3 +3557,52 @@ assert all(r['title_scalar_dispatch_object'] and
            r['title_scalar_child_context'] for r in animated)
 '@ | python -
 ```
+
+### Car-presentation scalar packets cross both candidate color groups
+
+The remaining 36 scalar draws join four `CCarPresentation + 2016`
+subobjects in the same final replay. Generated `CPresentationView` method
+`sub_82444E60` calls `sub_823F37D0`, which passes each presentation's
+`+2016` subobject to `sub_82443600`. That routine issues the three observed
+scalar wrapper calls in title packet order. Each of the four subobjects has
+one packet at each caller, and each packet executes three times in backend
+frame 6001:
+
+| Title return site | Packet per subobject | Prepared draws | Target color word | Observed write state |
+| --- | ---: | ---: | --- | --- |
+| `0x82443B98` | First | 12 | `00030000` | color mask 0, no pixel shader, depth control `08714263` |
+| `0x82443C40` | Second | 12 | `00030000` | color mask 0, no pixel shader, depth control `0871C263` |
+| `0x82444018` | Third | 12 | `000C0000` | color mask 7, pixel shader present, depth control `08700261` |
+
+The first two draw states are depth-only; the third writes color. The title
+packet ordinals are 205–216 in four consecutive triples. This is an exact
+same-owner relationship across the two candidate color groups, not two
+independent passes. Its geometry/material role and depth consumers are not
+proved, so Gate A cannot yet decide whether to render this contribution
+natively or retain it with an ordered bridge. A shader hash or 12-index
+shape is insufficient to call it a decal, shadow or vehicle surface.
+
+Recheck the saved ledger's packet and write-state partition:
+
+```powershell
+@'
+import collections, json
+from pathlib import Path
+rows = json.loads(Path(
+    '.local/native-renderer/snr01/state-resource-final-run-a-animated-joined-ledger.json'
+).read_text(encoding='utf8'))['draws']
+rows = [r for r in rows if r['target'].startswith('14020500/')
+        and r['title_scalar_outer_object']]
+sites = (0x82443B98, 0x82443C40, 0x82444018)
+assert len(rows) == 36
+assert {r['title_scalar_caller_lr'] for r in rows} == set(sites)
+assert len({r['title_scalar_outer_object'] for r in rows}) == 4
+assert sorted({r['title_packet_ordinal'] for r in rows}) == list(range(205, 217))
+assert collections.Counter(r['title_scalar_caller_lr'] for r in rows) == {
+    site: 12 for site in sites}
+assert all(r['color_mask'] == 0 and r['pixel_shader'] == 0
+           for r in rows if r['title_scalar_caller_lr'] != sites[2])
+assert all(r['color_mask'] == 7 and r['pixel_shader']
+           for r in rows if r['title_scalar_caller_lr'] == sites[2])
+'@ | python -
+```
