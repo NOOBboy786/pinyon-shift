@@ -22,8 +22,9 @@ def verify(path, log_path):
         return value
 
     magic = take("<8s")[0]
-    assert magic in (b"SNR03F1\0", b"SNR03F2\0")
-    extended = magic == b"SNR03F2\0"
+    assert magic in (b"SNR03F1\0", b"SNR03F2\0", b"SNR03F3\0")
+    extended = magic != b"SNR03F1\0"
+    sequenced = magic == b"SNR03F3\0"
     source_frame, view, camera, count = take("<QIII")
     assert 0 < count <= 512
     camera80 = take("<16I")
@@ -50,13 +51,14 @@ def verify(path, log_path):
         variants = {}
         for _ in range(variant_count):
             dynamic = take("<Q")[0]
+            sequence = take("<Q")[0] if sequenced else None
             system = take("<64I" if extended else "<40I")
             fetch = take("<4I")
             assert dynamic not in variants
             assert fetch[2] & 0x1FFFFFFC == address & 0x1FFFFFFC
             assert fetch[3] & 0x03FFFFFC == byte_count
             variants[dynamic] = (system, fetch)
-            states[packet, f"{dynamic:016X}"] = (system, fetch)
+            states[packet, f"{dynamic:016X}"] = (sequence, system, fetch)
         items.append(dict(owner=owner, record=record,
                           vertex_descriptor=descriptor, vertex_address=address,
                           vertex_size=size, packet_physical=packet,
@@ -120,12 +122,23 @@ def verify(path, log_path):
     assert len(final) == len(states)
     assert {(row["packet"], row["dynamic"]) for row in final} == set(states)
     for row in final:
-        system, fetch = states[row["packet"], row["dynamic"]]
+        sequence, system, fetch = states[row["packet"], row["dynamic"]]
+        if sequenced:
+            assert row["sequence"] == sequence
         assert system[:8] == tuple(row["system0"] + row["system1"])
         assert system[32:40] == tuple(row["system8"] + row["system9"])
         if extended:
             assert system[56:64] == tuple(row["system14"] + row["system15"])
         assert fetch == tuple(row["fetch47"])
+    if sequenced:
+        selected_color = [row for row in selected
+                          if row["vertex_shader"] == "5834939992FFC765" and
+                          row["pixel_shader"] == "C2F1242C2535A57E"]
+        assert {(row["packet_physical"], row["dynamic"], row["sequence"])
+                for row in selected_color} == {
+                    (packet, dynamic, state[0])
+                    for (packet, dynamic), state in states.items()}
+        assert len({state[0] for state in states.values()}) == len(states)
     rows = [json.loads(line.split("FH1 SNR03 camera row ", 1)[1])
             for line in lines if "FH1 SNR03 camera row {" in line]
     assert len(rows) == 8

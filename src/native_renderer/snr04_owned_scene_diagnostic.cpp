@@ -86,6 +86,10 @@ struct Reader {
   }
 };
 struct Item {
+  struct Variant {
+    uint64_t sequence = 0;
+    std::array<uint32_t, 64> system{};
+  };
   uint32_t packet = 0;
   uint32_t vertex_count = 0;
   std::array<uint32_t, 96> constants{};
@@ -94,22 +98,27 @@ struct Item {
   std::array<uint32_t, 64> system{};
   std::array<uint32_t, 64> original_system{};
   std::array<uint32_t, 4> fetch{};
+  std::vector<Variant> variants;
   std::vector<char> vertices;
 };
 struct Scene {
   uint64_t source_frame = 0;
+  bool sequenced = false;
   std::string fixture_sha256;
   std::vector<Item> items;
 };
 Scene load_scene(std::span<const char> file) {
   Reader reader{file};
   const auto magic = reader.take<std::array<char, 8>>();
-  const bool extended = magic ==
+  const bool sequenced = magic ==
+      std::array<char, 8>{'S', 'N', 'R', '0', '3', 'F', '3', '\0'};
+  const bool extended = sequenced || magic ==
       std::array<char, 8>{'S', 'N', 'R', '0', '3', 'F', '2', '\0'};
   require(extended || magic ==
               std::array<char, 8>{'S', 'N', 'R', '0', '3', 'F', '1', '\0'},
           "wrong fixture magic");
   Scene scene;
+  scene.sequenced = sequenced;
   scene.fixture_sha256 = sha256(file);
   scene.source_frame = reader.take<uint64_t>();
   reader.take<uint32_t>();  // Title view.
@@ -119,6 +128,7 @@ Scene load_scene(std::span<const char> file) {
   reader.take<std::array<uint32_t, 32>>();  // Two title camera word arrays.
   scene.items.reserve(count);
   std::set<uint32_t> packets;
+  std::set<uint64_t> sequences;
   for (uint32_t ordinal = 0; ordinal < count; ++ordinal) {
     auto metadata = reader.take<std::array<uint32_t, 5>>();
     Item item;
@@ -146,6 +156,9 @@ Scene load_scene(std::span<const char> file) {
     item.vertices = reader.bytes(byte_count);
     for (uint32_t variant = 0; variant < variant_count; ++variant) {
       reader.take<uint64_t>();  // Dynamic-state identity.
+      const uint64_t sequence = sequenced ? reader.take<uint64_t>() : 0;
+      require(!sequenced || (sequence && sequences.insert(sequence).second),
+              "duplicate or missing draw sequence");
       std::array<uint32_t, 64> system{};
       if (extended) {
         system = reader.take<std::array<uint32_t, 64>>();
@@ -168,6 +181,7 @@ Scene load_scene(std::span<const char> file) {
                       (extended && word >= 42 && word <= 45),
                   "non-diagnostic variant change");
       }
+      item.variants.push_back({sequence, system});
     }
     auto bits = [](uint32_t word) { return std::bit_cast<float>(word); };
     const float scale_y = bits(item.system[33]);
@@ -181,6 +195,17 @@ Scene load_scene(std::span<const char> file) {
     item.original_system = item.system;
     item.system[33] = std::bit_cast<uint32_t>(1.f);
     item.system[37] = std::bit_cast<uint32_t>(-1.f / height);
+    for (auto& variant : item.variants) {
+      const float variant_scale_y = bits(variant.system[33]);
+      const float variant_offset_y = bits(variant.system[37]);
+      require(std::isfinite(variant_scale_y) && variant_scale_y > 0 &&
+                  std::isfinite(variant_offset_y) &&
+                  std::abs((variant_offset_y + 1) / variant_scale_y - 1 +
+                           1.f / height) < 1e-6f,
+              "variant viewport remap does not normalize");
+      variant.system[33] = std::bit_cast<uint32_t>(1.f);
+      variant.system[37] = std::bit_cast<uint32_t>(-1.f / height);
+    }
     item.fetch[2] &= 3;  // Rebase fetch 95 onto the private raw buffer.
     scene.items.push_back(std::move(item));
   }
@@ -401,22 +426,30 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
     for (uint32_t corner : {0u, 1u, 3u, 1u, 2u, 3u})
       indices.push_back(uint16_t(first + corner));
   auto index_buffer = upload(device.Get(), indices.data(), indices.size() * sizeof(uint16_t));
-  struct Resources { ComPtr<ID3D12Resource> vertices, b0, b0_original, b1, b3; };
+  struct Resources {
+    ComPtr<ID3D12Resource> vertices, b0_original, b1, b3;
+    std::vector<ComPtr<ID3D12Resource>> b0_variants;
+  };
   std::vector<Resources> owned;
   owned.reserve(scene.items.size());
   for (const auto& item : scene.items) {
-    std::array<uint32_t, 120> system{};
-    std::copy(item.system.begin(), item.system.end(), system.begin());
     std::array<uint32_t, 120> original_system{};
     std::copy(item.original_system.begin(), item.original_system.end(),
               original_system.begin());
     std::array<uint32_t, 192> fetch{};
     std::copy(item.fetch.begin(), item.fetch.end(), fetch.begin() + 188);
-    owned.push_back({upload(device.Get(), item.vertices.data(), item.vertices.size()),
-                     upload(device.Get(), system.data(), sizeof(system)),
-                     upload(device.Get(), original_system.data(), sizeof(original_system)),
-                     upload(device.Get(), item.constants.data(), 23 * 16),
-                     upload(device.Get(), fetch.data(), sizeof(fetch))});
+    Resources resource{
+        upload(device.Get(), item.vertices.data(), item.vertices.size()),
+        upload(device.Get(), original_system.data(), sizeof(original_system)),
+        upload(device.Get(), item.constants.data(), 23 * 16),
+        upload(device.Get(), fetch.data(), sizeof(fetch)), {}};
+    for (const auto& variant : item.variants) {
+      std::array<uint32_t, 120> system{};
+      std::copy(variant.system.begin(), variant.system.end(), system.begin());
+      resource.b0_variants.push_back(upload(device.Get(), system.data(),
+                                            sizeof(system)));
+    }
+    owned.push_back(std::move(resource));
   }
   const auto built = std::chrono::steady_clock::now();
 
@@ -472,14 +505,28 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
                                      UINT(indices.size() * sizeof(uint16_t)),
                                      DXGI_FORMAT_R16_UINT};
   commands->IASetIndexBuffer(&index_view);
+  struct DrawRef { uint64_t sequence; size_t item, variant; };
+  std::vector<DrawRef> draws;
   for (size_t ordinal = 0; ordinal < scene.items.size(); ++ordinal) {
     const auto& item = scene.items[ordinal];
-    const auto& resource = owned[ordinal];
-    commands->SetGraphicsRootConstantBufferView(0, resource.b0->GetGPUVirtualAddress());
+    const size_t count = scene.sequenced ? item.variants.size() : 1;
+    for (size_t variant = 0; variant < count; ++variant)
+      draws.push_back({item.variants[variant].sequence, ordinal, variant});
+  }
+  if (scene.sequenced)
+    std::sort(draws.begin(), draws.end(),
+              [](const DrawRef& a, const DrawRef& b) {
+                return a.sequence < b.sequence;
+              });
+  for (const auto& draw : draws) {
+    const auto& item = scene.items[draw.item];
+    const auto& resource = owned[draw.item];
+    commands->SetGraphicsRootConstantBufferView(
+        0, resource.b0_variants[draw.variant]->GetGPUVirtualAddress());
     commands->SetGraphicsRootConstantBufferView(1, resource.b1->GetGPUVirtualAddress());
     commands->SetGraphicsRootConstantBufferView(2, resource.b3->GetGPUVirtualAddress());
     commands->SetGraphicsRootShaderResourceView(3, resource.vertices->GetGPUVirtualAddress());
-    commands->SetGraphicsRoot32BitConstant(4, UINT(ordinal + 1), 0);
+    commands->SetGraphicsRoot32BitConstant(4, UINT(draw.item + 1), 0);
     commands->DrawIndexedInstanced(item.vertex_count / 4 * 6, 1, 0, 0, 0);
   }
   commands->CopyBufferRegion(position_output.Get(), 0, position_zero.Get(), 0,
@@ -610,6 +657,7 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
           << "\"depth_viewport\":[0,0.5],"
           << "\"width\":" << width << ",\"height\":" << height << ','
           << "\"items\":" << scene.items.size() << ','
+          << "\"raster_draws\":" << draws.size() << ','
           << "\"covered_pixels\":" << covered << ','
           << "\"visible_items\":"
           << std::count_if(item_pixels.begin(), item_pixels.end(),

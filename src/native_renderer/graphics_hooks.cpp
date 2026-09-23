@@ -299,6 +299,7 @@ struct Snr03SceneSnapshot {
   std::vector<Snr03VegetationItem> items;
 };
 struct Snr03FinalState {
+  uint64_t draw_sequence;
   std::array<uint32_t, 64> system_constants;
   std::array<uint32_t, 4> fetch_47;
   bool operator==(const Snr03FinalState&) const = default;
@@ -335,7 +336,7 @@ std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
     const auto* data = reinterpret_cast<const char*>(&value);
     bytes.insert(bytes.end(), data, data + sizeof(value));
   };
-  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '3', 'F', '2', '\0'};
+  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '3', 'F', '3', '\0'};
   write(magic);
   write(scene.title->source_frame);
   write(scene.title->view);
@@ -362,6 +363,7 @@ std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
     bytes.insert(bytes.end(), item.vertex_bytes.begin(), item.vertex_bytes.end());
     for (const auto& [dynamic, state] : item.final_states) {
       write(dynamic);
+      write(state.draw_sequence);
       write(state.system_constants);
       write(state.fetch_47);
     }
@@ -952,6 +954,7 @@ void ObserveSnr03FinalDrawState(
     return;
   }
   Snr03FinalState state{};
+  state.draw_sequence = observation.draw_sequence;
   auto& system = state.system_constants;
   auto& fetch = state.fetch_47;
   std::copy_n(observation.system_constant_words, system.size(), system.begin());
@@ -959,11 +962,9 @@ void ObserveSnr03FinalDrawState(
   auto& variants = draw->second.final_states;
   const auto existing = variants.find(observation.dynamic_state);
   if (existing != variants.end()) {
-    if (existing->second != state) {
-      payload.rejected = true;
-      REXGPU_INFO("FH1 SNR03 final state mismatch packet={} dynamic={:016X}",
-                  item->packet_physical, observation.dynamic_state);
-    }
+    payload.rejected = true;
+    REXGPU_INFO("FH1 SNR03 repeated final state packet={} dynamic={:016X}",
+                item->packet_physical, observation.dynamic_state);
     return;
   }
   if (variants.size() >= 4) {
@@ -972,12 +973,13 @@ void ObserveSnr03FinalDrawState(
   }
   variants.emplace(observation.dynamic_state, state);
   REXGPU_INFO("FH1 SNR03 final draw state {{\"frame\":{},\"packet\":{},"
-              "\"dynamic\":\"{:016X}\","
+              "\"sequence\":{},\"dynamic\":\"{:016X}\","
               "\"system0\":[{},{},{},{}],\"system1\":[{},{},{},{}],"
               "\"system8\":[{},{},{},{}],\"system9\":[{},{},{},{}],"
               "\"system14\":[{},{},{},{}],\"system15\":[{},{},{},{}],"
               "\"fetch47\":[{},{},{},{}]}}",
               observation.frame_sequence, item->packet_physical,
+              observation.draw_sequence,
               observation.dynamic_state,
               system[0], system[1], system[2], system[3],
               system[4], system[5], system[6], system[7],

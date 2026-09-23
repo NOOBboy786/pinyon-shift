@@ -344,6 +344,10 @@ private-queue wait must be ordered without blocking that callback; see the
 An opt-in guest-command-list readback now verifies the five live BC3 payloads
 and all 67 packet joins in a later frame; the debug CPU wait is not a native
 sampling bridge or a performance result.
+The `SNR03F3` fixture now retains the SDK draw sequence for every selected
+final-state execution. A same-frame replay verified 135 ordered private raster
+draws from 67 packets, while the diagnostic remains unmasked and its post-VS
+file still covers only the first state per packet.
 Full compatibility
 coverage/depth parity, unload/reload and complete main-view ownership remain
 open.

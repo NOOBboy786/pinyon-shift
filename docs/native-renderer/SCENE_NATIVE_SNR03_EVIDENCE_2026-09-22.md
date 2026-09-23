@@ -874,3 +874,46 @@ This debug readback waits after submission and is excluded from performance
 measurement. The private diagnostic still uses an identity pixel shader;
 alpha-coverage/depth parity and an asynchronous private-queue texture handoff
 remain open.
+
+## Ordered final-state executions in the private raster
+
+The F2 fixture kept each packet's distinct final states but sorted them by
+dynamic-state hash, and the private identity raster drew only the first state
+per packet. `SNR03F3` adds the SDK's frame draw sequence to each final-state
+record. The fixture verifier checks a unique sequence for every selected
+execution and joins `(packet, dynamic state, sequence)` to the independent
+same-frame `FH1 scene binding` log. A repeated dynamic state for one packet
+now rejects the bounded fixture instead of silently dropping an execution.
+The private raster draws every F3 record in sequence order; F1/F2 replay keeps
+its historical one-draw-per-item behavior.
+
+In an AppData-backed sustained-race replay, the game exited normally with
+seven compatibility captures and five live BC3 readbacks. The F3 fixture has
+67 owned vegetation packets and 135 ordered final-state executions (SHA-256
+`A686C94AB6B505ABF4B95798EAF9E573A34137A2DF8C1BB3FD3CE526F38F25BB`).
+Both fixture and BC3 verifiers passed against
+`.local/native-renderer/snr04/f3-live-run-a-signal.log` (SHA-256
+`9AC6A738A3C6EF4A378D9D659217DA707EA327CEC8E56AE0D4F8BE2504FA1A3C`).
+The private unmasked identity/depth raster drew all 135 executions and covered
+412,433 pixels. The rebuilt standalone renderer replayed the exact fixture
+with byte-identical identity, depth and per-item post-VS outputs (SHA-256
+`23748892EC6BB15111915FB1EB63929F4EEE1F9407BEEC8879A409277DF98DBE`,
+`5CF9C8EA56245987049E4C4564603F6F3861B48600761B6A3394FC6134CC7FA5`,
+and `F9023D6D012838A05F829E5225BBCC1FF6EAE683E1CDFD03648A3DD22FB5F4E2`).
+The older F2 fixture still produces its previous identity and depth hashes.
+
+Recheck with:
+
+```powershell
+python tools/verify-snr03-scene-fixture.py `
+  .local/native-renderer/snr04/f3-live-run-a/snr03-scene-6000.bin `
+  .local/native-renderer/snr04/f3-live-run-a-signal.log
+python tools/verify-snr04-live-bc3.py `
+  .local/native-renderer/snr04/f3-live-run-a-signal.log `
+  .local/native-renderer/snr04/f3-live-run-a
+```
+
+The post-VS artifact still records the first state per packet, while the
+private raster now draws every final-state execution. It remains unmasked;
+same-frame alpha coverage and depth parity against compatibility are not yet
+proved. The rest of the candidate scene also remains outside this fixture.
