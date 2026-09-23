@@ -7,7 +7,8 @@ from pathlib import Path
 
 
 def verify(path: Path, view_call: int = 0, require_color: bool = False,
-           require_record_control: bool = False) -> dict:
+           require_record_control: bool = False,
+           require_descriptor_header: bool = False) -> dict:
     events = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if ("FH1 SNR02 " in line or "FH1 SNR01 track nested entry " in line
@@ -74,6 +75,15 @@ def verify(path: Path, view_call: int = 0, require_color: bool = False,
     if require_color:
         assert any(draw.get("color_mask", 0) and draw["pixel_shader"] for draw in draws), "no color-writing draw"
     control = {}
+    if require_descriptor_header:
+        words = capture["descriptor_words"]
+        assert len(words) == 8 and words[0] == words[3] != 0
+        assert words[1] == words[5] == 0
+        assert words[2] == entries[0]["container"] + 44
+        assert words[4] & 0x1FFFFFFF == target
+        assert words[7] >= 8 and all(row["command_bytes"] == words[7] - 8
+                                       for row in executions)
+        control["descriptor_words"] = words
     if require_record_control:
         assert len(records) == len(ranges) == 1, "expected one captured record and range"
         record, mesh_range = records[0], ranges[0]
@@ -91,10 +101,10 @@ def verify(path: Path, view_call: int = 0, require_color: bool = False,
             assert lookup["record"] == record["record"] and lookup["index"] == record["words"][0]
             assert lookup["table_entry"] == lookup["resource"]
             assert lookup["field60"] == lookup["argument"]
-        control = {"resource_lookup_skipped": record["resource_skip_flag"],
-                   "range_skipped": record["range_skip_flag"],
-                   "range_values": [word["value"] for word in range_words],
-                   "resource_lookups": len(lookups)}
+        control.update({"resource_lookup_skipped": record["resource_skip_flag"],
+                        "range_skipped": record["range_skip_flag"],
+                        "range_values": [word["value"] for word in range_words],
+                        "resource_lookups": len(lookups)})
     for draw in draws:
         assert fetches.get(("vertex", draw["draw"]), 0) == draw["vertex_fetch_count"]
         assert fetches.get(("texture", draw["draw"]), 0) == draw["texture_fetch_count"]
@@ -116,6 +126,8 @@ if __name__ == "__main__":
     parser.add_argument("--view-call", type=int, default=0)
     parser.add_argument("--require-color", action="store_true")
     parser.add_argument("--require-record-control", action="store_true")
+    parser.add_argument("--require-descriptor-header", action="store_true")
     args = parser.parse_args()
     print(json.dumps(verify(args.log, args.view_call, args.require_color,
-                            args.require_record_control), indent=2))
+                            args.require_record_control,
+                            args.require_descriptor_header), indent=2))

@@ -2580,10 +2580,19 @@ void PinyonShiftObserveSnr02TrackRebuildGate(
                     "\"instance\":{},\"parent\":{},"
                     "\"flags_address\":{},\"mask\":{},"
                     "\"parent_flags\":{},\"state\":{},"
-                    "\"descriptor\":{},\"command_target\":{}}}",
+                    "\"descriptor\":{},\"command_target\":{},"
+                    "\"descriptor_words\":[{},{},{},{},{},{},{},{}]}}",
                     frame, view_call, SnrM02ReadU32(r1.u32 + 1524), r27.u32,
                     r30.u32, r28.u32, SnrM02ReadU32(r27.u32 + 56),
-                    r25.u32, descriptor, command_target);
+                    r25.u32, descriptor, command_target,
+                    SnrM02ReadU32(descriptor),
+                    SnrM02ReadU32(descriptor + 4),
+                    SnrM02ReadU32(descriptor + 8),
+                    SnrM02ReadU32(descriptor + 12),
+                    SnrM02ReadU32(descriptor + 16),
+                    SnrM02ReadU32(descriptor + 20),
+                    SnrM02ReadU32(descriptor + 24),
+                    SnrM02ReadU32(descriptor + 28));
       }
     }
   }

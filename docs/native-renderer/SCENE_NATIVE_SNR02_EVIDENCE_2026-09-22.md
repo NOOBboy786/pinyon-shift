@@ -513,8 +513,10 @@ object +16 and pass that entry's field +60 to `sub_82C24168`, but the bit at
 `flags_address + 8` can skip the lookup. Independently, record words 10–11
 bound a four-byte control range, capped by the title at 20 entries; the bit
 at `flags_address + 16` can skip that range. The path passes the selected
-`CTrackMesh` to `sub_82450440` and then flushes the command list. These are
-observed control relationships, not decoded geometry or material roles.
+`CTrackMesh` to `sub_82450440`, but that callee does not read its mesh
+argument; it updates shared command state from the selected descriptor and
+control flags. The title then flushes the command list. These are observed
+control relationships, not decoded geometry or material roles.
 
 A bounded view-8 replay exited normally with seven compatibility captures.
 Its RelWithDebInfo executable SHA-256 was
@@ -543,3 +545,39 @@ that dereferenced the mesh's raw +140 word crashed; the final probe records
 that word without dereferencing it. The next lookup must follow the title's
 actual producer and resource-allocation paths, including the earlier point
 that populated the cached command list.
+
+### Selected command-list header and backend length
+
+Generated `sub_82439868` stores the selected descriptor pointer at state
+offset 1200. `sub_82450440` tests its word 0 but does not consume the
+`CTrackMesh` argument. At flush, `sub_82417060` reads descriptor word 0 and
+passes it to `sub_824167F8` for submission. A new event-triggered header
+capture checks this layout against the same view-8 color draw.
+
+The sustained-race replay exited normally with seven compatibility captures.
+Its RelWithDebInfo executable SHA-256 was
+`29CBBCDA620CF901206E4BF671B3BBD959B2103C8D425E62308BBECE928EDA0C`;
+the process-filtered log at
+`.local/native-renderer/snr02/track-descriptor-header-view8-run-a-filtered.log`
+has SHA-256
+`E683ABF504ABA5B5406178E5F26D5CE8B87894AE61410411160A5D8A75B16910`.
+The bounded check is:
+
+```powershell
+python tools/verify-snr02-rebuild-execution.py `
+  .local/native-renderer/snr02/track-descriptor-header-view8-run-a-filtered.log `
+  --view-call 8 --require-color --require-record-control `
+  --require-descriptor-header
+```
+
+At source frame 4806, the selected descriptor had words
+`[0xAC991808, 0, 0xABA251AC, 0xAC991808, 0xB7577E60, 0, 352, 1124]`.
+Word 2 equals the selected `CTrackModel` container +44; words 0 and 3 are
+equal; word 4 masks to the physical target `0x17577E60`. The next backend
+frame executed that target with `command_bytes=1116`, eight fewer than
+descriptor word 7, and prepared the same color-writing 2,060-index draw.
+This validates a command-list header and owner link for one selected
+contribution. It does not identify word 0's allocation owner, establish when
+the list was built or map material/texture roles. The next trace should
+follow the table entry that supplied this descriptor back to its constructor
+and stream/resource generation events.
