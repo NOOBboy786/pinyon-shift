@@ -9,8 +9,20 @@ from pathlib import Path
 import struct
 
 
+def texture_descriptors(value):
+    descriptors = {}
+    for entry in value.strip(";").split(";"):
+        slot, words = entry.split(":", 1)
+        assert words and len(words) == 48
+        descriptor = tuple(int(words[i:i + 8], 16) for i in range(0, 48, 8))
+        slot = int(slot)
+        assert slot not in descriptors
+        descriptors[slot] = descriptor
+    return descriptors
+
+
 def verify(path, frame, require_camera_match=False, require_final_state=False,
-           reference_size=None):
+           reference_size=None, require_texture_descriptors=False):
     lines = path.read_text(encoding="utf-8").splitlines()
     items = [json.loads(line.split("FH1 SNR03 item ", 1)[1])
              for line in lines if "FH1 SNR03 item {" in line]
@@ -63,6 +75,8 @@ def verify(path, frame, require_camera_match=False, require_final_state=False,
     owner_constants = collections.defaultdict(set)
     packet_constants = collections.defaultdict(set)
     packet_vertex_constants = collections.defaultdict(set)
+    packet_textures = collections.defaultdict(lambda: collections.defaultdict(set))
+    texture_variants = collections.defaultdict(set)
     repeats = collections.Counter()
     for row in selected:
         item = by_packet[row["packet_physical"]]
@@ -80,6 +94,16 @@ def verify(path, frame, require_camera_match=False, require_final_state=False,
             assert final_by_key[(row["packet_physical"], row["dynamic"])]["fetch47"][2:] == [
                 int(fetch[2][:8], 16), int(fetch[2][8:], 16)]
         assert row["index_count"] * 4 == (item["vertex_size"] & 0x03FFFFFC)
+        if require_texture_descriptors:
+            textures = texture_descriptors(row["textures"])
+            assert set(textures) == {0, 13}
+            for slot, words in textures.items():
+                texture_variants[slot].add(words)
+                packet_textures[row["packet_physical"]][slot].add(words)
+                expected = (20, 256, 256) if slot == 0 else (6, 1280, 720)
+                assert (words[1] & 0x3F,
+                        (words[2] & 0x1FFF) + 1,
+                        ((words[2] >> 13) & 0x1FFF) + 1) == expected
         constants = {int(key): value for part in row["constants"].split(";")
                      if ":" in part and part[0].isdigit()
                      for key, value in [part.split(":", 1)]}
@@ -104,6 +128,11 @@ def verify(path, frame, require_camera_match=False, require_final_state=False,
     assert all(len(values) == 1 for values in owner_constants.values())
     assert all(len(values) == 1 for values in packet_constants.values())
     assert all(len(values) == 1 for values in packet_vertex_constants.values())
+    if require_texture_descriptors:
+        assert all(set(slots) == {0, 13} and
+                   all(len(values) == 1 for values in slots.values())
+                   for slots in packet_textures.values())
+        assert len(packet_textures) == len(items) and len(texture_variants[13]) == 1
     assert len({next(iter(values)) for values in owner_constants.values()}) == len(owner_constants)
     assert not any("FH1 SNR03 geometry rejected" in line for line in lines)
     consumed = [line for line in lines
@@ -126,6 +155,13 @@ def verify(path, frame, require_camera_match=False, require_final_state=False,
         "camera144_matches_selected_bindings": len(selected) if camera else None,
         "final_draw_states": len(final_by_key) if require_final_state else None,
         "viewport_scale_y": dict(sorted(viewport_scales.items())) if reference_size else None,
+        "texture_variants_by_slot": {slot: len(values) for slot, values in
+                                     sorted(texture_variants.items())}
+                                    if require_texture_descriptors else None,
+        "texture_bases_by_slot": {slot: sorted({word[1] & 0x1FFFF000
+                                               for word in values})
+                                  for slot, values in sorted(texture_variants.items())}
+                                 if require_texture_descriptors else None,
     }
 
 
@@ -135,12 +171,14 @@ def main():
     parser.add_argument("--source-frame", type=int, default=6000)
     parser.add_argument("--require-camera-match", action="store_true")
     parser.add_argument("--require-final-state", action="store_true")
+    parser.add_argument("--require-texture-descriptors", action="store_true")
     parser.add_argument("--reference-size", help="verify full-view remap, e.g. 1280x720")
     args = parser.parse_args()
     size = tuple(map(int, args.reference_size.split("x"))) if args.reference_size else None
     print(json.dumps(verify(args.log, args.source_frame,
                             args.require_camera_match,
-                            args.require_final_state, size), sort_keys=True))
+                            args.require_final_state, size,
+                            args.require_texture_descriptors), sort_keys=True))
 
 
 if __name__ == "__main__":

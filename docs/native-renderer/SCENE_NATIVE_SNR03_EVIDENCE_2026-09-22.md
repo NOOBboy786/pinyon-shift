@@ -551,3 +551,48 @@ python tools/verify-snr03-vegetation-binding.py `
   .local/native-renderer/snr03/camera-match-run-a-signal.log `
   --source-frame 6000 --require-camera-match
 ```
+
+## Selected vegetation texture dependencies
+
+The final `FH1 scene binding` records also carry the pixel-stage fetch
+descriptors for each selected vegetation packet. The bounded
+`--require-texture-descriptors` check joins them through the same packet
+identity as the owned geometry, requires stable descriptors across repeated
+executions, and decodes the title fetch words. It passes on the
+`camera-match-run-a`, `final-system-run-d`, `scene-fixture-run-a`, `live-run-b`, and
+`renderdoc-extended` signal logs. The latter is the capture-matched run:
+72 selected packets and 189 prepared bindings. Each selected binding uses
+slots 0 and 13. Slot 0 has five distinct 256×256 format-20 descriptors;
+slot 13 has one shared 1280×720 format-6 descriptor. The descriptor words
+establish sizes and binding identity, not texture contents or generations.
+
+For the matched vegetation draw at event 11206 in
+`extended-capture_frame6000.rdc` (SHA-256
+`60D849F461DA39961437D99FC6DE8DD20860FA51FAA33EC8D73613E7E51`),
+RenderDoc reports two pixel-stage images in that order: 256×256 BC3_UNORM
+`ResourceId::7915` and 1280×720 R8G8B8A8_TYPELESS `ResourceId::8416`.
+The latter's latest captured copy before this draw is event 9232 from the
+16 MiB buffer `ResourceId::1600`; the buffer's latest prior compute
+read/write use is event 9230. This is a bounded resource-level producer
+chain. It does not establish the copied buffer byte range, the original
+title-side resource owner, or the full-view image's semantic role. The
+private diagnostic samples neither image, so visible alpha coverage and
+the full-view pixel dependency remain unresolved.
+
+Recheck the binding census and capture chain:
+
+```powershell
+python tools/verify-snr03-vegetation-binding.py `
+  .local/native-renderer/snr04/renderdoc-extended-signal.log `
+  --source-frame 6000 --require-texture-descriptors
+$env:SNR04_CAPTURE = (Resolve-Path `
+  .local/native-renderer/snr04/extended-capture_frame6000.rdc).Path
+$env:SNR04_OUTPUT = (Join-Path (Get-Location) `
+  '.local/native-renderer/snr04/vegetation-texture-chain-11206.json')
+$env:SNR04_EVENT = '11206'
+& .local/tools/renderdoc-1.46/RenderDoc_1.46_64/qrenderdoc.exe `
+  --python tools/probe-snr04-vegetation-textures.py
+```
+
+The checked JSON has SHA-256
+`ADEF67288CD687407C4968395B2325BBCB655874619CA4600347B9AED584C55D`.
