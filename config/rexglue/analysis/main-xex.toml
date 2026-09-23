@@ -258,7 +258,7 @@ registers = ["r3", "r19", "r25", "r26", "r30"]
 [[midasm_hook]]
 address = 0x8243694C
 name = "PinyonShiftObserveSnr02TrackRebuildGate"
-registers = ["r27", "r28", "r30", "r31"]
+registers = ["r1", "r25", "r27", "r28", "r30", "r31"]
 
 [[midasm_hook]]
 address = 0x82436AE0

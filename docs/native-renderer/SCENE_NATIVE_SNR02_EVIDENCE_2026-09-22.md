@@ -435,3 +435,41 @@ record, but the record's geometry/material fields and allocation lifetime
 remain unresolved. Rebuild timing varies across replays; the next capture
 must trigger on an actual cache miss and retain that source frame through
 backend consumption, rather than relying on a fixed source-frame number.
+
+### Event-triggered rebuild reaches backend execution
+
+The default-off `--pinyon_shift_snr02_trace_first_rebuild_after_frame=4800`
+probe captures the first track cache miss after that source frame, preserving
+its selected descriptor and physical command target. It records selected
+`CTrackMesh` records, the title's flush of that exact target and the backend
+indirect execution, indexed draws and fetches in the following frame. The
+bounded verifier is:
+
+```powershell
+python tools/verify-snr02-rebuild-execution.py `
+  .local/native-renderer/snr02/track-event-trigger-run-b-filtered.log
+```
+
+Two saved sustained-race replays exited normally with seven compatibility
+captures each. Run A's process-filtered log has SHA-256
+`8209277A7C555DEE29D1D23EF00180C02E2DAA0D4F6A7FD82F6EA079B6921554`.
+Its source frame 5017 had a cache miss, four selected record visits and one
+flush of command target `0x172593C0`. Backend frame 5018 executed that target
+once, preparing two indexed draws with one vertex fetch each. The second
+replay used executable SHA-256
+`253B1B16E75810ECAFDCE43E9B2B094AFC7C1D5443674E1986D35B248D036970`;
+its filtered log has SHA-256
+`A83E67AFB988A14BC229BE19FEB7610AF527C99B404075F05510A6BB9B7EEAFB`.
+Its source frame 4919 had 18 selected record visits and six flushes of
+`0x17499CA0`; backend frame 4920 executed that target six times, preparing
+36 indexed draws, 36 vertex fetches and six texture fetches. The records
+include repeated visits to the same mesh records within the source frame,
+not 18 distinct meshes. Every prepared draw had normalized color mask zero;
+the six textured draws had a pixel shader, but still wrote no color. This
+captured command list is a depth-only submission, so it does not yet prove a
+main-view scene-color material or complete the selected slice.
+
+This establishes a reproducible title `CTrackMesh` record → command-list
+flush → backend geometry/fetch chain despite variable rebuild timing. The next
+SNR-02 capture needs to select a color-writing view-8 track submission, then
+resolve the record's geometry/material object fields and resource freshness.

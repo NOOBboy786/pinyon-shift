@@ -40,6 +40,9 @@ REXCVAR_DEFINE_INT32(pinyon_shift_snr01_trace_source_frame, 0, "Pinyon Shift",
 REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_following_frame, false,
                     "Pinyon Shift", "Also trace the following source frame")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_INT32(pinyon_shift_snr02_trace_first_rebuild_after_frame, 0,
+                     "Pinyon Shift", "Trace the first track mesh rebuild after this frame")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_resident_packet_writers, false,
                     "Pinyon Shift", "Trace bounded resident PM4 packet writes")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
@@ -518,6 +521,8 @@ struct SnrM02WaitScope {
 thread_local std::vector<SnrM02WaitScope> snr_m02_wait_scopes;
 thread_local uint64_t snr_m02_wait_count = 0;
 thread_local uint64_t snr_m02_writer_count = 0;
+std::atomic<uint64_t> snr02_rebuild_capture{0};
+std::atomic<uint32_t> snr02_rebuild_draw_count{0};
 
 bool SnrM02TraceCurrentFrame() {
   static const int32_t target = REXCVAR_GET(pinyon_shift_snr_m02_trace_source_frame);
@@ -651,6 +656,13 @@ bool Snr01TraceCurrentFrame() {
            (REXCVAR_GET(pinyon_shift_snr01_trace_following_frame) &&
             frame == uint64_t(target) + 1))) ||
          (Snr03TargetFrame() > 0 && frame == uint64_t(Snr03TargetFrame()));
+}
+
+bool Snr02TraceCapturedFrame() {
+  const uint64_t capture = snr02_rebuild_capture.load(std::memory_order_acquire);
+  return capture &&
+         rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount) ==
+             capture >> 32;
 }
 
 bool Snr01TracePrimaryIndirectFrame() {
@@ -926,6 +938,55 @@ void ObservePreparedDraw(
   if (corpus_enabled) {
     RecordFh1GpuExecution(observation);
   }
+  const uint64_t rebuild = snr02_rebuild_capture.load(std::memory_order_acquire);
+  if (rebuild && observation.frame_sequence == (rebuild >> 32) + 1 &&
+      observation.command_buffer_physical_address == uint32_t(rebuild)) {
+    const uint32_t draw = snr02_rebuild_draw_count.fetch_add(
+                              1, std::memory_order_relaxed) + 1;
+    if (draw <= 512) {
+      REXGPU_INFO("FH1 SNR02 rebuild prepared draw {{\"frame\":{},"
+                  "\"draw\":{},\"command_target\":{},"
+                  "\"dispatch_packet\":{},\"draw_packet\":{},"
+                  "\"index_count\":{},\"index_base\":{},"
+                  "\"index_length\":{},\"vertex_shader\":{},"
+                  "\"pixel_shader\":{},\"vertex_fetch_count\":{},"
+                  "\"texture_fetch_count\":{},\"surface_info\":{},"
+                  "\"color_info\":[{},{},{},{}],\"depth_info\":{},"
+                  "\"depth_control\":{},\"color_mask\":{}}}",
+                  observation.frame_sequence, draw, uint32_t(rebuild),
+                  observation.indirect_dispatch_packet_physical_address,
+                  observation.draw_packet_physical_address,
+                  observation.index_count, observation.index_buffer_guest_base,
+                  observation.index_buffer_length, observation.vertex_shader_hash,
+                  observation.pixel_shader_hash, observation.vertex_fetch_count,
+                  observation.texture_fetch_count, observation.surface_info,
+                  observation.color_info[0], observation.color_info[1],
+                  observation.color_info[2], observation.color_info[3],
+                  observation.depth_info, observation.normalized_depth_control,
+                  observation.normalized_color_mask);
+      for (uint32_t i = 0; i < observation.vertex_fetch_count &&
+                           i < observation.vertex_fetch_capacity && i < 32; ++i) {
+        const auto& fetch = observation.vertex_fetches[i];
+        REXGPU_INFO("FH1 SNR02 rebuild vertex fetch {{\"draw\":{},"
+                    "\"slot\":{},\"constant\":{},\"stride_words\":{},"
+                    "\"guest_base\":{},\"length\":{},\"type\":{},"
+                    "\"source_packet\":{}}}",
+                    draw, i, fetch.fetch_constant, fetch.stride_words,
+                    fetch.guest_base, fetch.length, fetch.type,
+                    fetch.source_packet_physical_0);
+      }
+      for (uint32_t i = 0; i < observation.texture_fetch_count && i < 32; ++i) {
+        const auto& fetch = observation.texture_fetches[i];
+        REXGPU_INFO("FH1 SNR02 rebuild texture fetch {{\"draw\":{},"
+                    "\"constant\":{},\"base\":{},\"mip\":{},"
+                    "\"format\":{},\"dimension\":{}}}",
+                    draw, fetch.fetch_constant, fetch.base_address,
+                    fetch.mip_address, fetch.format, fetch.dimension);
+      }
+    } else if (draw == 513) {
+      REXGPU_INFO("FH1 SNR02 rebuild draw limit reached");
+    }
+  }
   static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
   if (target <= 0 || observation.frame_sequence + 1 < uint64_t(target) ||
       observation.frame_sequence > uint64_t(target) + 1) {
@@ -1043,6 +1104,18 @@ void ObservePreparedDraw(
 
 void ObserveIndirectBuffer(
     const rex::system::GraphicsIndirectBufferObservation& observation) {
+  const uint64_t rebuild = snr02_rebuild_capture.load(std::memory_order_acquire);
+  if (rebuild && observation.frame_sequence == (rebuild >> 32) + 1 &&
+      observation.command_buffer_physical_address == uint32_t(rebuild)) {
+    REXGPU_INFO("FH1 SNR02 rebuild indirect {{\"frame\":{},"
+                "\"command_target\":{},\"execution\":{},"
+                "\"parent\":{},\"dispatch_packet\":{},"
+                "\"command_bytes\":{}}}",
+                observation.frame_sequence, uint32_t(rebuild),
+                observation.execution_id, observation.parent_execution_id,
+                observation.dispatch_packet_physical_address,
+                observation.command_buffer_bytes);
+  }
   static const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
   if (target <= 0 || observation.frame_sequence + 1 < uint64_t(target) ||
       observation.frame_sequence > uint64_t(target) + 1) {
@@ -1134,13 +1207,15 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
   const bool enabled = ResetFh1GpuCorpus();
   graphics_system->SetPreparedDrawObserver(
       enabled || REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0 ||
+              REXCVAR_GET(pinyon_shift_snr02_trace_first_rebuild_after_frame) > 0 ||
               Snr03ProbeEnabled()
           ? &ObservePreparedDraw
           : nullptr);
   graphics_system->SetFinalDrawStateObserver(
       Snr03ProbeEnabled() ? &ObserveSnr03FinalDrawState : nullptr);
   graphics_system->SetIndirectBufferObserver(
-      REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
+      REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0 ||
+              REXCVAR_GET(pinyon_shift_snr02_trace_first_rebuild_after_frame) > 0
           ? &ObserveIndirectBuffer
           : nullptr);
   graphics_system->SetCopyObserver(
@@ -2341,6 +2416,21 @@ void Snr01LogStateFlush(const char* phase, PPCRegister& r1,
 void PinyonShiftObserveSnr01StateFlushBegin(PPCRegister& r1,
                                             PPCRegister& r31) {
   Snr01LogStateFlush("begin", r1, r31);
+  if (!Snr02TraceCapturedFrame()) {
+    return;
+  }
+  const uint64_t capture = snr02_rebuild_capture.load(std::memory_order_acquire);
+  const uint32_t descriptor = SnrM02ReadU32(r31.u32 + 1200);
+  const uint32_t command_target =
+      descriptor ? SnrM02ReadU32(descriptor + 16) & 0x1FFFFFFF : 0;
+  if (command_target == uint32_t(capture) &&
+      SnrM02ReadU32(r1.u32 + 88) == 0x82437048) {
+    REXGPU_INFO("FH1 SNR02 rebuild flush {{\"frame\":{},"
+                "\"state\":{},\"descriptor\":{},"
+                "\"command_target\":{},\"caller_lr\":{}}}",
+                capture >> 32, r31.u32, descriptor, command_target,
+                SnrM02ReadU32(r1.u32 + 88));
+  }
 }
 
 void PinyonShiftObserveSnr01StateFlushEnd(PPCRegister& r1,
@@ -2350,8 +2440,7 @@ void PinyonShiftObserveSnr01StateFlushEnd(PPCRegister& r1,
 
 void PinyonShiftObserveSnr01TrackModelBegin(PPCRegister& r3,
                                              PPCRegister& r7) {
-  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
-      !Snr01TraceCurrentFrame()) {
+  if (!Snr01TraceCurrentFrame() && !Snr02TraceCapturedFrame()) {
     return;
   }
   REXGPU_INFO("FH1 SNR01 track model begin {{\"frame\":{},"
@@ -2365,8 +2454,7 @@ void PinyonShiftObserveSnr01TrackModelBegin(PPCRegister& r3,
 void PinyonShiftObserveSnr01TrackModelReady(PPCRegister& r3,
                                              PPCRegister& r29,
                                              PPCRegister& r30) {
-  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
-      !Snr01TraceCurrentFrame()) {
+  if (!Snr01TraceCurrentFrame() && !Snr02TraceCapturedFrame()) {
     return;
   }
   const uint32_t vtable = SnrM02ReadU32(r30.u32);
@@ -2390,8 +2478,7 @@ void PinyonShiftObserveSnr01TrackModelReady(PPCRegister& r3,
 void PinyonShiftObserveSnr01TrackDescriptor(
     PPCRegister& r19, PPCRegister& r24, PPCRegister& r25,
     PPCRegister& r26, PPCRegister& r28, PPCRegister& r30) {
-  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
-      !Snr01TraceCurrentFrame()) {
+  if (!Snr01TraceCurrentFrame() && !Snr02TraceCapturedFrame()) {
     return;
   }
   const uint32_t parent = SnrM02ReadU32(r30.u32 + 4);
@@ -2423,8 +2510,7 @@ void PinyonShiftObserveSnr01TrackDescriptor(
 void PinyonShiftObserveSnr02TrackNestedEntry(
     PPCRegister& r3, PPCRegister& r19, PPCRegister& r25,
     PPCRegister& r26, PPCRegister& r30) {
-  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
-      !Snr01TraceCurrentFrame()) {
+  if (!Snr01TraceCurrentFrame() && !Snr02TraceCapturedFrame()) {
     return;
   }
   REXGPU_INFO("FH1 SNR01 track nested entry {{\"frame\":{},"
@@ -2441,14 +2527,42 @@ void PinyonShiftObserveSnr02TrackNestedEntry(
 }
 
 void PinyonShiftObserveSnr02TrackRebuildGate(
-    PPCRegister& r27, PPCRegister& r28, PPCRegister& r30,
-    PPCRegister& r31) {
+    PPCRegister& r1, PPCRegister& r25, PPCRegister& r27,
+    PPCRegister& r28, PPCRegister& r30, PPCRegister& r31) {
   const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
-  if (target <= 0) {
+  const int32_t rebuild_after =
+      REXCVAR_GET(pinyon_shift_snr02_trace_first_rebuild_after_frame);
+  if (target <= 0 && rebuild_after <= 0) {
     return;
   }
   const uint64_t frame = rex::perf::GetTotalCounter(
       rex::perf::CounterId::kSourceFrameCount);
+  if (rebuild_after > 0 && frame >= uint64_t(rebuild_after) &&
+      frame < 0xFFFFFFFFull && r31.u32 == 0 &&
+      r30.u32 == r27.u32 + 56 &&
+      r25.u32 == SnrM02ReadU32(r1.u32 + 84)) {
+    const uint32_t descriptor = SnrM02ReadU32(r25.u32 + 1200);
+    const uint32_t command_target =
+        descriptor ? SnrM02ReadU32(descriptor + 16) & 0x1FFFFFFF : 0;
+    if (command_target) {
+      uint64_t empty = 0;
+      if (snr02_rebuild_capture.compare_exchange_strong(
+              empty, (frame << 32) | command_target,
+              std::memory_order_acq_rel)) {
+        REXGPU_INFO("FH1 SNR02 rebuild capture {{\"frame\":{},"
+                    "\"instance\":{},\"parent\":{},"
+                    "\"flags_address\":{},\"mask\":{},"
+                    "\"parent_flags\":{},\"state\":{},"
+                    "\"descriptor\":{},\"command_target\":{}}}",
+                    frame, SnrM02ReadU32(r1.u32 + 1524), r27.u32,
+                    r30.u32, r28.u32, SnrM02ReadU32(r27.u32 + 56),
+                    r25.u32, descriptor, command_target);
+      }
+    }
+  }
+  if (target <= 0) {
+    return;
+  }
   if (!Snr01TraceCurrentFrame()) {
     if (r31.u32 != 0 || frame >= uint64_t(target)) {
       return;
@@ -2470,8 +2584,7 @@ void PinyonShiftObserveSnr02TrackRebuildGate(
 void PinyonShiftObserveSnr02TrackSelectedRecord(
     PPCRegister& r1, PPCRegister& r19, PPCRegister& r25,
     PPCRegister& r26, PPCRegister& r30, PPCRegister& r31) {
-  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
-      !Snr01TraceCurrentFrame()) {
+  if (!Snr01TraceCurrentFrame() && !Snr02TraceCapturedFrame()) {
     return;
   }
   const uint32_t record_root = SnrM02ReadU32(r1.u32 + 116);
@@ -2498,8 +2611,7 @@ void PinyonShiftObserveSnr02TrackSelectedRecord(
 }
 
 void PinyonShiftObserveSnr01TrackModelEnd() {
-  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0 &&
-      Snr01TraceCurrentFrame()) {
+  if (Snr01TraceCurrentFrame() || Snr02TraceCapturedFrame()) {
     REXGPU_INFO("FH1 SNR01 track model end {{\"frame\":{},"
                 "\"scene_packets\":{}}}",
                 rex::perf::GetTotalCounter(

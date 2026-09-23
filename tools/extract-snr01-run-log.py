@@ -27,6 +27,7 @@ def extract(session: Path, output: Path) -> int:
                 for line in source:
                     if (line.startswith("[") and started <= line[1:20] <= ended
                             and ("FH1 SNR01 " in line
+                                 or "FH1 SNR02 " in line
                                  or "FH1 clear producer " in line)):
                         destination.write(line)
                         count += 1
