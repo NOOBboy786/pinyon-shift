@@ -3332,3 +3332,63 @@ The state-resource verifier again joins **every** candidate state draw:
 resources. This repeat confirms the join across different visibility and
 resource counts; it does not establish resource generations or a complete
 native scene.
+
+### Remaining frame-wide boundary gap in the final replay
+
+The final strict ledger's 3,639 draws split into 1,919 on the two provisional
+candidate targets and 1,720 on other targets. The candidate draws comprise
+1,204 view-8 scene-list draws, 690 view-8 direct packets, one joined clear,
+and 24 indirect draws with no attachment writes. This rechecks the candidate
+view/pass boundary in a different frame; it does not freeze scene membership.
+
+Outside the candidate targets, 583 out-of-view scene-list draws have title
+view 0, another 669 have a joined view owner, 404 direct draws have a title
+packet in views 0–7, 48 unmatched indirect draws have no attachment writes,
+and ten are joined title clears. **Six
+remaining direct-root draws write attachments but have no joined title
+packet or view.** All six come from a source-frame-6001 root, in backend
+ordinals 3364, 3371, 3374, 3375, 3378 and 3381. Their target split is one
+`0A020280/00030000/000102D0/00000003`, two
+`0A020280/00030000/00000000/00000001`, one
+`14000500/00030000/00000000/00000002`, and two
+`14000500/00030000/000102D0/00000002`. The same six-target pattern occurs
+in the scalar, track-model and procedural-resource strict replays. The
+remaining noncandidate work therefore cannot yet be called a complete
+title-view census; these six need an exact producer/view or an explicitly
+classified non-view command path before SNR-00 freezes the boundary.
+
+The candidate's view-8 direct packets still need semantic work: in this
+replay, 220 join character-manager direct records, 211 join procedural
+item/node packets, 166 of 175 second-path draws join vegetation bound
+records, and all 57 scalar-wrapper draws join an outer object. Nine
+second-path draws have no bound-record join. The direct packet and outer
+object joins do not establish materials, geometry generations or safe
+native admission. The 596 shared-state scene-list draws join selected
+track-model resource objects through the state-resource verifier; the
+other scene-list families still need equivalent per-item resource joins.
+
+Recheck these counts from the final ledger without another gameplay run:
+
+```powershell
+@'
+import collections, json
+from pathlib import Path
+rows = json.loads(Path(
+    '.local/native-renderer/snr01/state-resource-final-run-a-ledger.json'
+).read_text(encoding='utf8'))['draws']
+candidate = [r for r in rows if r['target'].startswith('14020500/')]
+other = [r for r in rows if not r['target'].startswith('14020500/')]
+assert (len(rows), len(candidate), len(other)) == (3639, 1919, 1720)
+assert collections.Counter(r['classification'] for r in candidate) == {
+    'view_owner': 1204, 'direct_root': 690,
+    'title_clear': 1, 'unmatched_indirect': 24}
+assert collections.Counter(r['classification'] for r in other) == {
+    'view_owner': 669, 'out_of_view_scene': 583, 'direct_root': 410,
+    'unmatched_indirect': 48, 'title_clear': 10}
+unjoined = [r for r in other if r['classification'] == 'direct_root'
+            and r['title_packet_view_call'] is None]
+assert [r['ordinal'] for r in unjoined] == [3364, 3371, 3374, 3375, 3378, 3381]
+assert all(not r['no_attachment_write'] and r['root_source_frame'] == 6001
+           for r in unjoined)
+'@ | python -
+```
