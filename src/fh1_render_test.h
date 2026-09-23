@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 
@@ -22,6 +23,7 @@ namespace pinyon_shift::fh1_render_test {
 // with its deterministic controller stream. Invalid requests fail the process.
 void Configure(rex::RuntimeConfig& config);
 bool Enabled();
+std::filesystem::path OutputDirectory();
 
 // Called at the final guest-output boundary. Returns false because validation
 // observes the real output and never claims or modifies it.

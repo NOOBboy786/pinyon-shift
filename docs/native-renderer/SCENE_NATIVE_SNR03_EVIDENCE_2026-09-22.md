@@ -268,6 +268,46 @@ the upstream billboard/clip calculation or depth parity. Recheck the invariant
 with `--reference-size 1280x720` on the verifier command above; a deliberately
 wrong 1280×800 reference is rejected.
 
+## Same-frame owned-scene fixture for the first SNR-04 draw
+
+The probe now writes `snr03-scene-6000.bin` beside a scripted render test's
+captures after exact output-frame consumption. This local-only `SNR03F1`
+little-endian fixture contains source frame, title view/camera and both camera
+word arrays, then ordered item metadata, all 24 captured constant vectors,
+guarded vertex bytes and every `(dynamic state, 40 system words, 4 fetch words)`
+variant. The writer closes a temporary file before renaming it to the final
+name; a failed or partial write is never presented as a fixture. It does not
+write to the guest output or change the save.
+
+The saved sustained-race replay exited normally with seven compatibility
+captures. At output frame 6001 it wrote a 431,500-byte fixture in 2,071 µs,
+containing 67 ordered packets, 376,272 unique vertex bytes and 142 final-state
+variants. The fixture SHA-256 is
+`0D46FE9CCE413E9B97BC780ABCAE26AFE5E3255A05B3E82EF3F3D8EB03BFB673`;
+the executable SHA-256 is
+`D090DE04CA792B92B96F62A9DABE22C8A341BBEBDBF527F005D60EE4F05C956A`.
+The filtered ordered log at
+`.local/native-renderer/snr03/scene-fixture-run-a-signal.log` has SHA-256
+`F1C8C9BF082CD574E20CCE23D1E2BB3D0B6A543A47F0A9138A8B98D9B7ECFDE3`.
+The parser checks every item, all 24 constant vectors per selected prepared
+binding, the final-state keys and logged system/fetch words, camera rows,
+lengths and end-of-file. It rejects a truncated fixture and a deliberately
+corrupted constant:
+
+```powershell
+python tools/verify-snr03-scene-fixture.py `
+  .local/native-renderer/snr03/scene-fixture-run-a/snr03-scene-6000.bin `
+  .local/native-renderer/snr03/scene-fixture-run-a-signal.log
+```
+
+The same executable also completed the sustained-race route with the SNR-03
+probe disabled: normal exit, seven compatibility PPM captures and no fixture.
+
+This is a reproducible input for the first private identity/depth experiment,
+not a GPU draw or a Gate A result. The fixture is one frame of one vegetation
+contribution; it does not establish winding, transformed positions, depth
+parity, material/resource lifetimes or complete selected-slice coverage.
+
 ## Title camera to selected draw-state join
 
 The title scene publication now logs the two already-owned 4x4 camera word

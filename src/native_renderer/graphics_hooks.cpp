@@ -4,10 +4,13 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -21,6 +24,7 @@
 #include <rex/system/xmemory.h>
 
 #include "native_renderer/fh1_gpu_corpus.h"
+#include "fh1_render_test.h"
 
 REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_clear_producer_trace, false, "Pinyon Shift",
                     "Record bounded guest clear-producer timing and shader copies")
@@ -301,6 +305,62 @@ struct Snr03OwnedScene {
   std::shared_ptr<const Snr03SceneSnapshot> title;
   std::vector<Snr03OwnedItem> items;
 };
+bool WriteSnr03Fixture(const Snr03OwnedScene& scene,
+                       const std::filesystem::path& directory) {
+  const auto path = directory /
+      ("snr03-scene-" + std::to_string(scene.title->source_frame) + ".bin");
+  auto temporary = path;
+  temporary += ".tmp";
+  std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    return false;
+  }
+  auto write = [&](const auto& value) {
+    output.write(reinterpret_cast<const char*>(&value), sizeof(value));
+  };
+  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '3', 'F', '1', '\0'};
+  write(magic);
+  write(scene.title->source_frame);
+  write(scene.title->view);
+  write(scene.title->camera);
+  write(uint32_t(scene.items.size()));
+  write(scene.title->camera80);
+  write(scene.title->camera144);
+  for (const auto& item : scene.items) {
+    const auto& metadata = item.metadata;
+    write(metadata.owner);
+    write(metadata.record);
+    write(metadata.vertex_descriptor);
+    write(metadata.vertex_address);
+    write(metadata.vertex_size);
+    write(metadata.packet_physical);
+    write(metadata.bucket_entry);
+    write(item.guest_vertex_count);
+    write(uint32_t(item.vertex_bytes.size()));
+    write(uint32_t(item.vertex_constants.size()));
+    write(uint32_t(item.final_states.size()));
+    write(item.vertex_constants);
+    output.write(reinterpret_cast<const char*>(item.vertex_bytes.data()),
+                 item.vertex_bytes.size());
+    for (const auto& [dynamic, state] : item.final_states) {
+      write(dynamic);
+      write(state.system_constants);
+      write(state.fetch_47);
+    }
+  }
+  output.close();
+  std::error_code error;
+  if (!output) {
+    std::filesystem::remove(temporary, error);
+    return false;
+  }
+  std::filesystem::rename(temporary, path, error);
+  if (error) {
+    std::filesystem::remove(temporary, error);
+    return false;
+  }
+  return true;
+}
 thread_local std::vector<Snr03VegetationItem> snr03_vegetation_items;
 thread_local bool snr03_scene_overflow = false;
 std::mutex snr03_scene_mutex;
@@ -1190,6 +1250,15 @@ void ObserveSnr03OutputFrame(uint64_t output_frame) {
               "fetch_words=4 final_variants={} fingerprint={}", output_frame,
               owned->title->source_frame, owned->items.size(), payload.bytes,
               final_variants, fingerprint);
+  const auto directory = fh1_render_test::OutputDirectory();
+  if (!directory.empty()) {
+    const auto begin = std::chrono::steady_clock::now();
+    const bool written = WriteSnr03Fixture(*owned, directory);
+    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - begin).count();
+    REXGPU_INFO("FH1 SNR03 fixture output_frame={} written={} write_us={}",
+                output_frame, written, elapsed);
+  }
 }
 
 }  // namespace pinyon_shift::native_renderer

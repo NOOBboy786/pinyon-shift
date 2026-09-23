@@ -456,6 +456,10 @@ void Configure(rex::RuntimeConfig& config) {
 
 bool Enabled() { return g_test.enabled; }
 
+std::filesystem::path OutputDirectory() {
+  return g_test.enabled ? g_test.output : std::filesystem::path{};
+}
+
 bool ObserveOutput(
     const rex::system::NativeGuestOutputRenderContext& context) {
   if (!g_test.enabled) {
