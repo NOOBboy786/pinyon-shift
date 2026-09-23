@@ -3613,8 +3613,10 @@ assert all(r['color_mask'] == 7 and r['pixel_shader']
 title-return-site rules to the two independently strict frame-wide ledgers.
 It assigns every prepared draw to a required scene family, a retained
 candidate-target effect, or an outside target. An unexpected candidate caller
-or missing title join fails the check; no shader hash or spatial match admits
-a draw. The two replays give:
+or missing title join fails the check. Outside targets must also have a
+title view 0–7, a title clear producer, or a proven no-attachment-write
+indirect draw. No shader hash or spatial match admits a draw. The two
+replays give:
 
 | Strict replay | All draws | Required diagnostic scene | Retained on candidate targets | Other targets |
 | --- | ---: | ---: | ---: | ---: |

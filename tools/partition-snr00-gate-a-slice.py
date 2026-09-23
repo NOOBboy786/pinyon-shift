@@ -21,6 +21,19 @@ CAR_SCENE_LIST = {0x824399F0, 0x8243CE0C, 0x8241A2A4,
 
 def role(draw: dict) -> str:
     if draw["target"] not in CANDIDATE:
+        kind = draw["classification"]
+        if kind == "view_owner":
+            assert draw["owner"] and draw["scene_source_frame"] is not None
+            assert 0 <= draw["view_call"] < 8
+        elif kind == "out_of_view_scene":
+            assert draw["view_call"] == 0 and draw["scene_source_frame"] is not None
+        elif kind == "direct_root":
+            assert draw["title_packet_source_frame"] is not None
+            assert 0 <= draw["title_packet_view_call"] < 8
+        elif kind == "title_clear":
+            assert draw["clear_producer_record"] is not None
+        else:
+            assert kind == "unmatched_indirect" and draw["no_attachment_write"]
         return "outside_candidate_targets"
     kind = draw["classification"]
     if kind == "view_owner":
