@@ -470,6 +470,37 @@ captured command list is a depth-only submission, so it does not yet prove a
 main-view scene-color material or complete the selected slice.
 
 This establishes a reproducible title `CTrackMesh` record → command-list
-flush → backend geometry/fetch chain despite variable rebuild timing. The next
-SNR-02 capture needs to select a color-writing view-8 track submission, then
-resolve the record's geometry/material object fields and resource freshness.
+flush → backend geometry/fetch chain despite variable rebuild timing. It also
+shows why the next capture must select a color-writing view-8 submission.
+
+### View-8 color-writing track contribution
+
+The event probe can now track the presentation view-call ordinal and restrict
+capture with `--pinyon_shift_snr02_trace_view_call=8`. A saved sustained-race
+replay with the frame threshold at 4800 exited normally with seven compatibility
+captures. The RelWithDebInfo executable SHA-256 was
+`177182D1F7CC4F2A2F78C990DF9A7FF940A192945088150DA87B104C990621A0`;
+the process-filtered log at
+`.local/native-renderer/snr02/track-view8-event-run-a-filtered.log` has
+SHA-256
+`7E17107376F237C11A6032EE4CADCAFB2E59BD612CCB87BCAE2D0D46C53F5347`.
+Its title-to-backend chain passes:
+
+```powershell
+python tools/verify-snr02-rebuild-execution.py `
+  .local/native-renderer/snr02/track-view8-event-run-a-filtered.log `
+  --view-call 8 --require-color
+```
+
+Source frame 4834 missed the track cache for the selected bit at parent
+`0xAAFDF660`, traversed a `CTrackModel` → `CTrackSubModel` → `CTrackMesh`
+entry and selected its 56-byte record at `0x2E8F8B80`. The title flushed
+descriptor `0x2EB99800` to physical command target `0x17577E60`. Backend
+frame 4835 executed that same target and prepared one 2,060-index draw with
+one vertex fetch (guest base `0x11C64580`, 39,552 bytes) and three texture
+fetches at constants 0, 5 and 13. It has a nonzero pixel shader, normalized
+color mask 7 and color attachment `00030000`, one of the two candidate
+scene-color groups. The indexed buffer starts at guest `0x11C63560` and is
+4,120 bytes. This is a concrete color-writing main-view track contribution,
+not a semantic material map: the selected record's fields, texture roles,
+transform and allocation/payload generations remain to be established.

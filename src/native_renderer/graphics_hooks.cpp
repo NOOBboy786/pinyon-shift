@@ -43,6 +43,9 @@ REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_following_frame, false,
 REXCVAR_DEFINE_INT32(pinyon_shift_snr02_trace_first_rebuild_after_frame, 0,
                      "Pinyon Shift", "Trace the first track mesh rebuild after this frame")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_INT32(pinyon_shift_snr02_trace_view_call, 0, "Pinyon Shift",
+                     "Restrict track rebuild capture to this view call (0: any)")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 REXCVAR_DEFINE_BOOL(pinyon_shift_snr01_trace_resident_packet_writers, false,
                     "Pinyon Shift", "Trace bounded resident PM4 packet writes")
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
@@ -523,6 +526,9 @@ thread_local uint64_t snr_m02_wait_count = 0;
 thread_local uint64_t snr_m02_writer_count = 0;
 std::atomic<uint64_t> snr02_rebuild_capture{0};
 std::atomic<uint32_t> snr02_rebuild_draw_count{0};
+thread_local uint64_t snr02_view_frame = 0;
+thread_local uint32_t snr02_view_count = 0;
+thread_local std::vector<uint32_t> snr02_view_scopes;
 
 bool SnrM02TraceCurrentFrame() {
   static const int32_t target = REXCVAR_GET(pinyon_shift_snr_m02_trace_source_frame);
@@ -1629,6 +1635,15 @@ void PinyonShiftObserveTitleDrawPacketPublish(PPCRegister& r3, PPCRegister& r11,
 void PinyonShiftObservePresentationViewBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5,
     PPCRegister& r6, PPCRegister& r7, PPCRegister& r8) {
+  if (REXCVAR_GET(pinyon_shift_snr02_trace_first_rebuild_after_frame) > 0) {
+    const uint64_t frame = rex::perf::GetTotalCounter(
+        rex::perf::CounterId::kSourceFrameCount);
+    if (snr02_view_frame != frame && snr02_view_scopes.empty()) {
+      snr02_view_count = 0;
+      snr02_view_frame = frame;
+    }
+    snr02_view_scopes.push_back(++snr02_view_count);
+  }
   if (!Snr01TraceCurrentFrame()) {
     return;
   }
@@ -1662,6 +1677,9 @@ void PinyonShiftObservePresentationViewBegin(
 }
 
 void PinyonShiftObservePresentationViewEnd() {
+  if (!snr02_view_scopes.empty()) {
+    snr02_view_scopes.pop_back();
+  }
   if (snr01_view_scopes.empty()) {
     return;
   }
@@ -2532,12 +2550,18 @@ void PinyonShiftObserveSnr02TrackRebuildGate(
   const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
   const int32_t rebuild_after =
       REXCVAR_GET(pinyon_shift_snr02_trace_first_rebuild_after_frame);
+  const int32_t view_filter = REXCVAR_GET(pinyon_shift_snr02_trace_view_call);
+  const uint32_t view_call = snr02_view_scopes.empty()
+                                 ? 0
+                                 : snr02_view_scopes.back();
   if (target <= 0 && rebuild_after <= 0) {
     return;
   }
   const uint64_t frame = rex::perf::GetTotalCounter(
       rex::perf::CounterId::kSourceFrameCount);
-  if (rebuild_after > 0 && frame >= uint64_t(rebuild_after) &&
+  if (rebuild_after > 0 &&
+      (view_filter <= 0 || view_call == uint32_t(view_filter)) &&
+      frame >= uint64_t(rebuild_after) &&
       frame < 0xFFFFFFFFull && r31.u32 == 0 &&
       r30.u32 == r27.u32 + 56 &&
       r25.u32 == SnrM02ReadU32(r1.u32 + 84)) {
@@ -2550,11 +2574,12 @@ void PinyonShiftObserveSnr02TrackRebuildGate(
               empty, (frame << 32) | command_target,
               std::memory_order_acq_rel)) {
         REXGPU_INFO("FH1 SNR02 rebuild capture {{\"frame\":{},"
+                    "\"view_call\":{},"
                     "\"instance\":{},\"parent\":{},"
                     "\"flags_address\":{},\"mask\":{},"
                     "\"parent_flags\":{},\"state\":{},"
                     "\"descriptor\":{},\"command_target\":{}}}",
-                    frame, SnrM02ReadU32(r1.u32 + 1524), r27.u32,
+                    frame, view_call, SnrM02ReadU32(r1.u32 + 1524), r27.u32,
                     r30.u32, r28.u32, SnrM02ReadU32(r27.u32 + 56),
                     r25.u32, descriptor, command_target);
       }

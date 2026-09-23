@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-def verify(path: Path) -> dict:
+def verify(path: Path, view_call: int = 0, require_color: bool = False) -> dict:
     events = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if "FH1 SNR02 rebuild " in line or "FH1 SNR01 track nested entry " in line or "FH1 SNR01 track selected record " in line:
@@ -18,6 +18,8 @@ def verify(path: Path) -> dict:
     assert len(captures) == 1, f"expected one capture, found {len(captures)}"
     capture_index, capture = captures[0]
     frame, target = capture["frame"], capture["command_target"]
+    if view_call:
+        assert capture.get("view_call") == view_call
     assert frame > 0 and target > 0 and capture["state"] and capture["descriptor"]
     assert capture["flags_address"] == capture["parent"] + 56
     assert capture["mask"] and capture["parent_flags"] & capture["mask"] == 0
@@ -60,10 +62,13 @@ def verify(path: Path) -> dict:
             kind = "vertex" if "vertex fetch " in name else "texture"
             fetches[(kind, row["draw"])] = fetches.get((kind, row["draw"]), 0) + 1
     assert entries and len(entries) == len(records) and flushes and executions and draws
+    if require_color:
+        assert any(draw.get("color_mask", 0) and draw["pixel_shader"] for draw in draws), "no color-writing draw"
     for draw in draws:
         assert fetches.get(("vertex", draw["draw"]), 0) == draw["vertex_fetch_count"]
         assert fetches.get(("texture", draw["draw"]), 0) == draw["texture_fetch_count"]
-    return {"source_frame": frame, "backend_frame": frame + 1,
+    return {"source_frame": frame, "view_call": capture.get("view_call"),
+            "backend_frame": frame + 1,
             "command_target": f"0x{target:08X}", "selected_records": len(records),
             "flushes": len(flushes), "indirect_executions": len(executions),
             "prepared_draws": len(draws), "vertex_fetches": sum(
@@ -76,5 +81,7 @@ def verify(path: Path) -> dict:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
+    parser.add_argument("--view-call", type=int, default=0)
+    parser.add_argument("--require-color", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(verify(args.log), indent=2))
+    print(json.dumps(verify(args.log, args.view_call, args.require_color), indent=2))
