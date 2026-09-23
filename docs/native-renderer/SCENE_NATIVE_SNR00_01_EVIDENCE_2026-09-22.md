@@ -2821,3 +2821,32 @@ The same executable with the probes off also exited the saved route normally
 with seven compatibility captures. This is a smoke check, not a visual or
 performance equivalence claim. The updated summarizer also rechecked the
 earlier 4,598-draw scalar-wrapper ledger with its strict boundary flags.
+
+### Remaining unowned candidate direct packets in the particle replay
+
+Re-reading the full 3,206-draw ledger, 622 of the 646 candidate direct draws
+carry at least one of the direct-record, procedural item/node, vegetation
+bound-record, scalar-object or particle-parent joins. The remaining **24
+prepared draws are eight title view-8 packets**, with three prepared draws per
+packet. Their title packet and attachment joins are exact; their semantic
+render owner is not yet established:
+
+| Return site | Title packet ordinals | Prepared draws | Submission path | Index counts |
+| --- | --- | ---: | --- | --- |
+| `0x823F59C8` | 101–103 | 9 | secondary direct | 9300, 8700, 9300 |
+| `0x82401258` | 106 | 3 | indexed2 secondary | 220 |
+| `0x82412E1C` | 490–492 | 9 | secondary direct | 9096, 4, 512 |
+| `0x8244F070` | 116 | 3 | indexed2 secondary | 4 |
+
+Packet 101 writes candidate color word `00030000`; the other seven write
+`000C0000`. Generated `sub_823F5980` owns the first return site and retains
+its entry object while calling `sub_82416380`. The second-path scope for
+`sub_82412DD8` joins packets 490–492; its callers are respectively
+`0x823FA8DC`, `0x82447C08` and `0x823FB7D4`. Each caller invokes the
+same vtable slot `+164` on its render interface, but the shared command
+context alone does not identify the three scene owners. The two indexed2
+sites are calls to `sub_8240DC70` inside `sub_82400E70` and
+`sub_8244E938`; they issue argument selector 13 with sizes 24 and 16.
+These are code-path facts, not material or pass labels. Until the retained
+versus selected status of these eight packets and the other direct families
+is proved, the exact main-view slice remains provisional.
