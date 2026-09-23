@@ -135,6 +135,8 @@ struct Snr01SecondPathScope {
   uint32_t arg4;
   uint32_t arg5;
   uint32_t arg6;
+  uint32_t caller_object;
+  uint32_t caller_object_word0;
 };
 struct Snr01ScalarDrawScope {
   uint64_t frame;
@@ -2594,7 +2596,7 @@ void PinyonShiftObserveProceduralItemEnd() {
 
 void PinyonShiftObserveSnr01SecondPathBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4,
-    PPCRegister& r5, PPCRegister& r6) {
+    PPCRegister& r5, PPCRegister& r6, PPCRegister& r30) {
   if (!Snr01TraceCurrentFrame()) {
     return;
   }
@@ -2604,7 +2606,9 @@ void PinyonShiftObserveSnr01SecondPathBegin(
       ++snr01_second_path_count,
       snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
       snr01_semantic_packet_count, r12.u32, r3.u32, r4.u32, r5.u32,
-      r6.u32});
+      r6.u32, r30.u32,
+      snr01_view_scopes.empty() || snr01_view_scopes.back().ordinal != 8
+          ? 0 : SnrM02ReadU32(r30.u32)});
 }
 
 void PinyonShiftObserveSnr01SecondPathEnd() {
@@ -2620,9 +2624,11 @@ void PinyonShiftObserveSnr01SecondPathEnd() {
       "FH1 SNR01 second path {{\"frame\":{},\"call\":{},"
       "\"view_call\":{},\"caller_lr\":{},\"context\":{},"
       "\"arg4\":{},\"arg5\":{},\"arg6\":{},"
+      "\"caller_object\":{},\"caller_object_word0\":{},"
       "\"first_semantic\":{},\"last_semantic\":{}}}",
       scope.frame, scope.ordinal, scope.view_call, scope.caller_lr,
       scope.context, scope.arg4, scope.arg5, scope.arg6,
+      scope.caller_object, scope.caller_object_word0,
       scope.first_semantic + 1, snr01_semantic_packet_count);
 }
 

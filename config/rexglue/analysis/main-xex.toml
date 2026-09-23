@@ -322,7 +322,7 @@ name = "PinyonShiftObserveProceduralItemEnd"
 [[midasm_hook]]
 address = 0x82412DDC
 name = "PinyonShiftObserveSnr01SecondPathBegin"
-registers = ["r12", "r3", "r4", "r5", "r6"]
+registers = ["r12", "r3", "r4", "r5", "r6", "r30"]
 
 [[midasm_hook]]
 address = 0x82412E1C

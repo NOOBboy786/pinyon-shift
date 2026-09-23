@@ -2850,3 +2850,46 @@ sites are calls to `sub_8240DC70` inside `sub_82400E70` and
 These are code-path facts, not material or pass labels. Until the retained
 versus selected status of these eight packets and the other direct families
 is proved, the exact main-view slice remains provisional.
+
+### Three second-path packets retain distinct caller input records
+
+The existing default-off `sub_82412DD8` scope now reads the enclosing
+caller's preserved `r30` and its first word. In a normal-exit saved-race
+replay with seven compatibility captures, the three view-8 source-frame-6000
+calls each emitted exactly one semantic packet:
+
+| Caller return | Semantic packet | Caller `r30` | First word | Submit arguments `r4`, `r5` |
+| --- | ---: | --- | --- | --- |
+| `0x823FA8DC` | 389 | `0x40934BE0` | `0x3E800000` | 1, 9096 |
+| `0x82447C08` | 390 | `0x40934B60` | `0x3EFF6B07` | 13, 1 |
+| `0x823FB7D4` | 391 | `0x40934B00` | `0x3CF30D15` | 13, 128 |
+
+The addresses are adjacent input records with float-like first words, not
+RTTI vtables. They establish distinct caller-held inputs but do **not**
+identify persistent scene owners, geometry or material roles. The executable
+SHA-256 was
+`6FF1AD1AD68B635B3306604AF639EE290113A51A0CC90DD8B0E3064E449355F8`;
+the ordered filtered log is
+`.local/native-renderer/snr01/second-caller-run-b-filtered.log` (SHA-256
+`FB25F4D500C05CAF35366AADDC07B97B5119ACE9D75D38D836BBC3342146DF9F`).
+The read-only probe can be rechecked with:
+
+```powershell
+@'
+import json
+rows = [json.loads(line.split('FH1 SNR01 second path ')[1])
+        for line in open('.local/native-renderer/snr01/second-caller-run-b-filtered.log', encoding='utf-8')
+        if 'FH1 SNR01 second path ' in line]
+found = [r for r in rows if r['frame'] == 6000 and r['view_call'] == 8
+         and r['caller_lr'] in (0x823FA8DC, 0x82447C08, 0x823FB7D4)]
+assert len(found) == 3 and len({r['caller_object'] for r in found}) == 3
+assert all(r['caller_object_word0'] and r['first_semantic'] == r['last_semantic'] for r in found)
+'@ | python -
+```
+
+The broader strict census on this replay did **not** pass: backend frame 6001
+had 6,869 prepared draws, and the verifier reported root
+`(317456596, 321236480)` without a joined title packet. The earlier
+3,206-draw replay remains the last passing full-frame ledger. This new run
+qualifies only the bounded second-path call join; it cannot revise the
+frame-wide slice boundary or Gate A status.
