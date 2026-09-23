@@ -2420,6 +2420,83 @@ void PinyonShiftObserveSnr01TrackDescriptor(
               words[4], words[5], words[6], words[7]);
 }
 
+void PinyonShiftObserveSnr02TrackNestedEntry(
+    PPCRegister& r3, PPCRegister& r19, PPCRegister& r25,
+    PPCRegister& r26, PPCRegister& r30) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      !Snr01TraceCurrentFrame()) {
+    return;
+  }
+  REXGPU_INFO("FH1 SNR01 track nested entry {{\"frame\":{},"
+              "\"flags_address\":{},\"container\":{},\"container_vtable\":{},"
+              "\"submodel\":{},\"submodel_vtable\":{},"
+              "\"entry\":{},\"entry_vtable\":{},"
+              "\"entry_index\":{},\"selected\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              r30.u32, r19.u32, SnrM02ReadU32(r19.u32),
+              r26.u32, SnrM02ReadU32(r26.u32),
+              r25.u32, SnrM02ReadU32(r25.u32),
+              SnrM02ReadU32(r25.u32 + 40), r3.u32);
+}
+
+void PinyonShiftObserveSnr02TrackRebuildGate(
+    PPCRegister& r27, PPCRegister& r28, PPCRegister& r30,
+    PPCRegister& r31) {
+  const int32_t target = REXCVAR_GET(pinyon_shift_snr01_trace_source_frame);
+  if (target <= 0) {
+    return;
+  }
+  const uint64_t frame = rex::perf::GetTotalCounter(
+      rex::perf::CounterId::kSourceFrameCount);
+  if (!Snr01TraceCurrentFrame()) {
+    if (r31.u32 != 0 || frame >= uint64_t(target)) {
+      return;
+    }
+    static thread_local uint64_t last_miss_bucket = uint64_t(-1);
+    const uint64_t bucket = frame / 128;
+    if (bucket == last_miss_bucket) {
+      return;
+    }
+    last_miss_bucket = bucket;
+  }
+  REXGPU_INFO("FH1 SNR01 track rebuild gate {{\"frame\":{},"
+              "\"flags_address\":{},\"parent\":{},\"mask\":{},"
+              "\"parent_flags\":{},\"cached_flag\":{}}}",
+              frame, r30.u32, r27.u32, r28.u32,
+              SnrM02ReadU32(r27.u32 + 56), r31.u32);
+}
+
+void PinyonShiftObserveSnr02TrackSelectedRecord(
+    PPCRegister& r1, PPCRegister& r19, PPCRegister& r25,
+    PPCRegister& r26, PPCRegister& r30, PPCRegister& r31) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      !Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint32_t record_root = SnrM02ReadU32(r1.u32 + 116);
+  uint32_t words[14] = {};
+  if (r31.u32) {
+    for (uint32_t i = 0; i < 14; ++i) {
+      words[i] = SnrM02ReadU32(r31.u32 + 4 * i);
+    }
+  }
+  REXGPU_INFO("FH1 SNR01 track selected record {{\"frame\":{},"
+              "\"flags_address\":{},\"container\":{},\"submodel\":{},"
+              "\"entry\":{},\"entry_index\":{},"
+              "\"record_root\":{},\"record_base\":{},\"record\":{},"
+              "\"words\":[{},{},{},{},{},{},{},{},{},{},{},{},{},{}]}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              r30.u32, r19.u32, r26.u32, r25.u32,
+              SnrM02ReadU32(r25.u32 + 40), record_root,
+              SnrM02ReadU32(record_root), r31.u32,
+              words[0], words[1], words[2], words[3],
+              words[4], words[5], words[6], words[7],
+              words[8], words[9], words[10], words[11],
+              words[12], words[13]);
+}
+
 void PinyonShiftObserveSnr01TrackModelEnd() {
   if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0 &&
       Snr01TraceCurrentFrame()) {

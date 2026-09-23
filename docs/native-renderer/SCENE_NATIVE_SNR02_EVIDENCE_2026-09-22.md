@@ -384,3 +384,54 @@ not an authoritative mesh/material identity. The next SNR-02 step must trace
 the nested traversal's geometry/material objects and command-list producer
 to the backend fetches and shaders. Treating this descriptor address as a
 mesh key would confuse submission storage with the underlying resource.
+
+### Cached track command list and nested rebuild path
+
+Generated `sub_824365B0` turns the selected index into a bit mask and checks
+it against flags at the parent object +56. A set bit skips the nested
+`CTrackModel` traversal. A sparse default-off gate probe found cache misses
+in 21 pre-target 128-frame buckets on the saved sustained race. At source
+frame 6000, all 324 observed gates were set. At source frame 6001, two of
+324 calls missed; those two calls reached four selected 56-byte records and
+one selected view-8 scene packet. Both used the same track-model instance.
+
+The source-frame-6001 runtime vtables are `0x820016B4`, `0x82001474` and
+`0x8200143C`, which the verified title-image RTTI identifies as
+`CTrackModel`, `CTrackSubModel` and `CTrackMesh`. The generated virtual
+dispatches support that traversal: `CTrackModel` slot 2 returns its count
+and slot 4 selects a submodel; `CTrackSubModel` slot 3 returns its pointer
+range count and slot 5 selects a mesh; `CTrackMesh` slot 5 runs the
+selection check at `sub_82437058`. For all four observed record events,
+`record = record_base + 56 * CTrackMesh.entry_index`. The bounded
+`verify-snr02-track-rebuild.py` checks the earlier parent/flag address,
+runtime types, nested call order, record formula and packet scope.
+For the rebuilding call that emitted a packet, it also checks that the
+selected descriptor's word-4 command target is that packet's target.
+
+The scout used RelWithDebInfo executable SHA-256
+`02E048746B6EB647120F33E16E1C8EBE2609E49EBC8199D1C1CE64F248307496`
+and exited normally with seven compatibility captures. Its process-filtered
+log at `.local/native-renderer/snr02/track-gate-scout-run-a-filtered.log`
+has SHA-256
+`E1C81034F1ED74FFCF1D6E1BC2BF2CA413323CE9132592D9A6F11ACAF48FFA21`.
+The first log labeled the later `r30` value `instance`; generated code has
+already changed that register to `parent + 56`, so the hook now calls it
+`flags_address` and the verifier accepts both labels while checking the
+actual relationship.
+
+A second normal saved-race replay traced frame 6001 as the primary frame,
+but all 369 track gates there were cached and the nested traversal did not
+run. Its process-filtered log has SHA-256
+`C9DB68E9471C0CFA308F891D11DB41EE7ECF1F98B80D48EE06EB8B09CBD64335`;
+its strict frame-wide ledger has SHA-256
+`6A42A22208047B09B3EAD0A4B418552EEEE7D9FB62ABFAF97ED49775B89A91E0`.
+The frame-wide census and command-target join passed for source frame 6001:
+164 shared-state packets joined 762 candidate draws, including 119 track
+packets and 627 track draws. This replay does not join a rebuilding record
+to backend draws, because no rebuild occurred in its traced frame.
+
+The title-side graph now reaches a selected `CTrackMesh` and its 56-byte
+record, but the record's geometry/material fields and allocation lifetime
+remain unresolved. Rebuild timing varies across replays; the next capture
+must trigger on an actual cache miss and retain that source frame through
+backend consumption, rather than relying on a fixed source-frame number.
