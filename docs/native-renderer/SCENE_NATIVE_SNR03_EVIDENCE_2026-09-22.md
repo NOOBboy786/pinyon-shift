@@ -626,6 +626,35 @@ full-view image's semantic role. The
 private diagnostic samples neither image, so visible alpha coverage and
 the full-view pixel dependency remain unresolved.
 
+The same RenderDoc probe now reads BC3 mip 0 at event 11206. Its 65,536
+compressed bytes have SHA-256
+`18F6CE118B46945A4C2A63F5EE8E6E242D08570C53E03ABB8C77B97F08556D48`.
+Decoding the BC3 alpha selectors gives 37,353 zero-alpha texels, 5,663
+255-alpha texels and 22,520 intermediate-alpha texels. The texture has no
+recorded earlier use in this capture, so the replay does not establish its
+upload or title-side payload generation. In the full-view image, byte 3 of
+900,227 pixels is zero and of 21,373 pixels is 255; no intermediate value
+occurs. These payload counts alone do not establish sampled channels or
+discard behavior.
+
+The captured pixel shader `ResourceId::975` disassembly (SHA-256
+`C6935BE87C7176FCDA130D1C68436B8DA1AD6298C307FD893D995D99AA0EB1E5`)
+and constant block 3 join descriptor indices 736 and 898 to those two images.
+The first sample group reads four channels from index 736; the second reads
+the first channel from index 898. The first group's alpha is multiplied by
+interpolated `v4.w` and later reaches conditional `discard_z` and sample-mask
+logic. The full-view image's byte-3 distribution therefore does not by
+itself describe this draw's alpha test; its sampled first channel and the
+shader constants need further comparison. This disassembly is the translated
+DXBC shader for one matched draw, not a semantic material or all-variant proof.
+Faithful coverage comparison still needs both current textures, the relevant
+shader constants and the sampled depth state.
+
+The expanded probe result is
+`.local/native-renderer/snr04/vegetation-texture-shader-11206.json`
+(SHA-256 `F2B8D2FD7DC6AEDB6CF5D53C9363DE09DEDF97B4EC7C78F1A328F7FF5B755600`)
+with sibling `.dxbc.txt`.
+
 Recheck the binding census and capture chain:
 
 ```powershell
@@ -635,7 +664,7 @@ python tools/verify-snr03-vegetation-binding.py `
 $env:SNR04_CAPTURE = (Resolve-Path `
   .local/native-renderer/snr04/extended-capture_frame6000.rdc).Path
 $env:SNR04_OUTPUT = (Join-Path (Get-Location) `
-  '.local/native-renderer/snr04/vegetation-texture-chain-11206.json')
+  '.local/native-renderer/snr04/vegetation-texture-shader-11206.json')
 $env:SNR04_EVENT = '11206'
 & .local/tools/renderdoc-1.46/RenderDoc_1.46_64/qrenderdoc.exe `
   --python tools/probe-snr04-vegetation-textures.py

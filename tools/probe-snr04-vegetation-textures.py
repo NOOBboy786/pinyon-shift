@@ -7,6 +7,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import struct
 import traceback
 
 import renderdoc as rd
@@ -32,12 +33,27 @@ try:
     used = pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel)
     state["pixel_binding_count"] = len(used)
     assert len(used) == 2, "selected draw must have two pixel textures"
+    cb3 = pipeline.GetConstantBlock(rd.ShaderStage.Pixel, 3, 0).descriptor
+    cb3_words = struct.unpack("<8I", bytes(replay.GetBufferData(
+        cb3.resource, cb3.byteOffset, 32)))
+    assert {binding.access.arrayElement for binding in used} == {
+        cb3_words[2], cb3_words[5]}, "pixel descriptors differ from shader indices"
+    reflection = pipeline.GetShaderReflection(rd.ShaderStage.Pixel)
+    disassembly = replay.DisassembleShader(
+        pipeline.GetGraphicsPipelineObject(), reflection, "")
+    output.with_suffix(".dxbc.txt").write_bytes(disassembly.encode("utf-8"))
+    state["pixel_shader"] = {
+        "resource": str(pipeline.GetShader(rd.ShaderStage.Pixel)),
+        "descriptor_indices": [cb3_words[2], cb3_words[5]],
+        "disassembly_sha256": hashlib.sha256(disassembly.encode()).hexdigest(),
+    }
     textures = {texture.resourceId: texture for texture in replay.GetTextures()}
     state["pixel_textures"] = []
     for index, binding in enumerate(used):
         texture = textures[binding.descriptor.resource]
         state["pixel_textures"].append({
             "binding_order": index,
+            "descriptor_index": binding.access.arrayElement,
             "resource": str(texture.resourceId),
             "width": texture.width,
             "height": texture.height,
@@ -45,6 +61,38 @@ try:
             "mips": texture.mips,
             "samples": texture.msSamp,
         })
+    foliage = [binding.descriptor.resource for binding in used
+               if textures[binding.descriptor.resource].format.Name() == "BC3_UNORM"]
+    assert len(foliage) == 1, "no unique BC3 pixel texture"
+    subresource = rd.Subresource()
+    subresource.mip = subresource.slice = subresource.sample = 0
+    foliage_bytes = bytes(replay.GetTextureData(foliage[0], subresource))
+    foliage_pixels = textures[foliage[0]].width * textures[foliage[0]].height
+    assert len(foliage_bytes) == foliage_pixels, "unexpected BC3 mip-0 byte count"
+    alpha_counts = [0] * 256
+    for offset in range(0, len(foliage_bytes), 16):
+        first, second = foliage_bytes[offset:offset + 2]
+        if first > second:
+            palette = [first, second] + [((7 - i) * first + i * second) // 7
+                                         for i in range(1, 7)]
+        else:
+            palette = [first, second] + [((5 - i) * first + i * second) // 5
+                                         for i in range(1, 5)] + [0, 255]
+        selectors = int.from_bytes(foliage_bytes[offset + 2:offset + 8], "little")
+        for pixel in range(16):
+            alpha_counts[palette[(selectors >> (3 * pixel)) & 7]] += 1
+    assert sum(alpha_counts) == foliage_pixels
+    state["bc3_mip0"] = {
+        "resource": str(foliage[0]),
+        "bytes": len(foliage_bytes),
+        "sha256": hashlib.sha256(foliage_bytes).hexdigest(),
+        "alpha_zero": alpha_counts[0],
+        "alpha_full": alpha_counts[255],
+        "alpha_partial": sum(alpha_counts[1:255]),
+        "prior_uses": [{"event": usage.eventId, "usage": str(usage.usage)}
+                       for usage in replay.GetUsage(foliage[0])
+                       if usage.eventId < event][-8:],
+    }
     full_view = [binding.descriptor.resource for binding in used
                  if textures[binding.descriptor.resource].width == viewport.width
                  and textures[binding.descriptor.resource].height == viewport.height]
@@ -80,18 +128,22 @@ try:
     }
     replay.SetFrameEvent(max(writes), True)
     source_bytes = bytes(replay.GetBufferData(source, 0, 0))
-    subresource = rd.Subresource()
-    subresource.mip = subresource.slice = subresource.sample = 0
     replay.SetFrameEvent(copy_event, True)
     copied_bytes = bytes(replay.GetTextureData(target, subresource))
     replay.SetFrameEvent(event, True)
     sampled_bytes = bytes(replay.GetTextureData(target, subresource))
     assert source_bytes.startswith(copied_bytes) and sampled_bytes == copied_bytes
+    fourth_channel = copied_bytes[3::4]
+    assert len(fourth_channel) == textures[target].width * textures[target].height
     state["full_view_payload"] = {
         "source_offset": 0,
         "bytes": len(copied_bytes),
         "sha256": hashlib.sha256(copied_bytes).hexdigest(),
         "unchanged_at_draw": True,
+        "byte3_zero": fourth_channel.count(0),
+        "byte3_full": fourth_channel.count(255),
+        "byte3_partial": len(fourth_channel) - fourth_channel.count(0)
+                         - fourth_channel.count(255),
     }
     state["stage"] = "done"
 except Exception:
