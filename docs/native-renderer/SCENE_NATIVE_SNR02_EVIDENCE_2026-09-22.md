@@ -772,3 +772,43 @@ geometry import for the kind-0 shader when its layered-root conditions hold,
 but this capture does not prove those conditions or immutable bytes for all
 four kinds. Texture bytes, source material ownership and resource generations
 remain open.
+
+### Prepared procedural vertex bytes at the draw boundary
+
+The SDK's existing prepared-draw snapshot path was extended, default off,
+to the four observed procedural shader families when the SNR-02 item probe
+and source-frame trace are enabled. It copies the CPU-owned fetch-95 range
+at backend draw preparation, with a 256 KiB per-draw and 8 MiB per-frame
+budget. A failed CPU snapshot has a distinct status; the hash alone is not
+used as an immutable scene payload.
+
+A corrected RelWithDebInfo replay used the staged SDK graphics DLL, the
+AppData-backed `fh1-race-sustained.fh1test` route and the existing source
+frame 6000 flags plus `--pinyon_shift_snr02_item_payload_probe=true`.
+It exited normally with seven compatibility captures. The filtered log is
+`.local/native-renderer/snr02/item-snapshot-run-b-filtered.log` (SHA-256
+`8276841B1CC68B642F386D29D6923FB87FC072255746C7DAA3771501C10D11CA`);
+the strict frame-wide ledger is
+`.local/native-renderer/snr02/item-snapshot-run-b-ledger.json` (SHA-256
+`E0706C51177F060FAD2ABF088EFE36AAE073AF0A71A5284F48593ED7AFFBE229`).
+All 3,406 prepared draws passed the candidate-boundary census. The selected
+procedural family had 308 draws from 174 title calls. All 308 vertex
+snapshots returned status 1 with a nonzero hash, totaling 1,116,680 copied
+bytes including repeated draws. The 174 distinct address/length ranges
+total 518,400 bytes; the largest was 54,320 bytes. Every repeated draw of
+one title call had the same base, length and snapshot hash in this frame.
+
+Recheck the exact title-to-prepared join and snapshots with:
+
+```powershell
+python tools/verify-snr02-item-payload.py `
+  .local/native-renderer/snr02/item-snapshot-run-b-filtered.log `
+  .local/native-renderer/snr02/item-snapshot-run-b-ledger.json `
+  --require-vertex-snapshots
+```
+
+The SDK currently discards these copied bytes after the prepared-draw
+callback. SNR-03 still needs to publish owned bytes with the exact title
+call, transform/constants and resource generation through consumption.
+One frame of equal hashes does not prove streaming lifetime, material roles
+or private-renderer coverage.

@@ -13,7 +13,7 @@ CANDIDATE = {
 }
 
 
-def verify(log: Path, ledger: Path) -> dict:
+def verify(log: Path, ledger: Path, require_snapshots: bool = False) -> dict:
     ledger_data = json.loads(ledger.read_text())
     backend_frame = ledger_data["backend_frame"]
     items, payloads = {}, {}
@@ -60,6 +60,8 @@ def verify(log: Path, ledger: Path) -> dict:
     assert all(items[key]["submit_seen"] for key in selected)
     footprints = collections.Counter()
     geometry_by_call = collections.defaultdict(set)
+    snapshots = collections.Counter()
+    snapshot_bytes = 0
     for row in draws:
         ordinal = row["ordinal"]
         draw = prepared[ordinal]
@@ -75,7 +77,10 @@ def verify(log: Path, ledger: Path) -> dict:
         assert fetch["packet_physical"] == draw["packet_physical"]
         assert (fetch["fetch_constant"], fetch["stride_words"], fetch["type"]) == (95, 10, 3)
         assert fetch["length"] == draw["index_count"] * 10
-        assert fetch["cpu_snapshot_status"] == 0
+        snapshots[fetch["cpu_snapshot_status"]] += 1
+        if require_snapshots:
+            assert fetch["cpu_snapshot_status"] == 1 and fetch["cpu_snapshot_hash"]
+            snapshot_bytes += fetch["length"]
         assert fetch["source_execution_0"] == row["execution"]
         assert all(t["packet_physical"] == draw["packet_physical"] for t in texture)
         signature = tuple((t["fetch_constant"], t["format"]) for t in texture)
@@ -83,8 +88,11 @@ def verify(log: Path, ledger: Path) -> dict:
         call = row["title_packet_source_frame"], row["title_item_call"]
         kind = payloads[call]["kind"]
         footprints[(kind, draw["vertex_shader"], draw["pixel_shader"], signature)] += 1
-        geometry_by_call[call].add((fetch["guest_base"], fetch["length"]))
+        geometry_by_call[call].add((fetch["guest_base"], fetch["length"],
+                                    fetch["cpu_snapshot_hash"]))
     assert len(geometry_by_call) == len(selected)
+    if require_snapshots:
+        assert all(len(ranges) == 1 for ranges in geometry_by_call.values())
     by_runtime = collections.defaultdict(list)
     for payload in payloads.values():
         by_runtime[payload["runtime"]].append(payload)
@@ -101,10 +109,16 @@ def verify(log: Path, ledger: Path) -> dict:
     return {"selected_draws": len(draws), "selected_calls": len(selected),
             "payloads": len(payloads), "kinds": dict(sorted(collections.Counter(
                 payloads[key]["kind"] for key in selected).items())),
-            "unique_geometry_ranges": len({geometry for ranges in geometry_by_call.values()
+            "unique_geometry_ranges": len({geometry[:2]
+                                           for ranges in geometry_by_call.values()
                                            for geometry in ranges}),
+            "unique_snapshot_hashes": len({geometry[2]
+                                          for ranges in geometry_by_call.values()
+                                          for geometry in ranges if geometry[2]}),
             "geometry_ranges_per_call": dict(sorted(collections.Counter(
                 len(ranges) for ranges in geometry_by_call.values()).items())),
+            "vertex_snapshot_statuses": dict(sorted(snapshots.items())),
+            "vertex_snapshot_bytes": snapshot_bytes,
             "prepared_footprints": [
                 {"kind": kind, "vertex_shader": f"{vs:016X}",
                  "pixel_shader": f"{ps:016X}", "textures": signature, "draws": count}
@@ -114,5 +128,7 @@ def verify(log: Path, ledger: Path) -> dict:
 
 
 if __name__ == "__main__":
-    assert len(sys.argv) == 3, "usage: verify-snr02-item-payload.py LOG LEDGER"
-    print(json.dumps(verify(Path(sys.argv[1]), Path(sys.argv[2])), sort_keys=True))
+    assert len(sys.argv) in (3, 4), "usage: verify-snr02-item-payload.py LOG LEDGER [--require-vertex-snapshots]"
+    assert len(sys.argv) == 3 or sys.argv[3] == "--require-vertex-snapshots"
+    print(json.dumps(verify(Path(sys.argv[1]), Path(sys.argv[2]), len(sys.argv) == 4),
+                     sort_keys=True))
