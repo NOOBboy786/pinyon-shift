@@ -352,15 +352,28 @@ struct Snr02ItemScene {
   std::array<uint32_t, 16> camera144;
   std::vector<Snr02ItemSnapshot> items;
 };
+struct Snr02ItemDrawState {
+  uint64_t vertex_shader = 0;
+  uint64_t pixel_shader = 0;
+  uint64_t dynamic_state = 0;
+  uint32_t index_count = 0;
+  uint32_t texture_count = 0;
+  std::array<rex::system::GraphicsPreparedDrawTextureFetch, 2> textures{};
+  std::array<uint32_t, 1024> vertex_constants{};
+  std::array<uint32_t, 64> system_constants{};
+  std::array<uint32_t, 4> fetch47{};
+  bool final_seen = false;
+};
 struct Snr02ItemPayload {
   uint32_t base = 0;
   uint32_t length = 0;
-  uint32_t draws = 0;
   std::vector<uint8_t> vertex_bytes;
+  std::map<uint64_t, Snr02ItemDrawState> draws;
 };
 struct Snr02ItemPayloadState {
   std::map<uint32_t, Snr02ItemPayload> by_packet;
   size_t bytes = 0;
+  size_t draw_bytes = 0;
   bool rejected = false;
 };
 std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
@@ -650,6 +663,12 @@ uint64_t Snr03HashBytes(const std::vector<uint8_t>& bytes) {
   for (const uint8_t byte : bytes) {
     hash = (hash ^ byte) * 1099511628211ull;
   }
+  return hash;
+}
+
+uint64_t Snr02HashWords(std::span<const uint32_t> words) {
+  uint64_t hash = 14695981039346656037ull;
+  for (uint32_t word : words) hash = (hash ^ word) * 1099511628211ull;
   return hash;
 }
 
@@ -981,8 +1000,49 @@ void ObserveSnr03VertexPayload(
   }
 }
 
+void ObserveSnr02ItemFinalDrawState(
+    const rex::system::GraphicsFinalDrawStateObservation& observation) {
+  const int32_t target = Snr02ItemTargetFrame();
+  if (target <= 0 || observation.frame_sequence != uint64_t(target) + 1) return;
+  std::lock_guard lock(snr02_item_scene_mutex);
+  const auto scene = snr02_item_scenes.find(uint64_t(target));
+  if (scene == snr02_item_scenes.end()) return;
+  const auto item = std::find_if(scene->second->items.begin(),
+                                 scene->second->items.end(), [&](const auto& row) {
+    return row.packet == observation.draw_packet_physical_address;
+  });
+  if (item == scene->second->items.end()) return;
+  auto& state = snr02_item_payloads[uint64_t(target)];
+  const auto geometry = state.by_packet.find(item->packet);
+  if (geometry == state.by_packet.end() ||
+      !observation.system_constant_words ||
+      observation.system_constant_word_count < 64 ||
+      !observation.fetch_47_words) {
+    state.rejected = true;
+    return;
+  }
+  const auto variant = geometry->second.draws.find(observation.draw_sequence);
+  if (variant == geometry->second.draws.end() || variant->second.final_seen ||
+      variant->second.dynamic_state != observation.dynamic_state) {
+    state.rejected = true;
+    return;
+  }
+  auto& draw = variant->second;
+  std::copy_n(observation.system_constant_words, draw.system_constants.size(),
+              draw.system_constants.begin());
+  std::copy_n(observation.fetch_47_words, draw.fetch47.size(),
+              draw.fetch47.begin());
+  draw.final_seen = true;
+  REXGPU_INFO("FH1 SNR02 item final state {{\"frame\":{},\"packet\":{},"
+              "\"sequence\":{},\"dynamic\":{},\"system_hash\":{},"
+              "\"fetch47_hash\":{}}}", observation.frame_sequence,
+              item->packet, observation.draw_sequence, observation.dynamic_state,
+              Snr02HashWords(draw.system_constants), Snr02HashWords(draw.fetch47));
+}
+
 void ObserveSnr03FinalDrawState(
     const rex::system::GraphicsFinalDrawStateObservation& observation) {
+  ObserveSnr02ItemFinalDrawState(observation);
   const int32_t target = Snr03TargetFrame();
   if (target <= 0 || observation.frame_sequence != uint64_t(target) + 1) {
     return;
@@ -1065,7 +1125,10 @@ void ObserveSnr02ItemVertexPayload(
   const auto& fetch = observation.vertex_fetches[0];
   if (fetch.fetch_constant != 95 || fetch.stride_words != 10 ||
       fetch.length != observation.index_count * 10 ||
-      fetch.cpu_snapshot_status != 1 || !fetch.cpu_snapshot_bytes) {
+      fetch.cpu_snapshot_status != 1 || !fetch.cpu_snapshot_bytes ||
+      !observation.draw_sequence || !observation.vertex_float_constant_words ||
+      observation.texture_fetch_count > 2 ||
+      (observation.texture_fetch_count && !observation.texture_fetches)) {
     state.rejected = true;
     return;
   }
@@ -1076,28 +1139,50 @@ void ObserveSnr02ItemVertexPayload(
         !std::equal(value.vertex_bytes.begin(), value.vertex_bytes.end(),
                     fetch.cpu_snapshot_bytes)) {
       state.rejected = true;
-    } else {
-      ++value.draws;
+      return;
     }
-    return;
+  } else {
+    if (state.by_packet.size() >= 512 ||
+        fetch.length > 2 * 1024 * 1024 - state.bytes) {
+      state.rejected = true;
+      return;
+    }
+    Snr02ItemPayload value{};
+    value.base = fetch.guest_base;
+    value.length = fetch.length;
+    value.vertex_bytes.assign(fetch.cpu_snapshot_bytes,
+                              fetch.cpu_snapshot_bytes + fetch.length);
+    if (Snr03HashBytes(value.vertex_bytes) != fetch.cpu_snapshot_hash) {
+      state.rejected = true;
+      return;
+    }
+    state.bytes += fetch.length;
+    existing = state.by_packet.emplace(item->packet, std::move(value)).first;
   }
-  if (state.by_packet.size() >= 512 ||
-      fetch.length > 2 * 1024 * 1024 - state.bytes) {
+  if (existing->second.draws.size() >= 8 ||
+      state.draw_bytes > 8 * 1024 * 1024 - sizeof(Snr02ItemDrawState) ||
+      existing->second.draws.contains(observation.draw_sequence)) {
     state.rejected = true;
     return;
   }
-  Snr02ItemPayload value{};
-  value.base = fetch.guest_base;
-  value.length = fetch.length;
-  value.draws = 1;
-  value.vertex_bytes.assign(fetch.cpu_snapshot_bytes,
-                            fetch.cpu_snapshot_bytes + fetch.length);
-  if (Snr03HashBytes(value.vertex_bytes) != fetch.cpu_snapshot_hash) {
-    state.rejected = true;
-    return;
+  Snr02ItemDrawState draw{};
+  draw.vertex_shader = observation.vertex_shader_hash;
+  draw.pixel_shader = observation.pixel_shader_hash;
+  draw.dynamic_state = observation.fh1_execution_key.dynamic_state;
+  draw.index_count = observation.index_count;
+  draw.texture_count = observation.texture_fetch_count;
+  if (draw.texture_count) {
+    std::copy_n(observation.texture_fetches, draw.texture_count,
+                draw.textures.begin());
   }
-  state.bytes += fetch.length;
-  state.by_packet.emplace(item->packet, std::move(value));
+  std::copy_n(observation.vertex_float_constant_words, draw.vertex_constants.size(),
+              draw.vertex_constants.begin());
+  REXGPU_INFO("FH1 SNR02 item draw state {{\"frame\":{},\"packet\":{},"
+              "\"sequence\":{},\"vertex_hash\":{}}}",
+              observation.frame_sequence, item->packet, observation.draw_sequence,
+              Snr02HashWords(draw.vertex_constants));
+  existing->second.draws.emplace(observation.draw_sequence, std::move(draw));
+  state.draw_bytes += sizeof(Snr02ItemDrawState);
 }
 
 void ObservePreparedDraw(
@@ -1194,7 +1279,7 @@ void ObservePreparedDraw(
     }
   }
   REXGPU_INFO(
-      "FH1 SNR01 prepared draw {{\"frame\":{},\"ordinal\":{},"
+      "FH1 SNR01 prepared draw {{\"frame\":{},\"ordinal\":{},\"sequence\":{},"
       "\"indirect_execution\":{},\"indirect_parent\":{},"
       "\"dispatch_packet_physical\":{},"
       "\"packet_physical\":{},\"packet_bytes\":{},"
@@ -1208,7 +1293,7 @@ void ObservePreparedDraw(
       "\"surface_info\":{},\"color_info\":[{},{},{},{}],"
       "\"depth_info\":{},\"depth_control\":{},"
       "\"color_mask\":{},\"draw_flags\":{}}}",
-      observation.frame_sequence, logged_draws,
+      observation.frame_sequence, logged_draws, observation.draw_sequence,
       observation.indirect_buffer_execution_id,
       observation.indirect_buffer_parent_execution_id,
       observation.indirect_dispatch_packet_physical_address,
@@ -1383,7 +1468,8 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
           ? &ObservePreparedDraw
           : nullptr);
   graphics_system->SetFinalDrawStateObserver(
-      Snr03ProbeEnabled() ? &ObserveSnr03FinalDrawState : nullptr);
+      Snr03ProbeEnabled() || Snr02ItemProbeEnabled()
+          ? &ObserveSnr03FinalDrawState : nullptr);
   graphics_system->SetIndirectBufferObserver(
       REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0 ||
               REXCVAR_GET(pinyon_shift_snr02_trace_first_rebuild_after_frame) > 0
@@ -1459,7 +1545,7 @@ void ObserveSnr02ItemOutputFrame(uint64_t output_frame) {
     const auto* bytes = reinterpret_cast<const char*>(&value);
     encoded.insert(encoded.end(), bytes, bytes + sizeof(value));
   };
-  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '2', 'I', '1', '\0'};
+  constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '2', 'I', '2', '\0'};
   write(magic);
   write(scene->source_frame);
   write(uint32_t(scene->items.size()));
@@ -1477,19 +1563,37 @@ void ObserveSnr02ItemOutputFrame(uint64_t output_frame) {
     write(item.runtime);
     write(geometry.base);
     write(geometry.length);
-    write(geometry.draws);
+    write(uint32_t(geometry.draws.size()));
     encoded.insert(encoded.end(), geometry.vertex_bytes.begin(),
                    geometry.vertex_bytes.end());
-    draws += geometry.draws;
+    for (const auto& [sequence, state] : geometry.draws) {
+      if (!state.final_seen) {
+        REXGPU_INFO("FH1 SNR02 item owned scene rejected missing_final packet={} sequence={}",
+                    item.packet, sequence);
+        return;
+      }
+      write(sequence);
+      write(state.vertex_shader);
+      write(state.pixel_shader);
+      write(state.dynamic_state);
+      write(state.index_count);
+      write(state.texture_count);
+      write(state.textures);
+      write(state.vertex_constants);
+      write(state.system_constants);
+      write(state.fetch47);
+    }
+    draws += uint32_t(geometry.draws.size());
   }
   const auto directory = fh1_render_test::OutputDirectory();
   const bool written = !directory.empty() &&
       WriteSceneFixture(std::span<const char>(encoded), scene->source_frame,
                         directory, "snr02-items-");
   REXGPU_INFO("FH1 SNR02 item owned scene consumed output_frame={} "
-              "source_frame={} calls={} draws={} vertex_bytes={} "
+              "source_frame={} calls={} draws={} vertex_bytes={} state_bytes={} "
               "fixture_bytes={} written={}", output_frame, scene->source_frame,
-              scene->items.size(), draws, payload.bytes, encoded.size(), written);
+              scene->items.size(), draws, payload.bytes, payload.draw_bytes,
+              encoded.size(), written);
 }
 
 void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {

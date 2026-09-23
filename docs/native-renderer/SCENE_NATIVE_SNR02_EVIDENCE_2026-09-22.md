@@ -850,3 +850,47 @@ This fixture proves title and geometry ownership through one output-frame
 handoff. It does not yet contain final per-draw constants, state variants,
 texture contents or generations, so it cannot drive the SNR-04 private
 renderer or qualify the full frozen slice.
+
+### Ordered final state for repeated procedural draws
+
+The SDK now provides the same draw sequence to prepared and final-state
+observers for the four measured procedural shader families. The owned scene
+stores one state per sequence: vertex/pixel shader identities, vertex count,
+two bounded texture fetch descriptors, the complete 256-register vertex
+float bank, final 64 system words, fetch-47 words and dynamic-state identity.
+It requires every prepared draw to receive exactly one matching final
+callback before writing the version-2 fixture. These are diagnostic inputs;
+they do not replace the compatibility renderer or establish texture lifetime.
+
+The sustained-race replay exited normally with seven compatibility captures.
+Its strict candidate-boundary census passed 3,273 prepared draws; the Gate A
+partition counted 1,597 selected, 70 retained and 1,606 outside. The
+procedural family supplied 300 selected executions from 178 title calls.
+The `SNR02I2` fixture retained 485,320 unique vertex bytes and all 300
+ordered state variants. The independent verifier checked every title record,
+packet, draw sequence, shader identity, texture-fetch descriptor, vertex
+register hash and final system/fetch hash against that replay's log and
+ledger. The fixture is 1,862,932 bytes.
+
+| Evidence | Local path | SHA-256 |
+| --- | --- | --- |
+| Version-2 fixture | `.local/native-renderer/snr02/item-final-state-run-a/snr02-items-6000.bin` | `840997E2A3F14D780F128499B6DB8D0F0F99E985DCA5076D26287175DE0038A2` |
+| Filtered log | `.local/native-renderer/snr02/item-final-state-run-a-filtered.log` | `4167A05D64DB6D6858C782FBA6FCF899CB3A94D349ACD13055F4D5E4A58494D3` |
+| Strict ledger | `.local/native-renderer/snr02/item-final-state-run-a-ledger.json` | `4FDCCB9DA228F604BA46FE4736CF7F6FA617A0E7A6FDBC2E68814200CBB06810` |
+
+```powershell
+python tools/verify-snr02-item-scene.py `
+  .local/native-renderer/snr02/item-final-state-run-a/snr02-items-6000.bin `
+  .local/native-renderer/snr02/item-final-state-run-a-filtered.log `
+  .local/native-renderer/snr02/item-final-state-run-a-ledger.json
+```
+
+One selected draw inherited its vertex-fetch register from an earlier
+backend execution (`3650157` versus draw execution `3650245`). The
+draw-time owned bytes and packet/state joins passed. The verifier now
+reports this provenance separately instead of assuming that fetch-register
+writes always occur in the draw's execution.
+
+The fixture still lacks semantic material ownership, texture byte
+generations and a private render of these four vertex shader variants.
+SNR-03/04 and the full selected-slice coverage gate remain open.

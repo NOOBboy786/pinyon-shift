@@ -62,6 +62,7 @@ def verify(log: Path, ledger: Path, require_snapshots: bool = False) -> dict:
     geometry_by_call = collections.defaultdict(set)
     snapshots = collections.Counter()
     snapshot_bytes = 0
+    inherited_fetches = 0
     for row in draws:
         ordinal = row["ordinal"]
         draw = prepared[ordinal]
@@ -81,7 +82,8 @@ def verify(log: Path, ledger: Path, require_snapshots: bool = False) -> dict:
         if require_snapshots:
             assert fetch["cpu_snapshot_status"] == 1 and fetch["cpu_snapshot_hash"]
             snapshot_bytes += fetch["length"]
-        assert fetch["source_execution_0"] == row["execution"]
+        assert 0 < fetch["source_execution_0"] <= row["execution"]
+        inherited_fetches += fetch["source_execution_0"] != row["execution"]
         assert all(t["packet_physical"] == draw["packet_physical"] for t in texture)
         signature = tuple((t["fetch_constant"], t["format"]) for t in texture)
         assert signature in (((0, 20),), ((0, 20), (13, 6)))
@@ -119,6 +121,7 @@ def verify(log: Path, ledger: Path, require_snapshots: bool = False) -> dict:
                 len(ranges) for ranges in geometry_by_call.values()).items())),
             "vertex_snapshot_statuses": dict(sorted(snapshots.items())),
             "vertex_snapshot_bytes": snapshot_bytes,
+            "inherited_vertex_fetches": inherited_fetches,
             "prepared_footprints": [
                 {"kind": kind, "vertex_shader": f"{vs:016X}",
                  "pixel_shader": f"{ps:016X}", "textures": signature, "draws": count}

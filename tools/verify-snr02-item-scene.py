@@ -20,6 +20,13 @@ def hash_bytes(data: bytes) -> int:
     return value
 
 
+def hash_words(words) -> int:
+    value = 14695981039346656037
+    for word in words:
+        value = ((value ^ word) * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return value
+
+
 def verify(fixture: Path, log: Path, ledger: Path) -> dict:
     census = json.loads(ledger.read_text())
     source_frame = census["backend_frame"] - 1
@@ -29,10 +36,15 @@ def verify(fixture: Path, log: Path, ledger: Path) -> dict:
             assert row["title_packet_source_frame"] == source_frame
             selected[row["title_item_call"]].append(row)
     assert selected
-    title, fetches = {}, {}
+    title, fetches, prepared, draw_states, final_states = {}, {}, {}, {}, {}
+    textures = collections.defaultdict(list)
     for line in log.read_text(encoding="utf-8-sig").splitlines():
         for marker, destination in (("FH1 SNR02 item payload ", title),
-                                    ("FH1 SNR01 prepared vertex fetch ", fetches)):
+                                    ("FH1 SNR01 prepared vertex fetch ", fetches),
+                                    ("FH1 SNR01 prepared draw ", prepared),
+                                    ("FH1 SNR02 item draw state ", draw_states),
+                                    ("FH1 SNR02 item final state ", final_states),
+                                    ("FH1 SNR01 prepared texture fetch ", textures)):
             if marker not in line:
                 continue
             row = json.loads(line.split(marker, 1)[1])
@@ -41,12 +53,18 @@ def verify(fixture: Path, log: Path, ledger: Path) -> dict:
                 continue
             if destination is fetches and (row["fetch_constant"], row["stride_words"]) != (95, 10):
                 continue
-            key = row["call"] if destination is title else row["draw"]
+            key = (row["call"] if destination is title else
+                   row["ordinal"] if destination is prepared else
+                   row["sequence"] if destination is draw_states or destination is final_states else
+                   row["draw"])
+            if destination is textures:
+                destination[key].append(row)
+                continue
             assert key not in destination
             destination[key] = row
     data = fixture.read_bytes()
     magic, frame, count = struct.unpack_from("<8sQI", data)
-    assert magic == b"SNR02I1\0" and frame == source_frame
+    assert magic in (b"SNR02I1\0", b"SNR02I2\0") and frame == source_frame
     assert count == len(selected) and count <= 512
     camera = struct.unpack_from("<32I", data, 20)
     assert any(camera)
@@ -68,16 +86,59 @@ def verify(fixture: Path, log: Path, ledger: Path) -> dict:
         assert "".join(f"{word:08X}" for word in descriptor) == item["descriptor_words"]
         assert "".join(f"{word:08X}" for word in runtime) == item["runtime_words"]
         assert draws == len(selected[call])
+        expected = {}
         for row in selected[call]:
             fetch = fetches[row["ordinal"]]
             assert row["packet_physical"] == packet == fetch["packet_physical"]
             assert (fetch["guest_base"], fetch["length"],
                     fetch["cpu_snapshot_status"], fetch["cpu_snapshot_hash"]) == (
                 base, length, 1, hash_bytes(vertex))
+            if magic == b"SNR02I2\0":
+                observed = prepared[row["ordinal"]]
+                assert observed["packet_physical"] == packet
+                assert observed["sequence"] not in expected
+                expected[observed["sequence"]] = (row, observed)
+        if magic == b"SNR02I2\0":
+            seen = set()
+            for _ in range(draws):
+                sequence, vs, ps, dynamic, count_vertices, count_textures = struct.unpack_from(
+                    "<QQQQII", data, offset)
+                offset += 40
+                texture_words = struct.unpack_from("<18I", data, offset)
+                offset += 72
+                vertex_constants = struct.unpack_from("<1024I", data, offset)
+                offset += 4096
+                system = struct.unpack_from("<64I", data, offset)
+                offset += 256
+                fetch47 = struct.unpack_from("<4I", data, offset)
+                offset += 16
+                assert sequence in expected and sequence not in seen
+                seen.add(sequence)
+                row, observed = expected[sequence]
+                assert (vs, ps, count_vertices, count_textures) == (
+                    row["vertex_shader"], row["pixel_shader"],
+                    row["index_count"], observed["texture_fetch_count"])
+                assert count_textures <= 2
+                assert len(textures[row["ordinal"]]) == count_textures
+                for slot, fetch in enumerate(textures[row["ordinal"]]):
+                    actual = tuple(texture_words[slot * 9:(slot + 1) * 9])
+                    assert actual == tuple(fetch[key] for key in (
+                        "fetch_constant", "type", "base_address", "mip_address",
+                        "format", "dimension", "width", "height", "stack_depth"))
+                assert draw_states[sequence] == {
+                    "frame": census["backend_frame"], "packet": packet,
+                    "sequence": sequence, "vertex_hash": hash_words(vertex_constants)}
+                assert final_states[sequence] == {
+                    "frame": census["backend_frame"], "packet": packet,
+                    "sequence": sequence, "dynamic": dynamic,
+                    "system_hash": hash_words(system),
+                    "fetch47_hash": hash_words(fetch47)}
+            assert seen == set(expected)
         total_draws += draws
         total_bytes += length
     assert calls == set(selected) and offset == len(data)
-    return {"source_frame": frame, "calls": count, "draws": total_draws,
+    return {"source_frame": frame, "version": magic.decode().rstrip("\0"),
+            "calls": count, "draws": total_draws,
             "owned_vertex_bytes": total_bytes, "fixture_bytes": len(data)}
 
 
