@@ -346,6 +346,9 @@ nine-mip chains and all 67 packet joins in a later frame. All five compressed
 chains match the RenderDoc capture byte for byte. The debug CPU wait is not a
 native sampling bridge or a performance result; the captured anisotropic
 sampler requires the full mip chain for a faithful alpha diagnostic.
+At the matched event ordinary alpha discard is inactive and the pixel shader
+emits a four-bit sample mask. The one-sample private target cannot establish
+coverage parity; the next bounded check needs 4× private coverage/depth.
 The `SNR03F3` fixture now retains the SDK draw sequence for every selected
 final-state execution. A same-frame replay verified 135 ordered private raster
 draws from 67 packets, while the diagnostic remains unmasked and its post-VS

@@ -924,6 +924,12 @@ proved. The rest of the candidate scene also remains outside this fixture.
 The translated pixel shader for matched event 11206 is the existing local
 `pixel_C2F1242C2535A57E_00000000001A001F.dxil` (SHA-256
 `9954AD19FD4584CDF277F954E87005438DAA263094ACA722CF56F49930341D58`).
+At this event, `CB0[0].x = 984` selects alpha-test mode 7, so the ordinary
+alpha-discard branch is skipped. `CB0[14].y = 426` enables the sample-mask
+branch; `CB0[13].z = CB0[13].w = 1` selects four alpha thresholds and emits a
+four-bit output mask. The current private target has only one sample. A
+coverage comparison needs a 4× multisample private target and per-sample
+depth/coverage readback.
 The captured pixel sampler clamps UVs but allows anisotropic filtering at up
 to 4× across the mip chain. Its texture has nine mips, so the earlier mip-0
 readback was insufficient for a faithful alpha-coverage comparison. The
@@ -959,5 +965,6 @@ verifier cannot independently recheck this run's complete item log. The
 earlier F3 run's full fixture check remains valid, and this run's BC3 join
 verifier passed. The private raster still uses an identity pixel shader and
 does not sample these resources. The next coverage check must bind the
-captured shader inputs in a private diagnostic and compare same-frame alpha
-and depth against compatibility; this byte proof alone is not that check.
+captured shader inputs in a four-sample private diagnostic and compare
+same-frame per-sample alpha and depth against compatibility; this byte proof
+alone is not that check.
