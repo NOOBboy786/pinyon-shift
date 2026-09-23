@@ -777,8 +777,9 @@ For the same captured frame, set `SNR04_BC3_DIR` to
 `.local/native-renderer/snr04/vegetation-bc3-6000` and `SNR04_OUTPUT` to
 `.local/native-renderer/snr04/vegetation-pixel-census-6000-export.json` before
 running the command above. The probe then exports mip 0 of each of the five
-BC3 resources as a 65,536-byte `.bc3` file. A repeat replay produced the
-same census content; each exported file's SHA-256 matches the
+BC3 resources as a 65,536-byte `.bc3` file and its nine-mip compressed chain
+as an 87,408-byte `.bc3mips` file. A repeat replay produced the
+same census content; each exported mip-0 file's SHA-256 matches the
 corresponding `bc3_payloads` value above. These are compressed BC3 blocks,
 not decoded RGBA pixels. They belong to the 72-item same-run RenderDoc frame
 and can support a bounded offline texture-sampling diagnostic; they are not a
@@ -917,3 +918,46 @@ The post-VS artifact still records the first state per packet, while the
 private raster now draws every final-state execution. It remains unmasked;
 same-frame alpha coverage and depth parity against compatibility are not yet
 proved. The rest of the candidate scene also remains outside this fixture.
+
+## Full BC3 mip-chain input for the bounded alpha check
+
+The translated pixel shader for matched event 11206 is the existing local
+`pixel_C2F1242C2535A57E_00000000001A001F.dxil` (SHA-256
+`9954AD19FD4584CDF277F954E87005438DAA263094ACA722CF56F49930341D58`).
+The captured pixel sampler clamps UVs but allows anisotropic filtering at up
+to 4× across the mip chain. Its texture has nine mips, so the earlier mip-0
+readback was insufficient for a faithful alpha-coverage comparison. The
+shader uses the BC3 sample alpha and interpolated `v4.w` in its discard and
+sample-mask path. Its four constant blocks are system, pixel floats, fetch
+parameters, and bindless indices; the selected fixture and scene-binding log
+contain the relevant system, pixel-float and fetch words, while the live
+descriptor join identifies the sampled BC3 resource.
+
+The RenderDoc census probe and opt-in live guest-submission readback now export
+all nine compressed BC3 mips for each of the five selected resources. The live
+copy is recorded on the guest deferred command list, then read after its
+submission fence. A saved-route replay exited normally with seven
+compatibility captures. The verifier joined all 67 selected packets to the
+five live SRVs; each live mip chain is byte-identical to one of the five
+RenderDoc chains. Their SHA-256 values are
+`5FD7960D163D3069B17664F3A22CF1C7F3F48BD1CD879F278A9AE43A2565F62E`,
+`FC250E284C8D2411DD1684EB25486A533C6A5AD1D9DE0BDDE70CBA49F67B3DF2`,
+`C4C1C61BB4A279C6C08BE106AA6CE53CF7C8B3366AB5BBA6AE7B71F7DE3C8368`,
+`1513CBA8F46F4707338E04A772310974C43CB990804EABAE76CA31083D7CC57D`,
+and `812AF0DC0BCFE510207BAB31EB22FF7E55693FBE65F109B3A19A0D7C25D5478E`.
+
+Recheck the live packet/SRV/mip join with:
+
+```powershell
+python tools/verify-snr04-live-bc3.py `
+  .local/native-renderer/snr04/live-bc3-mips-run-a-signal.log `
+  .local/native-renderer/snr04/live-bc3-mips-run-a
+```
+
+The process log rotated away its first 25 `SNR03 item` rows, so the fixture
+verifier cannot independently recheck this run's complete item log. The
+earlier F3 run's full fixture check remains valid, and this run's BC3 join
+verifier passed. The private raster still uses an identity pixel shader and
+does not sample these resources. The next coverage check must bind the
+captured shader inputs in a private diagnostic and compare same-frame alpha
+and depth against compatibility; this byte proof alone is not that check.

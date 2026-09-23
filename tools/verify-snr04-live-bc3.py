@@ -12,6 +12,7 @@ def verify(log_path: Path, output_dir: Path) -> dict:
     scenes = {}
     bindings = collections.defaultdict(set)
     readbacks = {}
+    mip_chains = {}
     frames = set()
     readback_frames = set()
     submissions = set()
@@ -43,6 +44,20 @@ def verify(log_path: Path, output_dir: Path) -> dict:
             data = Path(path).read_bytes()
             assert len(data) == 65536
             readbacks[int(srv)] = hashlib.sha256(data).hexdigest()
+        elif "FH1 SNR04 BC3 mip chain " in line:
+            match = re.search(r"frame=(\d+) submission=(\d+) srv=(\d+) "
+                              r"written=(\w+) path=(.*)$", line)
+            assert match, line
+            frame, submission, srv, written, path = match.groups()
+            assert written == "true" and int(frame) in readback_frames
+            assert int(submission) in submissions
+            assert Path(path).resolve().parent == output_dir.resolve()
+            assert int(srv) not in mip_chains
+            data = Path(path).read_bytes()
+            assert len(data) == sum(((max(1, 256 >> mip) + 3) // 4) ** 2 * 16
+                                    for mip in range(9))
+            assert hashlib.sha256(data[:65536]).hexdigest() == readbacks[int(srv)]
+            mip_chains[int(srv)] = hashlib.sha256(data).hexdigest()
         elif "FH1 SNR04 BC3 " in line:
             raise AssertionError(line)
 
@@ -57,8 +72,10 @@ def verify(log_path: Path, output_dir: Path) -> dict:
     assert len(descriptor_srvs) == 5
     assert all(len(srvs) == 1 for srvs in descriptor_srvs.values())
     assert set(packet_srvs.values()) == set(readbacks)
+    assert not mip_chains or set(mip_chains) == set(readbacks)
     return {"frame": frames.pop(), "packets": len(scenes),
-            "srvs": {str(srv): sha for srv, sha in sorted(readbacks.items())}}
+            "srvs": {str(srv): sha for srv, sha in sorted(readbacks.items())},
+            "mip_chains": {str(srv): sha for srv, sha in sorted(mip_chains.items())}}
 
 
 if __name__ == "__main__":

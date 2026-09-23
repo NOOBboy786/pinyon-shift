@@ -1,7 +1,7 @@
 """Census pixel inputs of the matched vegetation draws in one RenderDoc frame.
 
 Run with qrenderdoc --python and SNR04_CAPTURE, SNR04_EVENTS_JSON, SNR04_OUTPUT.
-Set SNR04_BC3_DIR to save the same-frame compressed BC3 mip-0 bytes.
+Set SNR04_BC3_DIR to save the same-frame BC3 mip-0 and full mip-chain bytes.
 """
 
 import collections
@@ -70,15 +70,31 @@ try:
             subresource.mip = subresource.slice = subresource.sample = 0
             payload = bytes(replay.GetTextureData(resources[0].resourceId, subresource))
             assert len(payload) == resources[0].width * resources[0].height
+            mip_payloads = []
+            if bc3_dir:
+                for mip in range(resources[0].mips):
+                    subresource.mip = mip
+                    mip_bytes = bytes(replay.GetTextureData(
+                        resources[0].resourceId, subresource))
+                    blocks_x = (max(1, resources[0].width >> mip) + 3) // 4
+                    blocks_y = (max(1, resources[0].height >> mip) + 3) // 4
+                    assert len(mip_bytes) == blocks_x * blocks_y * 16
+                    mip_payloads.append(mip_bytes)
             if bc3_dir:
                 bc3_dir.mkdir(parents=True, exist_ok=True)
                 (bc3_dir / (bc3.replace("::", "-") + ".bc3")).write_bytes(payload)
+                (bc3_dir / (bc3.replace("::", "-") + ".bc3mips")).write_bytes(
+                    b"".join(mip_payloads))
             state["bc3_payloads"][bc3] = {
                 "bytes": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
                 "prior_uses": [usage.eventId for usage in replay.GetUsage(
                     resources[0].resourceId) if usage.eventId < event],
             }
+            if mip_payloads:
+                state["bc3_payloads"][bc3]["mips"] = [
+                    {"bytes": len(value), "sha256": hashlib.sha256(value).hexdigest()}
+                    for value in mip_payloads]
         state["draws"].append({
             "event": event,
             "shader_sha256": shader_hash,

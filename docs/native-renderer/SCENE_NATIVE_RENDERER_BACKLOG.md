@@ -341,9 +341,11 @@ and one shared full-view SRV position in the same output frame. The guest
 submission is signaled after the output callback, so the texture copy and
 private-queue wait must be ordered without blocking that callback; see the
 [SNR-03/04 evidence](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md#same-frame-final-pixel-descriptor-join).
-An opt-in guest-command-list readback now verifies the five live BC3 payloads
-and all 67 packet joins in a later frame; the debug CPU wait is not a native
-sampling bridge or a performance result.
+An opt-in guest-command-list readback now verifies the five live BC3
+nine-mip chains and all 67 packet joins in a later frame. All five compressed
+chains match the RenderDoc capture byte for byte. The debug CPU wait is not a
+native sampling bridge or a performance result; the captured anisotropic
+sampler requires the full mip chain for a faithful alpha diagnostic.
 The `SNR03F3` fixture now retains the SDK draw sequence for every selected
 final-state execution. A same-frame replay verified 135 ordered private raster
 draws from 67 packets, while the diagnostic remains unmasked and its post-VS
