@@ -2994,7 +2994,10 @@ three come from indexed2 return site `0x8244F070`. Its entry hook records
 caller `0x82446164`; generated `sub_82444E60` calls `sub_823E2DE0`
 there, which tail-calls `sub_8244E938`. The observed call's `arg5`
 equals the view-8 presentation pointer, proving that it belongs to this
-title view; its render-owner class and material role remain unresolved.
+title view. The verified title image places `sub_82444E60` in slot `+52`
+of `CPresentationView` and its thread-safe ref-counted form; the indexed2
+contribution originates within that presentation-view call. Its lower-level
+render-owner class and material role remain unresolved.
 The preceding sky and race-line attribution does not make the rest of the
 candidate attachment safe to suppress.
 
@@ -3007,7 +3010,7 @@ Recheck the exact parent-offset and packet joins with:
 
 ```powershell
 @'
-import json
+import json, struct
 from pathlib import Path
 rows = [json.loads(line[line.index('{'):]) for line in Path(
     '.local/native-renderer/snr01/final-direct-run-a-filtered.log'
@@ -3025,6 +3028,9 @@ assert all(r['caller_r30'] == parent['parent'] + offset[r['caller_lr']]
 assert {r['first_direct'] for r in wrappers} == {r['ordinal'] for r in packets}
 assert {r['direct_caller_lr'] for r in packets} == {0x823F59C8}
 assert indexed['arg5'] == view['view'] == parent['arg5']
+image = Path('.local/ui-verify/default-image.bin').read_bytes()
+word = lambda address: struct.unpack_from('>I', image, address - 0x82000000)[0]
+assert word(0x8200265C + 52) == 0x82444E60
 '@ | python -
 ```
 
