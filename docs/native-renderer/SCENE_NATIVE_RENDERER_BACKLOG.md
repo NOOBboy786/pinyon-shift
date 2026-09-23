@@ -164,10 +164,10 @@ and [Gate A preflight](SCENE_NATIVE_GATE_A_PREFLIGHT_2026-09-22.md#exact-view-8-
 
 1. **Boundary first (SNR-00/01):** attribute both color groups and the
    remaining draws to title views, owners and pass order. The final strict
-   replay still has six attachment-writing noncandidate direct-root draws
-   without a title packet/view join; resolve or explicitly classify their
-   command path before freezing the boundary. Record every unmatched draw
-   and every producer/consumer crossing the proposed cut.
+   replay now joins the six apparent noncandidate gaps to prior-source-frame
+   title clears; its frame-wide boundary has no unjoined attachment writer.
+   Record every unmatched draw and every producer/consumer crossing the
+   proposed cut.
    Freeze the exact slice only after that census; the present slice is a
    hypothesis. Candidate attachments also carry proven
    `CParticleSystemNew`/`CStandardParticleRenderer` draws; retain that path

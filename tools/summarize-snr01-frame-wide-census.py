@@ -46,10 +46,12 @@ def read_records(path, frames, backend_frame):
     records = {key: [] for key in PREFIXES}
     view_scopes = collections.defaultdict(list)
     with path.open(encoding="utf-8", errors="replace") as source:
-        for line in source:
+        for line_number, line in enumerate(source):
             for key, prefix in PREFIXES.items():
                 if prefix in line:
                     row = json.loads(line.split(prefix, 1)[1])
+                    if key in ("primary", "clear"):
+                        row["_log_order"] = line_number
                     if row["frame"] in (frames if key not in ("execution", "draw")
                                         else {backend_frame}):
                         if key in ("view_begin", "view_end", "direct", "semantic", "scalar",
@@ -191,8 +193,11 @@ def summarize(records, frames, backend_frame):
         if (not execution["parent"] and title_packet is None and
                 draw.get("packet_bytes", 0) > 0):
             end = draw["packet_physical"] + draw["packet_bytes"]
-            matches = [row for begin, limit, row in clear_ranges[source["frame"]]
-                       if begin <= draw["packet_physical"] and end <= limit]
+            matches = [row for frame in (source["frame"] - 1, source["frame"])
+                       for begin, limit, row in clear_ranges[frame]
+                       if begin <= draw["packet_physical"] and end <= limit
+                       and row.get("_log_order", -1) <
+                       source.get("_log_order", float("inf"))]
             assert len(matches) <= 1, f"ambiguous clear producer for draw {draw['ordinal']}"
             clear_producer = matches[0] if matches else None
         if packet is None:
@@ -411,6 +416,7 @@ def summarize(records, frames, backend_frame):
             "title_second_draw_vegetation_owner": second_draw["vegetation_owner"] if second_draw else None,
             "clear_producer_record": clear_producer["record"] if clear_producer else None,
             "clear_producer_flags": clear_producer["flags"] if clear_producer else None,
+            "clear_producer_source_frame": clear_producer["frame"] if clear_producer else None,
         })
     assert sorted(r["ordinal"] for r in detail) == list(range(1, len(detail) + 1))
     assert sum(classifications.values()) == len(records["draw"])

@@ -3333,7 +3333,7 @@ resources. This repeat confirms the join across different visibility and
 resource counts; it does not establish resource generations or a complete
 native scene.
 
-### Remaining frame-wide boundary gap in the final replay
+### Prior-frame clear producers close the final frame-wide boundary gap
 
 The final strict ledger's 3,639 draws split into 1,919 on the two provisional
 candidate targets and 1,720 on other targets. The candidate draws comprise
@@ -3344,18 +3344,28 @@ view/pass boundary in a different frame; it does not freeze scene membership.
 Outside the candidate targets, 583 out-of-view scene-list draws have title
 view 0, another 669 have a joined view owner, 404 direct draws have a title
 packet in views 0–7, 48 unmatched indirect draws have no attachment writes,
-and ten are joined title clears. **Six
-remaining direct-root draws write attachments but have no joined title
-packet or view.** All six come from a source-frame-6001 root, in backend
-ordinals 3364, 3371, 3374, 3375, 3378 and 3381. Their target split is one
-`0A020280/00030000/000102D0/00000003`, two
-`0A020280/00030000/00000000/00000001`, one
-`14000500/00030000/00000000/00000002`, and two
-`14000500/00030000/000102D0/00000002`. The same six-target pattern occurs
-in the scalar, track-model and procedural-resource strict replays. The
-remaining noncandidate work therefore cannot yet be called a complete
-title-view census; these six need an exact producer/view or an explicitly
-classified non-view command path before SNR-00 freezes the boundary.
+and 16 are joined title clears. The earlier ledger classified six of those
+clears as unjoined direct-root draws because their root was published in
+source frame 6001 while their command packets were written by clear records
+in source frame 6000. The exact root-packet addresses fall uniquely in the
+five preceding clear cursor ranges: backend ordinals 3364, 3371, 3374,
+3375, 3378 and 3381 join clear records 62440–62444, respectively (62442
+produces two draws). All five records precede the root's title primary
+packet in the ordered log. The verifier now admits a clear from the root's
+source frame or its immediately preceding frame, only when the complete
+draw packet lies in one unique, non-refilled clear range written before
+root publication. A later write to a reused ring address cannot qualify.
+
+The corrected ledger is
+`.local/native-renderer/snr01/state-resource-final-run-a-clear-joined-ledger.json`
+(SHA-256 `BFBCD5370B43D55951AD249C01C147AE43D9BFA4B570BA71390E97B128DE0831`).
+It accounts for all 3,639 prepared draws with no unjoined attachment
+writer on either candidate or noncandidate targets in this backend frame.
+This proves a frame-wide title view/pass or clear boundary for this replay,
+not complete semantic ownership, retained-pass dependencies or a frozen
+native scene slice.
+The independent 4,605-draw clear-complete replay also joins six prior-frame
+clears and leaves no unjoined attachment writer under the corrected verifier.
 
 The candidate's view-8 direct packets still need semantic work: in this
 replay, 220 join character-manager direct records, 211 join procedural
@@ -3370,6 +3380,14 @@ other scene-list families still need equivalent per-item resource joins.
 Recheck these counts from the final ledger without another gameplay run:
 
 ```powershell
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/state-resource-final-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw --require-dynamic-quad `
+  --title-image .local/ui-verify/default-image.bin `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr01/state-resource-final-run-a-clear-joined-ledger.json
 @'
 import collections, json
 from pathlib import Path
@@ -3383,12 +3401,14 @@ assert collections.Counter(r['classification'] for r in candidate) == {
     'view_owner': 1204, 'direct_root': 690,
     'title_clear': 1, 'unmatched_indirect': 24}
 assert collections.Counter(r['classification'] for r in other) == {
-    'view_owner': 669, 'out_of_view_scene': 583, 'direct_root': 410,
-    'unmatched_indirect': 48, 'title_clear': 10}
-unjoined = [r for r in other if r['classification'] == 'direct_root'
+    'view_owner': 669, 'out_of_view_scene': 583, 'direct_root': 404,
+    'unmatched_indirect': 48, 'title_clear': 16}
+cross_frame = [r for r in other if r['classification'] == 'title_clear'
+               and r['clear_producer_source_frame'] != r['root_source_frame']]
+assert [(r['ordinal'], r['clear_producer_record']) for r in cross_frame] == [
+    (3364, 62440), (3371, 62441), (3374, 62442), (3375, 62442),
+    (3378, 62443), (3381, 62444)]
+assert not [r for r in other if r['classification'] == 'direct_root'
             and r['title_packet_view_call'] is None]
-assert [r['ordinal'] for r in unjoined] == [3364, 3371, 3374, 3375, 3378, 3381]
-assert all(not r['no_attachment_write'] and r['root_source_frame'] == 6001
-           for r in unjoined)
 '@ | python -
 ```

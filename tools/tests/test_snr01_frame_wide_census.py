@@ -31,9 +31,7 @@ class FrameWideCensusTest(unittest.TestCase):
         self.assertEqual([row["title_view_call"] for row in rows], [8, 0])
 
     def test_scene_owner_direct_root_and_unmatched_child(self):
-        records = {key: [] for key in
-                   ("primary", "scene", "execution", "draw", "view_begin",
-                    "view_end", "direct", "semantic", "clear")}
+        records = {key: [] for key in SCRIPT["PREFIXES"]}
         for frame in (10, 11):
             for call in range(1, 9):
                 row = {"frame": frame, "call": call, "view": frame * 100 + call}
@@ -85,6 +83,15 @@ class FrameWideCensusTest(unittest.TestCase):
         self.assertEqual(len(result["draws"]), 4)
         self.assertEqual(result["draws"][1]["clear_producer_record"], 7)
         records["clear"][0]["refills"] = 1
+        self.assertEqual(SUMMARIZE(records, [10, 11], 11)["draws"][1]
+                         ["classification"], "direct_root")
+        records["clear"][0].update(refills=0, _log_order=10)
+        records["primary"][0].update(frame=11, _log_order=20)
+        draw = SUMMARIZE(records, [10, 11], 11)["draws"][1]
+        self.assertEqual((draw["classification"], draw["clear_producer_record"],
+                          draw["clear_producer_source_frame"]),
+                         ("title_clear", 7, 10))
+        records["clear"][0]["_log_order"] = 30
         self.assertEqual(SUMMARIZE(records, [10, 11], 11)["draws"][1]
                          ["classification"], "direct_root")
 
