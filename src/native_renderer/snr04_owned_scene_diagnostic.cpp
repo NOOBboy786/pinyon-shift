@@ -21,6 +21,7 @@
 #include <iomanip>
 #include <iostream>
 #include <set>
+#include <span>
 #include <source_location>
 #include <sstream>
 #include <stdexcept>
@@ -50,7 +51,7 @@ std::vector<char> read(const std::filesystem::path& path) {
   require(bool(file), "missing input");
   return {std::istreambuf_iterator<char>(file), {}};
 }
-std::string sha256(const std::vector<char>& data) {
+std::string sha256(std::span<const char> data) {
   BCRYPT_ALG_HANDLE algorithm = nullptr;
   require(BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) >= 0,
           "SHA-256 provider unavailable");
@@ -66,7 +67,7 @@ std::string sha256(const std::vector<char>& data) {
 }
 
 struct Reader {
-  const std::vector<char>& data;
+  std::span<const char> data;
   size_t position = 0;
   template <typename T> T take() {
     require(position <= data.size() && sizeof(T) <= data.size() - position,
@@ -98,8 +99,7 @@ struct Scene {
   std::string fixture_sha256;
   std::vector<Item> items;
 };
-Scene load_scene(const std::filesystem::path& path) {
-  auto file = read(path);
+Scene load_scene(std::span<const char> file) {
   Reader reader{file};
   require(reader.take<std::array<char, 8>>() ==
               std::array<char, 8>{'S', 'N', 'R', '0', '3', 'F', '1', '\0'},
@@ -224,7 +224,7 @@ void transition(ID3D12GraphicsCommandList* commands, ID3D12Resource* resource,
 }  // namespace
 
 uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
-    const std::filesystem::path& fixture,
+    std::span<const char> fixture,
     const std::filesystem::path& vertex_shader,
     const std::filesystem::path& output_directory,
     ID3D12Device* borrowed_device) {
@@ -609,4 +609,14 @@ uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
   summary.close();
   require(bool(summary) && covered > 0, "empty or unwritable diagnostic");
   return covered;
+}
+
+uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
+    const std::filesystem::path& fixture,
+    const std::filesystem::path& vertex_shader,
+    const std::filesystem::path& output_directory,
+    ID3D12Device* device) {
+  const auto bytes = read(fixture);
+  return RunSnr04OwnedSceneDiagnostic(bytes, vertex_shader,
+                                      output_directory, device);
 }

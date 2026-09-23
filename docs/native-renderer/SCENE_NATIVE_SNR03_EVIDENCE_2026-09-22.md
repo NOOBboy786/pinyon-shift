@@ -468,14 +468,14 @@ python tools/check-snr04-depth-overlap.py `
 
 The same SNR-03 output-frame callback now invokes the private renderer when
 `PINYON_SHIFT_SNR04_VS` names the exact locally translated vegetation VS.
-It receives the callback's D3D12 device, reads the already-owned frame-6000
-fixture, creates separate color/depth targets and a private command queue,
+It receives the callback's D3D12 device and already-owned frame-6000
+scene bytes, creates separate color/depth targets and a private command queue,
 waits for its fence, and writes diagnostic readbacks before returning. It
 does not bind or write the guest output; the callback still yields to normal
 compatibility rendering. With the variable absent, no diagnostic GPU work is
 scheduled. The standalone executable calls the same renderer source.
 
-Two AppData-backed sustained-race replays wrote `snr04-private-6000` during
+The initial two AppData-backed sustained-race replays wrote `snr04-private-6000` during
 output frame 6001 and exited normally with all seven compatibility captures.
 The second replay's `SNR03F1` fixture has SHA-256
 `D2A8FFDAB08A4A4D5FC1402379EDF42F9960A8DA41D7AF18A8D9D6D5C6FA5A02`;
@@ -512,8 +512,50 @@ Remove-Item Env:PINYON_SHIFT_SNR04_VS
 
 This is a live, frame-matched diagnostic for the **bounded vegetation
 contribution**, not full selected main-view ownership or compatibility
-coverage/depth parity. The file round-trip and private queue/fence are
+coverage/depth parity. The fixture write and private queue/fence are
 diagnostic costs, not a production bridge or suppression path.
+
+### In-memory owned-scene handoff
+
+The output callback now serializes its immutable `Snr03OwnedScene` once and
+passes those bytes directly to the private renderer. The same bytes are
+written as a separate `SNR03F1` fixture for verification; the fixture-write
+result no longer gates the in-memory diagnostic call.
+The standalone executable retains its file-path entry point. Neither path
+rereads mutable guest state at the later output callback.
+
+With RelWithDebInfo executable SHA-256
+`E1E3A37281FDB18E8444758219ECA19B9B2E8BF1141BA99DFE9AF9FF95AC0483`,
+an AppData-backed sustained-race replay exited normally with seven
+compatibility captures. It consumed source frame 6000 on output frame 6001
+and rendered 128,956 private identity pixels. The written fixture SHA-256
+`B63567567079ADBEAE3B8856244F8B1493F264491FC9ABB7B01C3A42E8D9EB0F`
+passed `verify-snr03-scene-fixture.py`: 60 ordered items, 306,176 owned
+vertex bytes, and 120 final variants. The in-memory renderer's fixture hash
+matches that file. A standalone replay of the same file produced
+byte-identical identity, depth and post-VS outputs, with SHA-256 respectively
+`109EA36B5FDC69C5D612F38C24D222160ECA16227A7BB49725371A24892375EB`,
+`D042A06D72DBBCB7D475A8CD88A3F84FFC099D23D7165A4872F11F13211318BF`,
+and `70BE32478A33305C1B050C8BF5C1ADE81D87821B50D0A4A304EF504AA95CC1A9`.
+This verifies both entry points for the captured scene; it does not compare
+different visibility sets or remove the private queue, fence and readback
+costs. The diagnostic still covers only the bounded vegetation contribution.
+
+The local replay is `.local/native-renderer/snr04/memory-run-a` and its
+ordered log is `.local/native-renderer/snr04/memory-run-a-signal.log`
+(SHA-256 `9526BEE24E7166A3BE3B5DA24B6C0A5E79492C37FCE8E47F5F70B66406871B90`).
+The saved-race launch command above reproduces it with a fresh output path.
+Recheck the fixture and standalone parity with:
+
+```powershell
+python tools/verify-snr03-scene-fixture.py `
+  .local/native-renderer/snr04/memory-run-a/snr03-scene-6000.bin `
+  .local/native-renderer/snr04/memory-run-a-signal.log
+.\out\build\win-amd64-relwithdebinfo\pinyon_shift_snr04_owned_scene_diagnostic.exe `
+  .local/native-renderer/snr04/memory-run-a/snr03-scene-6000.bin `
+  .local/native-renderer/seeded-probe/translation/dxil/vertex_5834939992FFC765_000000000000001F.dxil `
+  .local/native-renderer/snr04/memory-run-a-standalone-verify
+```
 
 ## Title camera to selected draw-state join
 

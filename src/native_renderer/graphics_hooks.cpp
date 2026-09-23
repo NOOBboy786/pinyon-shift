@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
@@ -324,18 +325,11 @@ struct Snr03OwnedScene {
   std::shared_ptr<const Snr03SceneSnapshot> title;
   std::vector<Snr03OwnedItem> items;
 };
-bool WriteSnr03Fixture(const Snr03OwnedScene& scene,
-                       const std::filesystem::path& directory) {
-  const auto path = directory /
-      ("snr03-scene-" + std::to_string(scene.title->source_frame) + ".bin");
-  auto temporary = path;
-  temporary += ".tmp";
-  std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
-  if (!output) {
-    return false;
-  }
+std::vector<char> EncodeSnr03Fixture(const Snr03OwnedScene& scene) {
+  std::vector<char> bytes;
   auto write = [&](const auto& value) {
-    output.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    const auto* data = reinterpret_cast<const char*>(&value);
+    bytes.insert(bytes.end(), data, data + sizeof(value));
   };
   constexpr std::array<char, 8> magic{'S', 'N', 'R', '0', '3', 'F', '1', '\0'};
   write(magic);
@@ -359,14 +353,26 @@ bool WriteSnr03Fixture(const Snr03OwnedScene& scene,
     write(uint32_t(item.vertex_constants.size()));
     write(uint32_t(item.final_states.size()));
     write(item.vertex_constants);
-    output.write(reinterpret_cast<const char*>(item.vertex_bytes.data()),
-                 item.vertex_bytes.size());
+    bytes.insert(bytes.end(), item.vertex_bytes.begin(), item.vertex_bytes.end());
     for (const auto& [dynamic, state] : item.final_states) {
       write(dynamic);
       write(state.system_constants);
       write(state.fetch_47);
     }
   }
+  return bytes;
+}
+bool WriteSnr03Fixture(std::span<const char> bytes, uint64_t source_frame,
+                       const std::filesystem::path& directory) {
+  const auto path = directory /
+      ("snr03-scene-" + std::to_string(source_frame) + ".bin");
+  auto temporary = path;
+  temporary += ".tmp";
+  std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    return false;
+  }
+  output.write(bytes.data(), bytes.size());
   output.close();
   std::error_code error;
   if (!output) {
@@ -1347,24 +1353,24 @@ void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {
               final_variants, fingerprint);
   const auto directory = fh1_render_test::OutputDirectory();
   if (!directory.empty()) {
+    const auto encoded = EncodeSnr03Fixture(*owned);
     const auto begin = std::chrono::steady_clock::now();
-    const bool written = WriteSnr03Fixture(*owned, directory);
+    const bool written = WriteSnr03Fixture(std::span<const char>(encoded),
+                                           owned->title->source_frame, directory);
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - begin).count();
     REXGPU_INFO("FH1 SNR03 fixture output_frame={} written={} write_us={}",
                 output_frame, written, elapsed);
 #if defined(_WIN32)
-    if (written && device) {
+    if (device) {
       const auto shader = diagnostics::EnvironmentPath("PINYON_SHIFT_SNR04_VS");
       if (shader) {
-        const auto fixture = directory /
-            ("snr03-scene-" + std::to_string(owned->title->source_frame) + ".bin");
         const auto private_output = directory /
             ("snr04-private-" + std::to_string(owned->title->source_frame));
         const auto diagnostic_begin = std::chrono::steady_clock::now();
         try {
           const auto covered = RunSnr04OwnedSceneDiagnostic(
-              fixture, *shader, private_output,
+              std::span<const char>(encoded), *shader, private_output,
               static_cast<ID3D12Device*>(device));
           const auto diagnostic_us = std::chrono::duration_cast<
               std::chrono::microseconds>(std::chrono::steady_clock::now() -
