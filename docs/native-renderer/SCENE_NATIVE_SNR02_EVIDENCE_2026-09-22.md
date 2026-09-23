@@ -273,3 +273,42 @@ The next bounded trace must observe title state after `sub_82435F50` and
 associate its matrix with each draw, including calls that reuse state. This
 still leaves actual mesh/material identity and resource generations open
 before an immutable scene can be admitted.
+
+## Selected track-model instance version
+
+The shared-state draw join in the [SNR-01 evidence](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#both-shared-state-callers-reach-selected-track-model-resources)
+identifies a `CTrackRenderModelInstance_Unified` at each selected resource
+pointer. Generated `sub_82DEB718` compares the instance's cached low 16 bits
+at offset 12 with the parent `CTrackRenderModel_Unified` high 16 bits at
+offset 12. Generated `sub_82DEB748` copies that parent version into the
+instance; `sub_82DEB7B0` also sets the instance's `0x800` flag while copying
+the version. These fields give a bounded readiness/version check, not an
+allocation generation.
+
+A default-off probe of both selected shared-state callers captured the
+instance, its parent at offset 4, the cached and parent version words, and
+the runtime pointer at offset 16. The RelWithDebInfo executable SHA-256 was
+`B7AAE85D030B1F0B601EB7A979937ACFAEF7E5BE00C5F692EE342FE2AE49FD48`.
+The saved sustained-race route exited normally with seven compatibility
+captures. The process-filtered log at
+`.local/native-renderer/snr02/track-version-run-a-filtered.log` has SHA-256
+`03647848A6B9CF3EB39BEDB3D75D7A74C4101BD09FC59A344EA8E0C75FDBB86E`;
+its source-frame-6000 census ledger has SHA-256
+`4D445AB3332B5E8DE01D6848C2C03B272116A2B99EB1C7FFACC5063C2BF3B8B7`.
+The strict frame-wide census and state/resource/draw verifier passed.
+
+The verifier joins all 164 selected view-8 shared-state packets to all 758
+candidate draws. The procedural-model caller contributes 45 packets, three
+resource pointers and 128 draws, all with cached version 1. The track-model
+caller contributes 119 packets, 113 resource pointers and 630 draws: 606
+with cached version 1 and 24 with version 9. Across the complete probe
+records for the source frame, all 283 calls have instance vtable
+`0x820019CC`, parent vtable `0x82001D74`, nonzero parent and runtime pointers,
+ready result 1, and cached version equal to the parent's current version.
+The instance flag's high 16 bits are `0x800` in those records.
+
+This proves version parity at the selected call boundaries in this replay.
+The next SNR-02 trace must identify the parent/runtime object's mesh and
+material choice at the resulting draw, and establish a true generation or
+allocation lifetime across release and reload. Until then, pointer plus
+cached version is a diagnostic identity only, not an immutable-scene key.

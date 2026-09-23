@@ -2306,15 +2306,21 @@ void PinyonShiftObserveSnr01ProceduralModelResource(
     return;
   }
   const uint32_t vtable = SnrM02ReadU32(r30.u32);
+  const uint32_t parent = SnrM02ReadU32(r30.u32 + 4);
+  const uint32_t runtime = SnrM02ReadU32(r30.u32 + 16);
   REXGPU_INFO(
       "FH1 SNR01 procedural model resource {{\"frame\":{},"
       "\"manager\":{},\"state_base\":{},\"resource\":{},"
       "\"vtable\":{},\"slot8\":{},\"ready\":{},"
-      "\"field4\":{},\"field16\":{}}}",
+      "\"field4\":{},\"field16\":{},"
+      "\"instance_word12\":{},\"parent_vtable\":{},"
+      "\"parent_word12\":{},\"runtime_word0\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       r14.u32, r20.u32, r30.u32, vtable,
       vtable ? SnrM02ReadU32(vtable + 32) : 0, r3.u32,
-      SnrM02ReadU32(r30.u32 + 4), SnrM02ReadU32(r30.u32 + 16));
+      parent, runtime, SnrM02ReadU32(r30.u32 + 12),
+      SnrM02ReadU32(parent), parent ? SnrM02ReadU32(parent + 12) : 0,
+      SnrM02ReadU32(runtime));
 }
 
 void Snr01LogStateFlush(const char* phase, PPCRegister& r1,
@@ -2364,13 +2370,21 @@ void PinyonShiftObserveSnr01TrackModelReady(PPCRegister& r3,
     return;
   }
   const uint32_t vtable = SnrM02ReadU32(r30.u32);
+  const uint32_t parent = SnrM02ReadU32(r30.u32 + 4);
+  const uint32_t runtime = SnrM02ReadU32(r30.u32 + 16);
   REXGPU_INFO("FH1 SNR01 track model ready {{\"frame\":{},"
               "\"state_base\":{},\"resource\":{},\"vtable\":{},"
-              "\"slot8\":{},\"ready\":{}}}",
-              rex::perf::GetTotalCounter(
-                  rex::perf::CounterId::kSourceFrameCount),
-              r29.u32, r30.u32, vtable,
-              vtable ? SnrM02ReadU32(vtable + 32) : 0, r3.u32);
+              "\"slot8\":{},\"ready\":{},\"parent\":{},"
+              "\"runtime\":{},\"instance_word12\":{},"
+              "\"parent_vtable\":{},\"parent_word12\":{},"
+              "\"runtime_word0\":{}}}",
+      rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount),
+      r29.u32, r30.u32, vtable,
+      vtable ? SnrM02ReadU32(vtable + 32) : 0, r3.u32,
+      parent, runtime, SnrM02ReadU32(r30.u32 + 12),
+      SnrM02ReadU32(parent), parent ? SnrM02ReadU32(parent + 12) : 0,
+      SnrM02ReadU32(runtime));
 }
 
 void PinyonShiftObserveSnr01TrackModelEnd() {

@@ -8,6 +8,15 @@ import re
 from pathlib import Path
 
 
+def cached_version(row):
+    if "instance_word12" not in row:
+        return None
+    assert row["parent_vtable"] == 0x82001D74
+    version = row["instance_word12"] & 0xFFFF
+    assert version == row["parent_word12"] >> 16
+    return version
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
@@ -34,6 +43,7 @@ def main():
             scope, _ = model[thread]
             assert scope["target"] == 0x82417BC0
             assert row["vtable"] == 0x820019CC and row["ready"] == 1
+            cached_version(row)
             model[thread] = (scope, row)
         elif "FH1 SNR01 track bucket entry " in line and thread in model:
             scope, _ = model.pop(thread)
@@ -46,6 +56,7 @@ def main():
             assert selected is None and row["state_base"] == scope["state_base"]
             assert row["resource"] == scope["resource"]
             assert row["vtable"] == 0x820019CC and row["ready"] == 1
+            cached_version(row)
             track[thread] = (scope, row)
         elif "FH1 SNR01 track model end " in line:
             track.pop(thread)
@@ -65,7 +76,8 @@ def main():
             assert row["flush_owner"] == state + 0xE940
             key = row["header_physical"], row["target_physical"]
             assert key not in packets
-            packets[key] = (path, selected["resource"], row)
+            packets[key] = (path, selected["resource"], row,
+                            cached_version(selected))
             resources[path].add(selected["resource"])
     assert not model and not track and packets
 
@@ -76,23 +88,28 @@ def main():
              and row["classification"] == "view_owner"
              and row["flush_caller_lr"] == 0x824170BC]
     joined = collections.Counter()
+    versions = collections.Counter()
     seen = set()
     for row in draws:
         key = row["execution_dispatch_packet_physical"], row["execution_command_buffer"]
-        path, resource, packet = packets[key]
+        path, resource, packet, version = packets[key]
         assert row["scene_source_frame"] == packet["frame"] == args.source_frame
         assert row["owner"] == packet["flush_owner"]
         joined[(path, row["target"].split("/")[1])] += 1
+        if version is not None:
+            versions[(path, version)] += 1
         seen.add(key)
     assert seen == set(packets)
     print(json.dumps({
         "source_frame": args.source_frame,
         "scene_packets": len(packets),
         "candidate_draws": len(draws),
-        "packets_by_path": dict(collections.Counter(path for path, _, _ in packets.values())),
+        "packets_by_path": dict(collections.Counter(path for path, _, _, _ in packets.values())),
         "resources_by_path": {path: len(values) for path, values in resources.items()},
         "draws_by_path_and_color": {f"{path}:{color}": count
                                     for (path, color), count in sorted(joined.items())},
+        "draws_by_path_and_cached_version": {
+            f"{path}:{version}": count for (path, version), count in sorted(versions.items())},
     }, indent=2))
 
 
