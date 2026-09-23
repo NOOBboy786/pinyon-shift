@@ -614,6 +614,13 @@ to `CTextureResource`; `+16` was zero, so the color path selected `+12`.
 The three pointers were stable across repeated prepared executions of each
 packet. An earlier probe without `+16` covered six car subobjects and found
 the same `+4`/`+12` classes, but cannot establish their color selection.
+The selected-reference helper `sub_824AFB20` clears a destination slot,
+calls the resource object's virtual slot `+8`, then stores the pointer.
+For both observed resource vtables that slot targets `sub_824493C0`, which
+atomically increments the object's counter at `+32`; virtual slot `+12`
+targets `sub_82448FD8`, which decrements it and destroys on zero. This is
+title-side reference ownership, not a proven GPU submission fence or
+payload-generation rule.
 Object class and pointer identity still do not prove actual GPU payload,
 semantic texture role, generation, or submission lifetime. These remain
 SNR-02 blockers, and this evidence alone does not admit the car triple to
