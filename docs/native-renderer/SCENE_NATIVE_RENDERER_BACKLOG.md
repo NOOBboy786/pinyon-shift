@@ -332,6 +332,10 @@ identity/depth readbacks without changing compatibility output; two replays
 exited with all seven compatibility captures. A later `SNR03F2` replay also
 owned three shader-selected pixel float registers and 64 final system words
 per variant; its fixture and live/private outputs passed the bounded checks.
+The matched RenderDoc frame partitions 189 vegetation executions into 135
+zero-pixel-texture draws and 54 two-texture color draws. The latter use five
+BC3 images, one shared full-view image and one pixel shader; the BC3 alpha
+path is the next bounded coverage input to bridge.
 Full compatibility
 coverage/depth parity, unload/reload and complete main-view ownership remain
 open.

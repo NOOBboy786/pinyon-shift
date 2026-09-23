@@ -727,3 +727,48 @@ python tools/verify-snr03-scene-fixture.py `
 The private raster still uses an identity pixel shader and samples neither
 texture. These captured constants are required input for a later pixel/depth
 comparison, not evidence of alpha coverage or full selected-slice ownership.
+
+## Capture-wide vegetation pixel-input census
+
+The matched post-VS event ledger
+`.local/native-renderer/snr04/tracked-slice-probe.json` (SHA-256
+`92593254762EFC5A439F95A3FA3515BAAEA9C7FDE701D5BBE264C52503467674`)
+identifies 189 executions of the selected vegetation vertex shader in the
+frame-6000 RenderDoc capture. A new pixel-input census replays every event:
+135 bind no pixel texture, and the remaining 54 bind exactly one 256×256 BC3
+image plus the same 1280×720 full-view image (`ResourceId::8416`). These 54
+draws use one translated pixel shader, `ResourceId::975`. Its five BC3
+resources and draw counts are `7740:9`, `7741:8`, `7742:9`, `7838:17` and
+`7915:11`. Their mip-0 SHA-256 values, in that order, are
+`2BA215D451D47395B4A59E8929BB76489D68BF7050D7262D37B51DEAC4B4F9E2`,
+`5C85D39B674C126E09F4E30F0E84F98D4C5BF4E877107A7534BEA4FBCF46E62C`,
+`746BEE6A94C14FF5729FB327B301806ECFA7251DCD6F74DAEAC52E41B633AC5F`,
+`74D60D0008034CDE78CF3AA7D2C91F1Bdda5204223A72D1F0AC59631ECEBFEB0`,
+and `18F6CE118B46945A4C2A63F5EE8E6E242D08570C53E03ABB8C77B97F08556D48`.
+The capture records no earlier use of any of those BC3 resources, so it
+cannot prove their upload or title-side generation.
+
+The one matched pixel-shader disassembly samples four BC3 channels, samples
+the full-view image's first channel, then forms the alpha used for discard
+and sample-mask tests from the BC3 alpha and interpolated `v4.w`. Inference:
+for these 54 draws, the full-view image does not feed the alpha-coverage
+decision; a bounded coverage diagnostic can first bridge the five current
+BC3 images and captured alpha state. Faithful color still depends on the
+compute-fed full-view image. This does not classify the 135 zero-texture
+executions as a complete depth pass or establish the rest of view 8.
+
+The repeatable result is
+`.local/native-renderer/snr04/vegetation-pixel-census-6000.json` (SHA-256
+`D3090413D1EA116619D23F83B2D5654A1CDD5482BD2C8D481290C1B88AD9375B`).
+Recheck the captured partition with:
+
+```powershell
+$env:SNR04_CAPTURE = (Resolve-Path `
+  .local/native-renderer/snr04/extended-capture_frame6000.rdc).Path
+$env:SNR04_EVENTS_JSON = (Resolve-Path `
+  .local/native-renderer/snr04/tracked-slice-probe.json).Path
+$env:SNR04_OUTPUT = (Join-Path (Get-Location) `
+  '.local/native-renderer/snr04/vegetation-pixel-census-6000.json')
+& .local/tools/renderdoc-1.46/RenderDoc_1.46_64/qrenderdoc.exe `
+  --python tools/probe-snr04-vegetation-pixel-census.py
+```
