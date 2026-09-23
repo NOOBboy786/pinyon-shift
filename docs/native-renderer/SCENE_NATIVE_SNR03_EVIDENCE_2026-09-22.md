@@ -773,6 +773,17 @@ $env:SNR04_OUTPUT = (Join-Path (Get-Location) `
   --python tools/probe-snr04-vegetation-pixel-census.py
 ```
 
+For the same captured frame, set `SNR04_BC3_DIR` to
+`.local/native-renderer/snr04/vegetation-bc3-6000` and `SNR04_OUTPUT` to
+`.local/native-renderer/snr04/vegetation-pixel-census-6000-export.json` before
+running the command above. The probe then exports mip 0 of each of the five
+BC3 resources as a 65,536-byte `.bc3` file. A repeat replay produced the
+same census content; each exported file's SHA-256 matches the
+corresponding `bc3_payloads` value above. These are compressed BC3 blocks,
+not decoded RGBA pixels. They belong to the 72-item same-run RenderDoc frame
+and can support a bounded offline texture-sampling diagnostic; they are not a
+live resource bridge for later 67-item replays.
+
 ## Same-frame final pixel descriptor join
 
 A bounded SDK log at `D3D12CommandProcessor::UpdateBindings` records the

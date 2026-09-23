@@ -1,6 +1,7 @@
 """Census pixel inputs of the matched vegetation draws in one RenderDoc frame.
 
 Run with qrenderdoc --python and SNR04_CAPTURE, SNR04_EVENTS_JSON, SNR04_OUTPUT.
+Set SNR04_BC3_DIR to save the same-frame compressed BC3 mip-0 bytes.
 """
 
 import collections
@@ -18,6 +19,7 @@ import renderdoc as rd
 events = [row["event"] for row in json.loads(Path(
     os.environ["SNR04_EVENTS_JSON"]).read_text())["matches"]]
 output = Path(os.environ["SNR04_OUTPUT"])
+bc3_dir = Path(os.environ["SNR04_BC3_DIR"]) if os.environ.get("SNR04_BC3_DIR") else None
 state = {"stage": "open", "events": len(events), "draws": [],
          "skipped": [], "bc3_payloads": {}}
 cap = replay = None
@@ -68,6 +70,9 @@ try:
             subresource.mip = subresource.slice = subresource.sample = 0
             payload = bytes(replay.GetTextureData(resources[0].resourceId, subresource))
             assert len(payload) == resources[0].width * resources[0].height
+            if bc3_dir:
+                bc3_dir.mkdir(parents=True, exist_ok=True)
+                (bc3_dir / (bc3.replace("::", "-") + ".bc3")).write_bytes(payload)
             state["bc3_payloads"][bc3] = {
                 "bytes": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
