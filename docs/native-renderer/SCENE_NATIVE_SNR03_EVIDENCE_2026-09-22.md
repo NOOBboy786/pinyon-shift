@@ -228,7 +228,8 @@ Recheck it with:
 ```powershell
 python tools/verify-snr03-vegetation-binding.py `
   .local/native-renderer/snr03/final-system-run-d-signal.log `
-  --source-frame 6000 --require-camera-match --require-final-state
+  --source-frame 6000 --require-camera-match --require-final-state `
+  --reference-size 1280x720
 ```
 
 These are raw final system words, not a proved native clip transform. The
@@ -236,6 +237,36 @@ diagnostic still needs to select the correct dynamic variant for each native
 submission, validate packed-quad decode and depth, and expand beyond this
 vegetation contribution to the complete frozen main-view slice. SNR-03 and
 SNR-04 remain open.
+
+The SDK's offline shader analysis catalog also resolves the vertex constant
+layout without a register-order guess. Its entry for vegetation VS
+`5834939992FFC765` has `float_count=23`, one fetch `(95, 4)`, and bitmap
+indices `128–131, 157–161, 163, 214–215, 221, 241–245, 250–251, 253–255`.
+These are exactly the first 23 vectors in the owned draw's sorted constant
+array; the 24th captured vector, index 256, is outside this vertex shader's
+map. The catalog at
+`.local/native-renderer/seeded-probe/producer-state/cache/fh1-native-shaders-v2.bin`
+has SHA-256
+`3C77C669F68F645B5F2B27351D1BB1054B98EE92A3AADE5057D5B2F428CAA5C2`.
+Its captured specialization-`0x1F` bytecode has SHA-256
+`2ADFE080228C468CE9AEC7E21D19798FC8AAA32CDBA5D7325C4FAC4070F21FAA`.
+The bytecode expects system, compressed float and fetch constant buffers plus
+raw shared-memory SRV/UAV bindings. Feeding it owned vertex bytes still
+requires an explicitly remapped fetch base and a private diagnostic pipeline;
+the catalog match alone is not a native render.
+
+The captured VS applies its final viewport remap as
+`clip.xyz = clip.xyz * ndc_scale + clip.w * ndc_offset`. In the final 1280×720
+replay, all 142 selected dynamic states had `scale.x=1`, `scale.z=-1`,
+`offset.x=1/1280` and `offset.z=1`. Their Y scales were 1.0 (45 states),
+1.551724 (67) or 3.461539 (30), with different bin selections. For every
+state, `(offset.y + 1) / scale.y - 1` equals `-1/720` within `10⁻⁶`.
+This is evidence that the repeated packet executions use vertically tiled
+viewport remaps and that a full-resolution diagnostic can normalize this
+*system* remap to `(1, 1, -1)` and `(1/1280, -1/720, 1)`. It does not prove
+the upstream billboard/clip calculation or depth parity. Recheck the invariant
+with `--reference-size 1280x720` on the verifier command above; a deliberately
+wrong 1280×800 reference is rejected.
 
 ## Title camera to selected draw-state join
 

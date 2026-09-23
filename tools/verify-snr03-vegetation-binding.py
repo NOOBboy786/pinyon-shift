@@ -4,10 +4,13 @@
 import argparse
 import collections
 import json
+import math
 from pathlib import Path
+import struct
 
 
-def verify(path, frame, require_camera_match=False, require_final_state=False):
+def verify(path, frame, require_camera_match=False, require_final_state=False,
+           reference_size=None):
     lines = path.read_text(encoding="utf-8").splitlines()
     items = [json.loads(line.split("FH1 SNR03 item ", 1)[1])
              for line in lines if "FH1 SNR03 item {" in line]
@@ -31,6 +34,21 @@ def verify(path, frame, require_camera_match=False, require_final_state=False):
         assert all(all(len(row[name]) == 4 for name in (
             "system0", "system1", "system8", "system9", "fetch47"))
                    for row in final)
+    viewport_scales = collections.Counter()
+    if reference_size:
+        assert require_final_state
+        width, height = reference_size
+        assert width > 0 and height > 0
+        word_float = lambda word: struct.unpack("<f", struct.pack("<I", word))[0]
+        for row in final_by_key.values():
+            scale = list(map(word_float, row["system8"][:3]))
+            offset = list(map(word_float, row["system9"][:3]))
+            assert scale[0] == 1.0 and scale[1] >= 1.0 and scale[2] == -1.0
+            assert math.isclose(offset[0], 1 / width, abs_tol=1e-6)
+            assert offset[2] == 1.0
+            assert math.isclose((offset[1] + 1) / scale[1] - 1,
+                                -1 / height, abs_tol=1e-6)
+            viewport_scales[round(scale[1], 6)] += 1
     camera = None
     if require_camera_match:
         camera_rows = [json.loads(line.split("FH1 SNR03 camera row ", 1)[1])
@@ -107,6 +125,7 @@ def verify(path, frame, require_camera_match=False, require_final_state=False):
         "unselected_probe_bindings": len(bindings) - len(selected),
         "camera144_matches_selected_bindings": len(selected) if camera else None,
         "final_draw_states": len(final_by_key) if require_final_state else None,
+        "viewport_scale_y": dict(sorted(viewport_scales.items())) if reference_size else None,
     }
 
 
@@ -116,10 +135,12 @@ def main():
     parser.add_argument("--source-frame", type=int, default=6000)
     parser.add_argument("--require-camera-match", action="store_true")
     parser.add_argument("--require-final-state", action="store_true")
+    parser.add_argument("--reference-size", help="verify full-view remap, e.g. 1280x720")
     args = parser.parse_args()
+    size = tuple(map(int, args.reference_size.split("x"))) if args.reference_size else None
     print(json.dumps(verify(args.log, args.source_frame,
                             args.require_camera_match,
-                            args.require_final_state), sort_keys=True))
+                            args.require_final_state, size), sort_keys=True))
 
 
 if __name__ == "__main__":
