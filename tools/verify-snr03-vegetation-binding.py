@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 
-def verify(path, frame):
+def verify(path, frame, require_camera_match=False):
     lines = path.read_text(encoding="utf-8").splitlines()
     items = [json.loads(line.split("FH1 SNR03 item ", 1)[1])
              for line in lines if "FH1 SNR03 item {" in line]
@@ -18,6 +18,17 @@ def verify(path, frame):
                 for line in lines if "FH1 scene binding {" in line]
     selected = [row for row in bindings if row["packet_physical"] in by_packet]
     assert selected and {row["packet_physical"] for row in selected} == set(by_packet)
+    camera = None
+    if require_camera_match:
+        camera_rows = [json.loads(line.split("FH1 SNR03 camera row ", 1)[1])
+                       for line in lines if "FH1 SNR03 camera row {" in line]
+        assert len(camera_rows) == 8
+        assert {(row["offset"], row["row"]) for row in camera_rows} == {
+            (offset, index) for offset in (80, 144) for index in range(4)}
+        assert all(row["frame"] == frame for row in camera_rows)
+        camera = [word for row in sorted(
+            (row for row in camera_rows if row["offset"] == 144),
+            key=lambda row: row["row"]) for word in row["words"]]
     owner_constants = collections.defaultdict(set)
     packet_constants = collections.defaultdict(set)
     packet_vertex_constants = collections.defaultdict(set)
@@ -38,6 +49,15 @@ def verify(path, frame):
         constants = {int(key): value for part in row["constants"].split(";")
                      if ":" in part and part[0].isdigit()
                      for key, value in [part.split(":", 1)]}
+        if camera is not None:
+            words = {key: tuple(int(value[i:i + 8], 16)
+                                for i in range(0, 32, 8))
+                     for key, value in constants.items() if len(value) == 32}
+            assert words[17028] == tuple(camera[8:12])
+            assert words[17016] == tuple(camera[12:16])
+            for column, register in enumerate((17356, 17360, 17364)):
+                assert words[register][:3] == tuple(camera[4 * row + column]
+                                                    for row in range(3))
         assert constants[17396].startswith("3E80000040800000")
         pair = (constants[17020], constants[17024])
         owner_constants[item["owner"]].add(pair)
@@ -66,6 +86,7 @@ def verify(path, frame):
         "vertex_constant_registers_per_packet": 24,
         "repeat_distribution": dict(sorted(collections.Counter(repeats.values()).items())),
         "unselected_probe_bindings": len(bindings) - len(selected),
+        "camera144_matches_selected_bindings": len(selected) if camera else None,
     }
 
 
@@ -73,8 +94,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path)
     parser.add_argument("--source-frame", type=int, default=6000)
+    parser.add_argument("--require-camera-match", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(verify(args.log, args.source_frame), sort_keys=True))
+    print(json.dumps(verify(args.log, args.source_frame,
+                            args.require_camera_match), sort_keys=True))
 
 
 if __name__ == "__main__":

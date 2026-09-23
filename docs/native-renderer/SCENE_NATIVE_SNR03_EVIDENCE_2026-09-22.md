@@ -182,3 +182,40 @@ check, not an image-equivalence or performance result.
 This extends one bounded immutable contribution; it does not close SNR-03 or
 SNR-04. Semantic transforms, the rest of the selected main-view scene,
 native identity/depth output and full-resolution comparisons remain open.
+
+## Title camera to selected draw-state join
+
+The title scene publication now logs the two already-owned 4x4 camera word
+arrays at offsets 80 and 144 for the one SNR-03 probe frame. No guest state is
+modified. A normal-exit saved-race replay produced seven compatibility
+captures and published 67 selected vegetation packets at source frame 6000.
+They joined 132 command-thread prepared bindings at output frame 6001.
+
+All 132 bindings contain title camera offset-144 row 2 exactly at vertex
+constant register 17028 and row 3 exactly at register 17016. Registers
+17356, 17360 and 17364 each contain the first three elements of a column
+formed from offset-144 rows 0–2, also exact in every binding. The fourth
+elements of those three registers differ from the corresponding title row-3
+words by 1, 18 and 1 integer units in this replay. The verifier checks only
+the exact relationships; those differing words are not asserted equal.
+Offset-80 words do not have a comparable direct row/column match in this
+selected shader's captured constant set.
+
+This establishes a source-camera-to-final-draw relationship for the bounded
+vegetation contribution. It does not yet prove the complete clip transform,
+the role of offset 80, packed vertex decode, per-item transforms, or camera
+stability under streaming and other modes. Those remain admission blockers
+for SNR-04's native diagnostic.
+
+The executable SHA-256 was
+`98A6E196A0514DBBE77EF4071185F1AEEDC891C174B15FA045C48A360F59863B`.
+The ordered filtered log is
+`.local/native-renderer/snr03/camera-match-run-a-signal.log` (SHA-256
+`481F232BFF758DC642C45579F28076ABEA3C4F57605AF87C1F8A00742674229B`).
+Recheck the exact join with:
+
+```powershell
+python tools/verify-snr03-vegetation-binding.py `
+  .local/native-renderer/snr03/camera-match-run-a-signal.log `
+  --source-frame 6000 --require-camera-match
+```

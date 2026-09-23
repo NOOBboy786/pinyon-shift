@@ -1413,6 +1413,15 @@ void PinyonShiftObservePresentationViewEnd() {
       REXGPU_INFO("FH1 SNR03 scene published frame={} view={} camera={} "
                   "items={} fingerprint={}", frame, scene->view, scene->camera,
                   scene->items.size(), fingerprint);
+      for (uint32_t row = 0; row < 4; ++row) {
+        for (const auto* matrix : {&scene->camera80, &scene->camera144}) {
+          REXGPU_INFO("FH1 SNR03 camera row {{\"frame\":{},\"offset\":{},"
+                      "\"row\":{},\"words\":[{},{},{},{}]}}",
+                      frame, matrix == &scene->camera80 ? 80 : 144, row,
+                      (*matrix)[row * 4], (*matrix)[row * 4 + 1],
+                      (*matrix)[row * 4 + 2], (*matrix)[row * 4 + 3]);
+        }
+      }
       for (size_t i = 0; i < scene->items.size(); ++i) {
         const auto& item = scene->items[i];
         REXGPU_INFO("FH1 SNR03 item {{\"frame\":{},\"ordinal\":{},"
