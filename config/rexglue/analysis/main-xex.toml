@@ -221,6 +221,16 @@ address = 0x82413A80
 name = "PinyonShiftObserveSecondDrawBegin"
 registers = ["r3", "r4", "r5", "r6"]
 
+# Bound the scalar draw wrapper around its original sub_82416380 submit.
+[[midasm_hook]]
+address = 0x824131BC
+name = "PinyonShiftObserveScalarDrawBegin"
+registers = ["r12", "r3", "r4", "r7", "r29"]
+
+[[midasm_hook]]
+address = 0x824131F4
+name = "PinyonShiftObserveScalarDrawEnd"
+
 [[midasm_hook]]
 address = 0x82413A0C
 name = "PinyonShiftObserveVegetationStateBind"

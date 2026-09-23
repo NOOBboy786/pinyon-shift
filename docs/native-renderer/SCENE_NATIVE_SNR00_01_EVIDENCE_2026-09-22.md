@@ -2708,3 +2708,58 @@ input object are the next bounded provenance target. The other gaps are
 nine each from `0x823F59C8` and `0x82412E1C`, plus three each from
 `0x82401258`, `0x8244F070` and `0x82D0735C`. This partitions the remaining
 direct-draw ownership work without guessing their mesh or material roles.
+
+### Scalar draw wrapper joins the car-presentation subobject
+
+A read-only scope around `sub_824131B8` records the entry caller, device,
+selector and input count with the exact direct-packet ordinal range emitted
+by its original `sub_82416380` call. The frame-wide ledger keys that range
+by title thread as well as source frame and ordinal; ordinals repeat on
+different title threads. In a normal-exit saved-race replay, all 88 candidate
+prepared draws from this wrapper joined a scope, and the strict candidate
+boundary check passed across all 4,598 prepared draws.
+
+Seventy-two of the 88 wrapper draws came from the three indirect call sites
+`0x82443B98`, `0x82443C40` and `0x82444018` inside generated
+`sub_82443600`. That function retains its entry `r3` in nonvolatile `r29`
+while passing the graphics device to the draw wrapper. For all eight live
+`CCarPresentation` instances, the captured `r29` was exactly the
+presentation address plus 2016, with three prepared draws per call site per
+presentation. The local-player presentation also appears in this set. This
+proves a title presentation-subobject → direct packet → prepared-draw edge;
+the subobject's first word is zero, so no separate RTTI type is claimed.
+The other 16 wrapper draws in this replay came from `0x82415A28` (ten) and
+`0x823FDDFC`/`0x823FDE2C` (three each) and still need semantic ownership.
+
+The final instrumented executable SHA-256 was
+`F405E6939C188DBFF1082D3853DEFB5F54A121733314E749E5FFC2624961591F`.
+The ordered filtered log is
+`.local/native-renderer/snr01/scalar-outer-run-a-filtered.log` (SHA-256
+`DBD77567575B30B097EE7C06532B779195808D1AE269983F60BE00128BCDF021`)
+and its ledger is
+`.local/native-renderer/snr01/scalar-outer-run-a-ledger.json` (SHA-256
+`FCF36A1B2ADE91882CA0E9FB49B54E72B43601FB3934E7AFB711EC164EFDDA8F`).
+The replay produced seven compatibility captures. Recheck with:
+
+```powershell
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/scalar-outer-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr01/scalar-outer-run-a-ledger.json
+python tools/verify-snr01-player-presentation.py `
+  .local/native-renderer/snr01/scalar-outer-run-a-filtered.log `
+  --frame 6000 --require-local-model --require-scalar-presentation `
+  --census-ledger .local/native-renderer/snr01/scalar-outer-run-a-ledger.json
+```
+
+This replay's candidate groups contain 2,595 draws: 2,017 view-8 scene
+owners, 553 view-8 direct packets, one retained clear and 24 indirect
+draws with no attachment writes. The 72 newly joined draws are a subset of
+the 553 direct packets; they do not establish mesh/material generations or
+complete the main-view slice.
+The same final build with the probes off exited normally with seven
+compatibility captures. This is a smoke check, not an image-equivalence or
+performance result.

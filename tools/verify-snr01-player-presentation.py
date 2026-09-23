@@ -42,6 +42,8 @@ def main() -> int:
     parser.add_argument("--require-local-presentation", action="store_true")
     parser.add_argument("--require-local-model", action="store_true")
     parser.add_argument("--require-list-owner", action="store_true")
+    parser.add_argument("--require-scalar-presentation", action="store_true")
+    parser.add_argument("--census-ledger", type=Path)
     parser.add_argument("--require-owner-calls", action="store_true")
     parser.add_argument("--require-backend-join", action="store_true")
     parser.add_argument("--require-model-records", action="store_true")
@@ -96,6 +98,7 @@ def main() -> int:
         args.require_local_presentation
         or args.require_local_model
         or args.require_list_owner
+        or args.require_scalar_presentation
         or args.require_owner_calls
         or args.require_backend_join
         or args.require_model_records
@@ -391,6 +394,35 @@ def main() -> int:
             }),
         })
 
+    scalar_summary = {}
+    if args.require_scalar_presentation:
+        assert args.census_ledger, "--require-scalar-presentation needs --census-ledger"
+        ledger = json.loads(args.census_ledger.read_text(encoding="utf-8"))
+        assert ledger["source_frames"][0] == args.frame
+        callers = {0x82443B98, 0x82443C40, 0x82444018}
+        targets = {
+            "14020500/00030000/00010400/00000003",
+            "14020500/000C0000/00010400/00000003",
+        }
+        draws = [
+            r for r in ledger["draws"] if r["target"] in targets
+            and r["title_scalar_caller_lr"] in callers
+        ]
+        owners = {r["presentation"] + 2016 for r in presentations}
+        assert len(owners) == 8 and len(draws) == 72
+        assert Counter((r["title_scalar_outer_object"],
+                        r["title_scalar_caller_lr"]) for r in draws) == {
+                            (owner, caller): 3 for owner in owners
+                            for caller in callers
+                        }
+        assert all(r["classification"] == "direct_root"
+                   and r["title_packet_view_call"] == 8
+                   and r["title_scalar_outer_first_word"] == 0
+                   for r in draws)
+        assert local["presentation"] + 2016 in owners
+        scalar_summary = {"presentation_subobject_draws": len(draws),
+                          "presentation_subobjects": len(owners)}
+
     node_packets = [
         r for r in local_packets + model_packets if "node" in r
     ]
@@ -548,6 +580,7 @@ def main() -> int:
     }
     summary.update(owner_call_summary)
     summary.update(list_owner_summary)
+    summary.update(scalar_summary)
     summary.update(model_record_summary)
     summary.update(backend_summary)
     print(json.dumps(summary, indent=2))

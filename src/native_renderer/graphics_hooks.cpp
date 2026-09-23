@@ -127,6 +127,20 @@ struct Snr01SecondPathScope {
   uint32_t arg5;
   uint32_t arg6;
 };
+struct Snr01ScalarDrawScope {
+  uint64_t frame;
+  uint64_t ordinal;
+  uint64_t view_call;
+  uint64_t first_direct;
+  uint32_t caller_lr;
+  uint32_t object;
+  uint32_t object_first_word;
+  uint32_t command;
+  uint32_t outer_object;
+  uint32_t outer_first_word;
+  uint32_t selector;
+  uint32_t input_count;
+};
 struct Snr01DirectScope {
   uint32_t caller_lr;
   uint32_t owner;
@@ -282,6 +296,8 @@ struct Snr01ItemNodeScope {
 };
 thread_local std::vector<Snr01EmitterScope> snr01_emitter_scopes;
 thread_local std::vector<Snr01SecondPathScope> snr01_second_path_scopes;
+thread_local std::vector<Snr01ScalarDrawScope> snr01_scalar_draw_scopes;
+thread_local uint64_t snr01_scalar_draw_count = 0;
 thread_local uint64_t snr01_second_path_count = 0;
 std::atomic<rex::memory::Memory*> snr01_memory{nullptr};
 thread_local std::vector<Snr01DirectScope> snr01_direct_scopes;
@@ -1132,6 +1148,7 @@ void PinyonShiftObserveGraphicsFrame() {
   snr01_track75_scopes.clear();
   snr01_track_bucket_scopes.clear();
   snr01_second_draw_scopes.clear();
+  snr01_scalar_draw_scopes.clear();
   snr01_item_node_scopes.clear();
   snr01_direct_scopes.clear();
   snr01_dispatch_scopes.clear();
@@ -1150,6 +1167,7 @@ void PinyonShiftObserveGraphicsFrame() {
       snr01_second_draw_count = snr01_unmatched_second_draw_exits =
       snr01_second_draw_skips =
       snr01_item_node_count = snr01_unmatched_item_node_exits =
+      snr01_scalar_draw_count =
       snr01_direct_call_count = snr01_direct_packet_count =
       snr01_unmatched_direct_exits = 0;
   if (rex::perf::CriticalPathTraceEnabled() &&
@@ -2053,6 +2071,49 @@ void PinyonShiftObserveSecondTrackDispatch(
         bucket.ordinal, r31.u32, r11.u32, r4.u32, r5.u32,
         r6.u32, r7.u32, r8.u32, r9.u32, r10.u32);
   }
+}
+
+void PinyonShiftObserveScalarDrawBegin(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r7,
+    PPCRegister& r29) {
+  if (!Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const bool outer_call = r12.u32 == 0x82443B98 ||
+                          r12.u32 == 0x82443C40 ||
+                          r12.u32 == 0x82444018;
+  const uint32_t outer = outer_call ? r29.u32 : 0;
+  snr01_scalar_draw_scopes.push_back({
+      uint64_t(rex::perf::GetTotalCounter(
+          rex::perf::CounterId::kSourceFrameCount)),
+      ++snr01_scalar_draw_count,
+      snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal,
+      snr01_direct_packet_count, r12.u32, r3.u32,
+      SnrM02ReadU32(r3.u32), SnrM02ReadU32(r3.u32 + 20),
+      outer, outer ? SnrM02ReadU32(outer) : 0,
+      r4.u32, r7.u32});
+}
+
+void PinyonShiftObserveScalarDrawEnd() {
+  if (snr01_scalar_draw_scopes.empty()) {
+    return;
+  }
+  const auto scope = snr01_scalar_draw_scopes.back();
+  snr01_scalar_draw_scopes.pop_back();
+  if (scope.ordinal > kSnr01ProceduralLimit) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 scalar draw {{\"frame\":{},\"ordinal\":{},"
+      "\"view_call\":{},\"caller_lr\":{},\"object\":{},"
+      "\"object_first_word\":{},\"command\":{},"
+      "\"outer_object\":{},\"outer_first_word\":{},"
+      "\"selector\":{},\"input_count\":{},"
+      "\"first_direct\":{},\"last_direct\":{}}}",
+      scope.frame, scope.ordinal, scope.view_call, scope.caller_lr,
+      scope.object, scope.object_first_word, scope.command,
+      scope.outer_object, scope.outer_first_word, scope.selector,
+      scope.input_count, scope.first_direct + 1, snr01_direct_packet_count);
 }
 
 void PinyonShiftObserveSecondDrawBegin(

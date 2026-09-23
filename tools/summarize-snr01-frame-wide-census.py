@@ -22,6 +22,7 @@ PREFIXES = {
     "item": "FH1 SNR01 procedural item ",
     "second_path": "FH1 SNR01 second path ",
     "second_draw": "FH1 SNR01 second draw call ",
+    "scalar": "FH1 SNR01 scalar draw ",
     "family_record": "FH1 SNR01 direct family record ",
     "family": "FH1 SNR01 direct family ",
     "clear": "FH1 clear producer ",
@@ -38,14 +39,16 @@ def read_records(path, frames, backend_frame):
                     row = json.loads(line.split(prefix, 1)[1])
                     if row["frame"] in (frames if key not in ("execution", "draw")
                                         else {backend_frame}):
-                        if key in ("view_begin", "view_end", "direct", "semantic"):
+                        if key in ("view_begin", "view_end", "direct", "semantic", "scalar"):
                             thread = int(re.search(r"\[t(\d+)\]", line)[1])
+                            if key in ("direct", "semantic", "scalar"):
+                                row["title_thread"] = thread
                             scope = view_scopes[thread]
                             if key == "view_begin":
                                 scope.append(row)
                             elif key == "view_end":
                                 assert scope and scope.pop()["call"] == row["call"]
-                            else:
+                            elif key != "scalar":
                                 row["title_view_call"] = scope[-1]["call"] if scope else 0
                                 row["title_view"] = scope[-1]["view"] if scope else 0
                         records[key].append(row)
@@ -99,6 +102,12 @@ def summarize(records, frames, backend_frame):
             key = (scope["frame"], ordinal)
             assert key not in second_draws, f"overlapping second draws: {key}"
             second_draws[key] = scope
+    scalar_draws = {}
+    for scope in records["scalar"]:
+        for ordinal in range(scope["first_direct"], scope["last_direct"] + 1):
+            key = (scope["frame"], scope["title_thread"], ordinal)
+            assert key not in scalar_draws, f"overlapping scalar draws: {key}"
+            scalar_draws[key] = scope
     assert len(primary) == len(records["primary"])
     assert len(scene) == len(records["scene"])
     assert all(r["view_call"] == 0 or
@@ -185,6 +194,7 @@ def summarize(records, frames, backend_frame):
         item_node = None
         second_path = None
         second_draw = None
+        scalar_draw = None
         if title_packet and title_packet[0] == "semantic":
             title_row = title_packet[1]
             key = (title_row["frame"], title_row["ordinal"])
@@ -221,6 +231,13 @@ def summarize(records, frames, backend_frame):
                 assert item_node["receiver"] == item["receiver"]
         if title_packet and title_packet[0] == "direct":
             title_row = title_packet[1]
+            scalar_draw = scalar_draws.get((title_row["frame"], title_row["title_thread"],
+                                            title_row["ordinal"]))
+            if (records["scalar"] and
+                    title_row["direct_caller_lr"] == 0x824131F4):
+                assert scalar_draw, f"missing scalar draw: {draw['ordinal']}"
+            if scalar_draw:
+                assert scalar_draw["view_call"] == title_row["title_view_call"]
             matches = [row for row in families[title_row["frame"]]
                        if row["first_direct"] <= title_row["ordinal"]
                        <= row["last_direct"]]
@@ -278,6 +295,7 @@ def summarize(records, frames, backend_frame):
             "no_attachment_write": no_attachment_write,
             "title_packet_kind": title_packet[0] if title_packet else None,
             "title_packet_ordinal": title_packet[1]["ordinal"] if title_packet else None,
+            "title_packet_thread": title_packet[1]["title_thread"] if title_packet else None,
             "title_packet_path": title_packet[1].get("path") if title_packet else None,
             "title_packet_source_frame": title_packet[1]["frame"] if title_packet else None,
             "title_packet_view_call": title_packet[1]["title_view_call"] if title_packet else None,
@@ -298,6 +316,14 @@ def summarize(records, frames, backend_frame):
             "title_direct_record_source": family_record["source"] if family_record else None,
             "title_direct_record_arg6": family_record["arg6"] if family_record else None,
             "title_direct_record_arg7": family_record["arg7"] if family_record else None,
+            "title_scalar_caller_lr": scalar_draw["caller_lr"] if scalar_draw else None,
+            "title_scalar_object": scalar_draw["object"] if scalar_draw else None,
+            "title_scalar_object_first_word": scalar_draw["object_first_word"] if scalar_draw else None,
+            "title_scalar_command": scalar_draw["command"] if scalar_draw else None,
+            "title_scalar_outer_object": scalar_draw["outer_object"] if scalar_draw else None,
+            "title_scalar_outer_first_word": scalar_draw["outer_first_word"] if scalar_draw else None,
+            "title_scalar_selector": scalar_draw["selector"] if scalar_draw else None,
+            "title_scalar_input_count": scalar_draw["input_count"] if scalar_draw else None,
             "title_item_call": item["call"] if item else None,
             "title_item_receiver": item["receiver"] if item else None,
             "title_item_descriptor": item["descriptor_address"] if item else None,
@@ -358,6 +384,7 @@ def main():
     parser.add_argument("--require-direct-family-record", action="store_true")
     parser.add_argument("--require-semantic-item-node", action="store_true")
     parser.add_argument("--require-second-path", action="store_true")
+    parser.add_argument("--require-scalar-draw", action="store_true")
     parser.add_argument("--require-candidate-boundary", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -371,6 +398,8 @@ def main():
         assert records["item"] and records["item_node"], "no item-node records"
     if args.require_second_path:
         assert records["second_path"], "no second-path records"
+    if args.require_scalar_draw:
+        assert records["scalar"], "no bounded scalar-draw scopes"
     result = summarize(records, frames, args.source_frame + 1)
     if args.require_candidate_boundary:
         targets = {
