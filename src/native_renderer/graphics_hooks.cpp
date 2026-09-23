@@ -2320,6 +2320,22 @@ void PinyonShiftObserveScalarDrawBegin(
       r4.u32, r7.u32});
 }
 
+void PinyonShiftObserveSnr01GraphicsDeviceDraw(
+    PPCRegister& r12, PPCRegister& r3, PPCRegister& r4,
+    PPCRegister& r6, PPCRegister& r30) {
+  if (!Snr01TraceCurrentFrame() || snr01_view_scopes.empty() ||
+      snr01_view_scopes.back().ordinal != 8) {
+    return;
+  }
+  REXGPU_INFO(
+      "FH1 SNR01 graphics device draw {{\"frame\":{},\"view_call\":8,"
+      "\"caller_lr\":{},\"device\":{},\"selector\":{},"
+      "\"input_count\":{},\"caller_r30\":{},\"first_direct\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      r12.u32, r3.u32, r4.u32, r6.u32, r30.u32,
+      snr01_direct_packet_count + 1);
+}
+
 void PinyonShiftObserveScalarDrawEnd() {
   if (snr01_scalar_draw_scopes.empty()) {
     return;
@@ -2762,6 +2778,7 @@ void PinyonShiftObserveIndexed2Owner(PPCRegister& r12, PPCRegister& r3,
                                      PPCRegister& r4, PPCRegister& r5,
                                      PPCRegister& r7, PPCRegister& r8) {
   if (!Snr01TraceCurrentFrame() || r7.u32 != 4 ||
+      snr01_view_scopes.empty() || snr01_view_scopes.back().ordinal != 8 ||
       ++snr01_indexed2_owner_count > 256) {
     return;
   }
@@ -2776,10 +2793,11 @@ void PinyonShiftObserveIndexed2Owner(PPCRegister& r12, PPCRegister& r3,
       "FH1 SNR01 indexed2 owner {{\"frame\":{},\"ordinal\":{},"
       "\"caller_lr\":{},\"receiver\":{},\"receiver_word0\":{},"
       "\"arg4\":{},\"arg5\":{},\"arg7\":{},\"arg8\":{},"
+      "\"arg8_word0\":{},"
       "\"view_call\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       snr01_indexed2_owner_count, r12.u32, r3.u32, receiver_word0, r4.u32,
-      r5.u32, r7.u32, r8.u32,
+      r5.u32, r7.u32, r8.u32, SnrM02ReadU32(r8.u32),
       snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
 }
 

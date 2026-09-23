@@ -2956,3 +2956,77 @@ start = descriptor + 8 - 0x82000000
 assert image[start:image.index(0, start)] == b'.?AVCRealtimeSky@@'
 '@ | python -
 ```
+
+### Indexed2 packet 106 is a race-line presentation call
+
+The verified title image has `sub_823EA098` at vtable slot `+32` of
+`CPresentationRaceLine` (`0x8201FF70`). Generated `sub_823EA098` calls
+`sub_82400E70`; the latter issues `sub_8240DC70` at return site
+`0x82401258`. This is the exact caller site of title packet 106 in the
+earlier passing particle ledger, which expanded to three candidate-attachment
+prepared draws. Treat this as a **retained race-line presentation producer**
+in the provisional cut, subject to SNR-05 color/depth composition proof.
+The remaining semantically unowned direct work in that ledger is 12 draws:
+nine at graphics-device wrapper return `0x823F59C8` and three at
+`0x8244F070`. The wrapper itself is not an owner: title-image vtables for
+`CD3D9GraphicsDevice` and its thread-safe ref-counted form contain
+`sub_823F5980`; its enclosing caller still needs a title join.
+
+### The graphics-device wrapper packets also belong to `CRealtimeSky`
+
+A bounded entry hook on `sub_823F5980` records its enclosing caller before
+the generic device submission. In a normal-exit saved-race replay with seven
+compatibility captures, all three view-8 calls that produced the direct
+packet family came from `sub_823FADC0`, `sub_82406030` and
+`sub_82D71228`. Generated `sub_82D756A8` invokes those functions with
+its parent at offsets `+48`, `+736` and `+256`. The observed caller-held
+addresses were exactly those offsets from parent `0x4321F020`, whose
+`0x8223A694` vtable again resolves to `CRealtimeSky`. The wrapper's
+`first_direct` ordinals 193–195 join exact secondary packets 193–195,
+all with return site `0x823F59C8`. Their 3100, 2900 and 3100 input
+counts match the 9300, 8700 and 9300 prepared index counts in the
+earlier passing backend ledger.
+
+Thus **18 of the original 24 unowned candidate direct draws** are now
+attributed to retained `CRealtimeSky` submissions (nine through each of
+two wrappers), and three to the race-line presentation path. The remaining
+three come from indexed2 return site `0x8244F070`. Its entry hook records
+caller `0x82446164`; generated `sub_82444E60` calls `sub_823E2DE0`
+there, which tail-calls `sub_8244E938`. The observed call's `arg5`
+equals the view-8 presentation pointer, proving that it belongs to this
+title view; its render-owner class and material role remain unresolved.
+The preceding sky and race-line attribution does not make the rest of the
+candidate attachment safe to suppress.
+
+The executable SHA-256 was
+`D5F0B7968DCA001EA9B55F237BBAA80AC9AAB1841C4D9B7B8B6A81FD060FB1DC`.
+The nine-record filtered trace is
+`.local/native-renderer/snr01/final-direct-run-a-filtered.log` (SHA-256
+`603E5E86FD81BF2576765B504EECCBB25CABB8BD224583B9CD47395757EF3A9B`).
+Recheck the exact parent-offset and packet joins with:
+
+```powershell
+@'
+import json
+from pathlib import Path
+rows = [json.loads(line[line.index('{'):]) for line in Path(
+    '.local/native-renderer/snr01/final-direct-run-a-filtered.log'
+).read_text(encoding='utf-8').splitlines()]
+view, = [r for r in rows if 'view' in r]
+parent, = [r for r in rows if 'parent' in r]
+wrappers = [r for r in rows if 'caller_r30' in r]
+packets = [r for r in rows if 'direct_caller_lr' in r]
+indexed, = [r for r in rows if 'receiver' in r]
+offset = {0x823FB260: 48, 0x82406910: 736, 0x82D71D2C: 256}
+assert len(wrappers) == len(packets) == 3
+assert {r['caller_lr'] for r in wrappers} == set(offset)
+assert all(r['caller_r30'] == parent['parent'] + offset[r['caller_lr']]
+           for r in wrappers)
+assert {r['first_direct'] for r in wrappers} == {r['ordinal'] for r in packets}
+assert {r['direct_caller_lr'] for r in packets} == {0x823F59C8}
+assert indexed['arg5'] == view['view'] == parent['arg5']
+'@ | python -
+```
+
+This replay used a source-frame-only trace, so it establishes bounded
+title-packet provenance rather than a new passing full-frame backend census.
