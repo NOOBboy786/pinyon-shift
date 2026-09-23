@@ -3606,3 +3606,64 @@ assert all(r['color_mask'] == 7 and r['pixel_shader']
            for r in rows if r['title_scalar_caller_lr'] == sites[2])
 '@ | python -
 ```
+
+### Revised Gate A diagnostic slice across both candidate targets
+
+`tools/partition-snr00-gate-a-slice.py` applies exact target-tuple and
+title-return-site rules to the two independently strict frame-wide ledgers.
+It assigns every prepared draw to a required scene family, a retained
+candidate-target effect, or an outside target. An unexpected candidate caller
+or missing title join fails the check; no shader hash or spatial match admits
+a draw. The two replays give:
+
+| Strict replay | All draws | Required diagnostic scene | Retained on candidate targets | Other targets |
+| --- | ---: | ---: | ---: | ---: |
+| Final resource/animated join | 3,639 | 1,852 | 67 | 1,720 |
+| Independent clear-complete/animated join | 4,605 | 2,644 | 61 | 1,900 |
+
+| Required family | 3,639-draw replay | 4,605-draw replay |
+| --- | ---: | ---: |
+| Car model/presentation scene lists | 608 | 1,067 |
+| Shared track/procedural scene lists | 596 | 893 |
+| Character-manager direct records | 220 | 261 |
+| Procedural item/node packets | 211 | 170 |
+| Vegetation bound records | 166 | 138 |
+| Animated-scene scalar packets | 15 | 43 |
+| Car-presentation scalar packets | 36 | 72 |
+
+The required set is every view-8 scene-list draw plus exact character-manager,
+procedural item/node, vegetation bound-record, animated-scene scalar and
+car-presentation scalar packets. The latter include both depth-only packets
+on color word `00030000` and the color-writing packet on `000C0000` for each
+owner. They stay required in the diagnostic until the title proves whether
+their role belongs to native scene work or needs a retained ordered bridge;
+the current owner join alone does not prove that role. Retained effects are
+the proven sky, particle, race-line, presentation-strip and skid callers,
+the title clear, and no-attachment-write indirect points. They still execute
+under compatibility; their composition/depth dependencies remain open.
+
+This is an explicit **pilot slice revision** from attachment membership to
+title-proved contribution membership. It does not mean that the 1,852 or
+2,644 draws are already admitted to an immutable scene. Geometry, material,
+resource generations and complete full-resolution diagnostic coverage are
+still missing. Any new candidate target tuple or caller fails the current
+rule and requires a documented revision. Other game modes and streaming
+transitions need independent qualification before the rule can be treated as
+their boundary.
+
+Recheck both frame-wide partitions:
+
+```powershell
+python tools/partition-snr00-gate-a-slice.py `
+  .local/native-renderer/snr01/state-resource-final-run-a-animated-joined-ledger.json
+python tools/partition-snr00-gate-a-slice.py `
+  .local/native-renderer/snr01/clear-complete-run-a-animated-joined-ledger.json
+```
+
+The saved outputs are `.local/native-renderer/snr01/gate-a-slice-3639.json`
+and `gate-a-slice-4605.json` (SHA-256
+`7400BAB86AE6EC3F8B289654E9D1F82E417C05C97D2CBCEC18FA5F3A344CF117`
+and `412FBBFECDA2B6F9F35135D3411F6E8C86BE1B2E95D3F8F6BEE6491C67C2296F`).
+The underlying ledgers have SHA-256
+`15B465656A52D0CEEE0B13E0D7B8C83A06DE116DA4875111BA86D5F479A491D1`
+and `D2CE9261E25959D706789F71CE803CE78DC6E60995CD7729C1D52D84D5084F6E`.

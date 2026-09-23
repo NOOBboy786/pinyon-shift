@@ -42,6 +42,23 @@ compatible only where their producers, consumers and composition are preserved.
 If that boundary is not separable, revise the slice explicitly before suppression.
 One easy mesh or a subset selected by shader hash cannot complete this milestone.
 
+For the race pilot, the **Gate A diagnostic slice is explicitly revised** to
+the title-linked scene-list, character, procedural-item, vegetation,
+animated-scene and car-presentation scalar submissions on the two exact
+candidate target tuples. The car scalar owner spans both color words: its two
+depth-only passes and color pass belong to one required diagnostic contribution
+until their semantic role and consumers prove otherwise. Keep sky, particles,
+race line, presentation strip, skid effects, clear and no-attachment-write
+points in the retained compatibility path. Every other target is outside this
+pilot slice, not an inferred scene pass. The
+[frame-wide partition](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#revised-gate-a-diagnostic-slice-across-both-candidate-targets)
+checks every prepared draw in two independent frames and fails on a new
+candidate caller. This freezes the **pilot selection rule**, not native
+admission: SNR-02 must still prove geometry, material and lifetime for every
+required contribution, and SNR-05 must prove retained composition before
+suppression. Route/mode changes must be reclassified rather than silently
+treated as this same slice.
+
 ## Evidence and changes to Pro's proposal
 
 The supplied Pro research reviewed Skate at `f6e0ae8`, SDK `7eb0faf`, and Pinyon
