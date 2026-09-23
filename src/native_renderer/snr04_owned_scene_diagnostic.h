@@ -1,0 +1,16 @@
+#pragma once
+
+#include <cstdint>
+#include <filesystem>
+
+struct ID3D12Device;
+
+namespace pinyon_shift::native_renderer {
+
+uint32_t RunSnr04OwnedSceneDiagnostic(
+    const std::filesystem::path& fixture,
+    const std::filesystem::path& vertex_shader,
+    const std::filesystem::path& output_directory,
+    ID3D12Device* device = nullptr);
+
+}  // namespace pinyon_shift::native_renderer

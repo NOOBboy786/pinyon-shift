@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -25,6 +26,10 @@
 
 #include "native_renderer/fh1_gpu_corpus.h"
 #include "fh1_render_test.h"
+#include "pinyon_shift_diagnostics.h"
+#if defined(_WIN32)
+#include "native_renderer/snr04_owned_scene_diagnostic.h"
+#endif
 
 REXCVAR_DEFINE_BOOL(pinyon_shift_fh1_clear_producer_trace, false, "Pinyon Shift",
                     "Record bounded guest clear-producer timing and shader copies")
@@ -1169,7 +1174,7 @@ void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
 
 bool Snr03ProbeEnabled() { return Snr03TargetFrame() > 0; }
 
-void ObserveSnr03OutputFrame(uint64_t output_frame) {
+void ObserveSnr03OutputFrame(uint64_t output_frame, void* device) {
   if (!Snr03ProbeEnabled() || output_frame != uint64_t(Snr03TargetFrame()) + 1) {
     return;
   }
@@ -1258,6 +1263,33 @@ void ObserveSnr03OutputFrame(uint64_t output_frame) {
         std::chrono::steady_clock::now() - begin).count();
     REXGPU_INFO("FH1 SNR03 fixture output_frame={} written={} write_us={}",
                 output_frame, written, elapsed);
+#if defined(_WIN32)
+    if (written && device) {
+      const auto shader = diagnostics::EnvironmentPath("PINYON_SHIFT_SNR04_VS");
+      if (shader) {
+        const auto fixture = directory /
+            ("snr03-scene-" + std::to_string(owned->title->source_frame) + ".bin");
+        const auto private_output = directory /
+            ("snr04-private-" + std::to_string(owned->title->source_frame));
+        const auto diagnostic_begin = std::chrono::steady_clock::now();
+        try {
+          const auto covered = RunSnr04OwnedSceneDiagnostic(
+              fixture, *shader, private_output,
+              static_cast<ID3D12Device*>(device));
+          const auto diagnostic_us = std::chrono::duration_cast<
+              std::chrono::microseconds>(std::chrono::steady_clock::now() -
+                                          diagnostic_begin).count();
+          REXGPU_INFO("FH1 SNR04 private diagnostic output_frame={} "
+                      "source_frame={} covered_pixels={} elapsed_us={}",
+                      output_frame, owned->title->source_frame, covered,
+                      diagnostic_us);
+        } catch (const std::exception& error) {
+          REXGPU_INFO("FH1 SNR04 private diagnostic rejected output_frame={} "
+                      "reason={}", output_frame, error.what());
+        }
+      }
+    }
+#endif
   }
 }
 

@@ -464,6 +464,57 @@ python tools/check-snr04-depth-overlap.py `
   .local/native-renderer/snr04/offline-same-run/depth.f32 --item 27
 ```
 
+### Private diagnostic on the live output callback
+
+The same SNR-03 output-frame callback now invokes the private renderer when
+`PINYON_SHIFT_SNR04_VS` names the exact locally translated vegetation VS.
+It receives the callback's D3D12 device, reads the already-owned frame-6000
+fixture, creates separate color/depth targets and a private command queue,
+waits for its fence, and writes diagnostic readbacks before returning. It
+does not bind or write the guest output; the callback still yields to normal
+compatibility rendering. With the variable absent, no diagnostic GPU work is
+scheduled. The standalone executable calls the same renderer source.
+
+Two AppData-backed sustained-race replays wrote `snr04-private-6000` during
+output frame 6001 and exited normally with all seven compatibility captures.
+The second replay's `SNR03F1` fixture has SHA-256
+`D2A8FFDAB08A4A4D5FC1402379EDF42F9960A8DA41D7AF18A8D9D6D5C6FA5A02`;
+`tools/verify-snr03-scene-fixture.py` passed its 67 ordered items, 376,272
+vertex bytes, 135 final variants and title/command-state join. Its private
+identity, depth and post-VS outputs each match a standalone replay of this
+*same* fixture byte-for-byte (SHA-256 respectively
+`5112A309739EF7BA746E542A9D5E334313A8A95CDEA8684080667409FD0A8A66`,
+`32F7691B05405F16266E0BE52A3D4A7F1256BDE51C245686EE740A5C1E55F3B7`,
+`768F650DF2A058261C5B43F90A2FA00B580A3053CBED310B4B1BF0A2BD0EA3E0`).
+The callback logged 395,185 diagnostic identity pixels and 206,332 µs for
+the cold diagnostic. That is not a frame-time or FPS comparison.
+In a separate negative replay, setting `PINYON_SHIFT_SNR04_VS` to the fixture
+instead of VS bytecode logged `reason=wrong vegetation vertex shader`, wrote
+no private target, and still exited normally with all seven compatibility
+captures. Thus a rejected diagnostic leaves guest output active.
+
+The local verified output is `.local/native-renderer/snr04/live-run-b`; its
+ordered signal log is `.local/native-renderer/snr04/live-run-b-signal.log`.
+Reproduce with the saved-race procedure, a fresh render-test output path,
+and the additional environment variable:
+
+```powershell
+$env:PINYON_SHIFT_SNR04_VS = (Resolve-Path `
+  .local/native-renderer/seeded-probe/translation/dxil/vertex_5834939992FFC765_000000000000001F.dxil).Path
+$stateRoot = Join-Path $env:LOCALAPPDATA 'PinyonShift\source\0.1.0\.local\preview'
+.\tools\launch-preview.ps1 -Configuration RelWithDebInfo -StateRoot $stateRoot `
+  -RenderTestScript config/render-tests/fh1-race-sustained.fh1test `
+  -RenderTestOutput .local/native-renderer/snr04/live-run-new `
+  -RenderTestTimeoutSeconds 240 -Hidden `
+  -GameArgumentsJson '["--pinyon_shift_fh1_gpu_corpus=true","--pinyon_shift_fh1_scene_dump=true","--pinyon_shift_snr01_trace_source_frame=6000","--pinyon_shift_snr03_probe_frame=6000"]' -Json
+Remove-Item Env:PINYON_SHIFT_SNR04_VS
+```
+
+This is a live, frame-matched diagnostic for the **bounded vegetation
+contribution**, not full selected main-view ownership or compatibility
+coverage/depth parity. The file round-trip and private queue/fence are
+diagnostic costs, not a production bridge or suppression path.
+
 ## Title camera to selected draw-state join
 
 The title scene publication now logs the two already-owned 4x4 camera word

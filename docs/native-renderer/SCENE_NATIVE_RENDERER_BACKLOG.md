@@ -309,8 +309,11 @@ positions byte-for-byte for all 72 vegetation items in one same-run frame;
 [SNR-03/04 evidence](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md#same-run-renderdoc-post-vs-comparison).
 The captured 0–0.5 viewport depth range is now reproduced in the private
 raster, and one draw has a bounded sample-0 before/after depth comparison.
-Full compatibility coverage/depth parity, a live callback, unload/reload and
-complete main-view ownership remain open.
+The private diagnostic now runs on the exact output-frame callback and writes
+identity/depth readbacks without changing compatibility output; two replays
+exited with all seven compatibility captures. Full compatibility
+coverage/depth parity, unload/reload and complete main-view ownership remain
+open.
 
 **Done when / Gate A:** the selected main-view scene is complete and stable at
 reference resolution with no missing, duplicated, stale or misattributed objects.

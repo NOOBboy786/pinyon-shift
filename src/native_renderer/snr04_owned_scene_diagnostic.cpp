@@ -1,5 +1,7 @@
 // Diagnostic only: replay the SNR-03 owned fixture into private D3D12 targets.
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <bcrypt.h>
 #include <d3d12.h>
@@ -24,6 +26,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "native_renderer/snr04_owned_scene_diagnostic.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -219,27 +223,34 @@ void transition(ID3D12GraphicsCommandList* commands, ID3D12Resource* resource,
 }
 }  // namespace
 
-int main(int argc, char** argv) try {
-  require(argc == 4, "usage: snr04-owned-scene-diagnostic FIXTURE VS_DXBC OUTPUT_DIR");
+uint32_t pinyon_shift::native_renderer::RunSnr04OwnedSceneDiagnostic(
+    const std::filesystem::path& fixture,
+    const std::filesystem::path& vertex_shader,
+    const std::filesystem::path& output_directory,
+    ID3D12Device* borrowed_device) {
   const auto begin = std::chrono::steady_clock::now();
-  auto scene = load_scene(argv[1]);
-  auto vs = read(argv[2]);
+  auto scene = load_scene(fixture);
+  auto vs = read(vertex_shader);
   require(vs.size() == 19328 && std::memcmp(vs.data(), "DXBC", 4) == 0 &&
               sha256(vs) == expected_vs_sha,
           "wrong vegetation vertex shader");
   const auto extracted = std::chrono::steady_clock::now();
 
-  ComPtr<ID3D12Debug> debug;
-  if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
-    debug->EnableDebugLayer();
-  ComPtr<IDXGIFactory6> factory;
-  check(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
-  ComPtr<IDXGIAdapter1> adapter;
-  check(factory->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
-                                           IID_PPV_ARGS(&adapter)));
   ComPtr<ID3D12Device> device;
-  check(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0,
-                          IID_PPV_ARGS(&device)));
+  if (borrowed_device) {
+    device = borrowed_device;
+  } else {
+    ComPtr<ID3D12Debug> debug;
+    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
+      debug->EnableDebugLayer();
+    ComPtr<IDXGIFactory6> factory;
+    check(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
+    ComPtr<IDXGIAdapter1> adapter;
+    check(factory->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+                                             IID_PPV_ARGS(&adapter)));
+    check(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0,
+                            IID_PPV_ARGS(&device)));
+  }
   constexpr char ps_source[] =
       "cbuffer Item : register(b2) { uint id; };"
       "float4 main() : SV_Target0 {"
@@ -515,8 +526,8 @@ int main(int argc, char** argv) try {
   }
   const auto drawn = std::chrono::steady_clock::now();
 
-  std::filesystem::create_directories(argv[3]);
-  const auto directory = std::filesystem::path(argv[3]);
+  std::filesystem::create_directories(output_directory);
+  const auto& directory = output_directory;
   std::ofstream image(directory / "identity.ppm", std::ios::binary);
   image << "P6\n" << width << ' ' << height << "\n255\n";
   std::ofstream depth_file(directory / "depth.f32", std::ios::binary);
@@ -597,10 +608,5 @@ int main(int argc, char** argv) try {
   summary << "]}\n";
   summary.close();
   require(bool(summary) && covered > 0, "empty or unwritable diagnostic");
-  std::cout << "SNR04 diagnostic items=" << scene.items.size()
-            << " covered_pixels=" << covered << "\n";
-  return 0;
-} catch (const std::exception& error) {
-  std::cerr << error.what() << '\n';
-  return 1;
+  return covered;
 }

@@ -8,7 +8,8 @@ namespace {
 
 bool ObserveRenderTestOutput(
     const rex::system::NativeGuestOutputRenderContext& context) {
-  pinyon_shift::native_renderer::ObserveSnr03OutputFrame(context.frame_sequence);
+  pinyon_shift::native_renderer::ObserveSnr03OutputFrame(context.frame_sequence,
+                                                        context.device);
   return pinyon_shift::fh1_render_test::ObserveOutput(context);
 }
 
