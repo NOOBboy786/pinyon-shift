@@ -2893,12 +2893,14 @@ assert {r['caller_object'] - {0x823FA8DC: 1408, 0x82447C08: 1280,
 '@ | python -
 ```
 
-The broader strict census on this replay did **not** pass: backend frame 6001
-had 6,869 prepared draws, and the verifier reported root
-`(317456596, 321236480)` without a joined title packet. The earlier
-3,206-draw replay remains the last passing full-frame ledger. This new run
-qualifies only the bounded second-path call join; it cannot revise the
-frame-wide slice boundary or Gate A status.
+The initial broader extraction for this replay did **not** pass: it counted
+6,869 prepared draws and reported root `(317456596, 321236480)` without a
+title packet. That extraction mistakenly included the previous process's
+tail from rotated `runtime.*.log` files. It is invalid as a frame-wide
+ledger; the three bounded call records above remain from the stated replay.
+The session-bounded extraction and passing full census below supersede the
+missing-root claim. Gate A remains open for the separate full-slice coverage
+and resource/dependency requirements.
 
 ### Shared second-path parent is `CRealtimeSky`
 
@@ -3036,3 +3038,89 @@ assert word(0x8200265C + 52) == 0x82444E60
 
 This replay used a source-frame-only trace, so it establishes bounded
 title-packet provenance rather than a new passing full-frame backend census.
+
+### The final indexed2 family is a depth-tested world-space strip
+
+A bounded read at the `sub_8244E938` entry captured the first four 16-byte
+vertex records and the dynamic record count. In a normal-exit saved-race
+replay with seven captures, the count was three; the first three position
+triples were approximately `(-1606.47, 36.57, 2766.76)`,
+`(-1773.72, 40.05, 2609.40)` and `(-1806.81, 39.31, 2529.29)`. These are
+world-space coordinates, not a screen-space quad. The matching family in
+the passing backend ledger had one 128×128 texture fetch and depth control
+`0x08700262`: depth test enabled, depth write disabled, by ShiftGlue's
+`RB_DEPTHCONTROL` bit layout. The title source is `CPresentationView`, as
+proved above. This is a depth-tested, depth-read-only presentation
+contribution whose exact lower-level material and composition role remain
+open; it must not be silently folded into the native opaque slice.
+
+The single-record trace is
+`.local/native-renderer/snr01/indexed2-quad-run-a-filtered.log` (SHA-256
+`8C3ABAC2D9788ADC0505760550B600C05B991198FA2C245CA22878CE85FB23F4`).
+It used executable SHA-256
+`09BA6236BCE3BB4CBAB4D9D96521C18F8EBF7385BC7E411B915B1AFB90DD96AE`.
+Recheck the first three positions with:
+
+```powershell
+@'
+import json, struct
+from pathlib import Path
+line, = Path('.local/native-renderer/snr01/indexed2-quad-run-a-filtered.log').read_text().splitlines()
+row = json.loads(line[line.index('{'):])
+assert row['view_call'] == 8 and row['quad_count'] == 3
+xyz = [struct.unpack('<f', struct.pack('<I', word))[0]
+       for word in row['quad_words'][:12]]
+assert all(-2000 < xyz[i] < -1500 and 30 < xyz[i+1] < 50
+           and 2500 < xyz[i+2] < 2800 for i in (0, 4, 8))
+'@ | python -
+```
+
+### Process-bounded replay passes the full candidate boundary census
+
+Rotating `runtime` logs retained records from previous launches; file names
+alone are not a run boundary. `tools/extract-snr01-run-log.py` now uses the
+process-specific JSONL session's start/end times and restores chronological
+rotation order. The unit check includes an old-run tail in a rotated file.
+For the normal-exit saved-race replay starting at
+`20260923T052728Z-p30692.jsonl`, the extracted log contains only this
+process's SNR-01 and clear-producer records. It is
+`.local/native-renderer/snr01/clear-complete-run-a-session-filtered.log`
+(SHA-256
+`9BF6DC293F4D82B18064C6AC5FA3A9F82FCBC71BA0A9580CD17B089FFCC71953`)
+with ledger `.local/native-renderer/snr01/clear-complete-run-a-ledger.json`
+(SHA-256
+`B99E029223DAF72CD1D915760DC7592ED443045CF990E7ECBAFAF1C3D8DC4A03`).
+The build is the same SHA-256 as the quad replay above, and this run
+produced seven compatibility captures.
+
+The strict verifier accounted for **all 4,605 prepared draws and 131 root
+buffers** in backend frame 6001. Both candidate color groups contain 2,705
+draws: 1,960 view-8 scene-owner draws, 720 view-8 direct draws, one joined
+title clear, and 24 indirect draws with no attachment write. The 24
+direct draws without a direct-record, item/node, vegetation bound-record,
+scalar-object or particle-parent join again partition as nine plus nine
+`CRealtimeSky` draws, three race-line draws, and three view-owned indexed2
+draws. No candidate writer lacks a proven title view-8 packet, scene-owner
+join or clear. This is a reproducible **view/pass boundary census**, not
+proof of complete semantic mesh/material ownership or a suppression cut.
+
+Reproduce the extraction and strict check with:
+
+```powershell
+$stateRoot = Join-Path $env:LOCALAPPDATA 'PinyonShift\source\0.1.0\.local\preview'
+$session = Join-Path $stateRoot 'logs\20260923T052728Z-p30692.jsonl'
+python tools/extract-snr01-run-log.py $session `
+  .local/native-renderer/snr01/clear-complete-run-a-session-filtered.log
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/clear-complete-run-a-session-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw --require-dynamic-quad `
+  --title-image .local/ui-verify/default-image.bin `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr01/clear-complete-run-a-ledger.json
+```
+
+The candidate view/pass boundary is stronger now, but SNR-00/01 remain open:
+the complete selected-slice owner → geometry/material/lifetime joins,
+retained-pass consumers and full same-frame diagnostic are not yet proved.

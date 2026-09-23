@@ -2789,15 +2789,21 @@ void PinyonShiftObserveIndexed2Owner(PPCRegister& r12, PPCRegister& r3,
           memory->TranslateVirtual(r3.u32));
     }
   }
+  std::string quad_words;
+  for (uint32_t i = 0; i < 16; ++i) {
+    if (i) quad_words += ',';
+    quad_words += std::to_string(SnrM02ReadU32(r8.u32 + i * 4));
+  }
   REXGPU_INFO(
       "FH1 SNR01 indexed2 owner {{\"frame\":{},\"ordinal\":{},"
       "\"caller_lr\":{},\"receiver\":{},\"receiver_word0\":{},"
       "\"arg4\":{},\"arg5\":{},\"arg7\":{},\"arg8\":{},"
-      "\"arg8_word0\":{},"
+      "\"arg8_word0\":{},\"quad_count\":{},\"quad_words\":[{}],"
       "\"view_call\":{}}}",
       rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
       snr01_indexed2_owner_count, r12.u32, r3.u32, receiver_word0, r4.u32,
       r5.u32, r7.u32, r8.u32, SnrM02ReadU32(r8.u32),
+      SnrM02ReadU32(r8.u32 + 400), quad_words,
       snr01_view_scopes.empty() ? 0 : snr01_view_scopes.back().ordinal);
 }
 
