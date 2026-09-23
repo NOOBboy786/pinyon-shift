@@ -95,3 +95,43 @@ candidate pass duration. Continue the bounded same-frame diagnostic, then
 measure extraction/build/upload and the required color/depth bridge. Before
 SNR-10 suppression, replace these generous attachment estimates with a
 pass/resource cut whose producers, consumers and removable work are exact.
+
+## Exact view-8 ordering check
+
+The later [session-bounded SNR-01 replay](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#process-bounded-replay-passes-the-full-candidate-boundary-census)
+is a single backend frame, not another timing sample. Its strict ledger
+accounts for all 2,705 candidate-target draws in backend frame 6001. The
+title clear is ordinal 1634; the view-8 contribution spans ordinals
+1635–4314, followed by 24 no-attachment-write point draws. The two color
+words are used *within* this span, rather than forming two independently
+composable passes.
+
+| Joined source in this frame | Prepared draws | Color word(s) | Cut status |
+| --- | ---: | --- | --- |
+| View-8 scene lists with `CCarPresentation` / `CCarModel` owner | 636 / 431 | `000C0000` | Candidate, pending per-item geometry/material/lifetime |
+| View-8 scene lists with one untyped retained state owner | 893 | 865 on `00030000`, 28 on `000C0000` | Candidate boundary only; owner semantics open |
+| Character-manager direct records / procedural item-node packets | 261 / 170 | `000C0000` / `00030000` | Candidate, pending material/resource generations |
+| Other semantic / scalar direct packets | 147 / 121 | `000C0000` / both | Mixed, cannot assign wholly to native slice |
+| `CRealtimeSky` / `CStandardParticleRenderer` / race-line / view strip | 9 / 6 / 3 / 3 | Both / `000C0000` | Retain pending exact bridge and composition |
+| Joined title clear / no-write indirect point draws | 1 / 24 | `00030000` | Retain; points have guest-visible effects to check |
+
+The retained sky and presentation packets recur between candidate scene
+lists: sky appears at ordinals 2028–2032, 3502–3506 and 4242–4246;
+race-line at 2036, 3510 and 4250; particle at 2086–2087, 3741–3742 and
+4312–4313; and the depth-tested view strip at 2088, 3743 and 4314. Later
+scene-list and direct draws still write the same candidate attachments.
+A single end-of-frame overlay cannot be assumed to preserve this ordering.
+SNR-05 must prove the exact read/write/resolve dependencies and choose a
+handoff or native replacement at each required point before any suppression.
+
+The table is a draw provenance and ordering check, not a removable-cost
+estimate: it provides no GPU duration per semantic family and does not
+establish the untyped owner's material or the scalar packets' contents.
+All 893 untyped-owner draws share one captured owner pointer, first word
+`0xBF0C2E94`, and flush return site `0x824170BC`; resolving that state
+object and its selected list entries is the largest remaining owner join.
+Recompute it from
+`.local/native-renderer/snr01/clear-complete-run-a-ledger.json` using
+`classification`, `owner_first_word`, `title_packet_caller_lr`, `target`
+and `ordinal`; the ledger's log SHA-256 is
+`9BF6DC293F4D82B18064C6AC5FA3A9F82FCBC71BA0A9580CD17B089FFCC71953`.

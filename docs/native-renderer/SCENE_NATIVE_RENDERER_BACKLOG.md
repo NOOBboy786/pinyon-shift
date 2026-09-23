@@ -1,8 +1,8 @@
 # Scene-native renderer backlog
 
-Status: in progress; SNR-00/01 have pilot controls and exact local-car
-title-to-GPU joins, but the full main-view boundary is not proved. No
-scene-native implementation or performance result is claimed.
+Status: in progress; SNR-00/01 have pilot controls and a passing frame-wide
+view/pass boundary census. Exact full-slice mesh/material/lifetime ownership
+and retained-pass bridges remain open. No performance result is claimed.
 This is the primary execution roadmap for new renderer architecture. The
 [performance backlog](PERFORMANCE_BACKLOG.md) remains the record of previous
 experiments; the [resource migration checklist](NATIVE_RESOURCE_MIGRATION_CHECKLIST.md)
@@ -13,8 +13,8 @@ title-to-GPU join gaps.
 The [SNR-02 evidence log](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md) records
 the local-car resource census and seven selected title submodels.
 The [SNR-03 evidence log](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md) records
-bounded same-frame vegetation metadata, guarded vertex bytes and final raw
-draw-state ownership; full-slice coverage and native identity/depth remain open.
+bounded same-frame vegetation metadata, guarded vertex bytes and a private
+same-frame identity/depth diagnostic; full-slice coverage remains open.
 The [Gate A preflight](SCENE_NATIVE_GATE_A_PREFLIGHT_2026-09-22.md) bounds
 candidate-attachment GPU work and lists the retained resource dependencies;
 it does not qualify a suppression cut.
@@ -152,13 +152,15 @@ completed implementation tickets. Effort is relative scope, not a time estimate.
 ### Immediate priority and stop/go checks
 
 Treat **Gate A (SNR-00–04)** as the active execution phase. SNR-05–12 remain
-the roadmap, not simultaneous implementation work. The first priority is a
-whole-frame ownership and pass-boundary census, not further expansion of the
-already joined local-car path. In the frame-6000/6001 replay, 4,911 prepared
-draws include 2,884 on a candidate scene color/depth tuple split between two
-color words; the local-car join accounts for 268 draws on one of them. Target
-words alone do not prove view identity or separability. See the
-[SNR-00/01 evidence](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#full-backend-target-census-for-the-local-car-replay).
+the roadmap, not simultaneous implementation work. A process-bounded replay
+now attributes all 4,605 prepared draws and 131 root buffers in backend frame
+6001; both candidate color groups account for 2,705 draws, with no
+unattributed attachment writer. This proves the title view/pass boundary for
+that frame, not a frozen opaque-scene slice. Retained sky, particle, race-line
+and presentation draws interleave with candidate scene writes; other direct
+and scene-list families still lack exact geometry/material/lifetime ownership.
+See the [SNR-00/01 evidence](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#process-bounded-replay-passes-the-full-candidate-boundary-census)
+and [Gate A preflight](SCENE_NATIVE_GATE_A_PREFLIGHT_2026-09-22.md#exact-view-8-ordering-check).
 
 1. **Boundary first (SNR-00/01):** attribute both color groups and the
    remaining draws to title views, owners and pass order. Record every
