@@ -307,7 +307,9 @@ Current evidence: the standalone private diagnostic matches captured post-VS
 positions byte-for-byte for all 72 vegetation items in one same-run frame;
 189 captured variants match the fixture's vertex-count distribution. See the
 [SNR-03/04 evidence](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md#same-run-renderdoc-post-vs-comparison).
-Same-frame compatibility coverage/depth, a live callback, unload/reload and
+The captured 0–0.5 viewport depth range is now reproduced in the private
+raster, and one draw has a bounded sample-0 before/after depth comparison.
+Full compatibility coverage/depth parity, a live callback, unload/reload and
 complete main-view ownership remain open.
 
 **Done when / Gate A:** the selected main-view scene is complete and stable at

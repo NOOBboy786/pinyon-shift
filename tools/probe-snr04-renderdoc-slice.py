@@ -43,7 +43,8 @@ try:
         raise RuntimeError(str(result))
     actions = [a for a in replay.GetRootActions()
                if a.flags & rd.ActionFlags.Drawcall and a.numIndices in counts]
-    state.update(stage='search', candidate_actions=len(actions), matches=[])
+    state.update(stage='search', candidate_actions=len(actions), matches=[],
+                 depth_ranges={})
     save()
     for action in actions:
         replay.SetFrameEvent(action.eventId, True)
@@ -54,6 +55,9 @@ try:
             continue
         mesh = replay.GetPostVSData(0, 0, rd.MeshDataStage.VSOut)
         assert mesh.numIndices == action.numIndices and mesh.vertexByteStride >= 16
+        viewport = pipeline.GetViewport(0)
+        depth_range = f'{viewport.minDepth:g}/{viewport.maxDepth:g}'
+        state['depth_ranges'][depth_range] = state['depth_ranges'].get(depth_range, 0) + 1
         raw = bytes(replay.GetBufferData(mesh.vertexResourceId, mesh.vertexByteOffset, mesh.vertexByteSize))
         assert len(raw) >= (mesh.numIndices - 1) * mesh.vertexByteStride + 16
         positions = b''.join(raw[i * mesh.vertexByteStride:

@@ -430,7 +430,7 @@ int main(int argc, char** argv) try {
   commands->ClearRenderTargetView(rtv_handle, clear_color, 0, nullptr);
   commands->ClearDepthStencilView(dsv_handle, D3D12_CLEAR_FLAG_DEPTH, 0, 0, 0, nullptr);
   commands->OMSetRenderTargets(1, &rtv_handle, FALSE, &dsv_handle);
-  D3D12_VIEWPORT viewport{0, 0, float(width), float(height), 0, 1};
+  D3D12_VIEWPORT viewport{0, 0, float(width), float(height), 0, 0.5f};
   D3D12_RECT scissor{0, 0, LONG(width), LONG(height)};
   commands->RSSetViewports(1, &viewport);
   commands->RSSetScissorRects(1, &scissor);
@@ -576,6 +576,7 @@ int main(int argc, char** argv) try {
           << "\"fixture_sha256\":\"" << scene.fixture_sha256 << "\","
           << "\"vs_sha256\":\"" << expected_vs_sha << "\","
           << "\"depth_test\":\"greater_equal\","
+          << "\"depth_viewport\":[0,0.5],"
           << "\"width\":" << width << ",\"height\":" << height << ','
           << "\"items\":" << scene.items.size() << ','
           << "\"covered_pixels\":" << covered << ','

@@ -359,7 +359,8 @@ $toolchain = Enter-PinyonBuildEnvironment
 Two runs produced identical `identity.ppm` (SHA-256
 `25646AAA945A80247094F22A669AE0F491876929EE0BEEB7E59CC3CBBE545695`)
 and `depth.f32` (SHA-256
-`303BE45E177947B389844653FD01BE67155BD775AFB5704F8709FC1DF55E26B0`).
+`31C1085BDB52B6332D2AA41FEAC171711C0438B47459543DB6BC49F95AF53C23`
+after matching the captured 0–0.5 depth viewport).
 All 67 packets were drawn; 410,331 pixels have a packet identity and 39
 packets own at least one pixel. The remaining 28 may be offscreen or occluded;
 zero final pixels is not evidence of unsupported geometry. The local summary
@@ -398,7 +399,8 @@ the selected shader and fixture vertex counts, matching the fixture's
 variant-weighted count distribution. This proves the owned geometry, fetch,
 constants, and original viewport state produce the same VS positions for
 every selected item in the captured frame. It does not identify each of the
-other 117 viewport variants by packet identity.
+other 117 viewport variants by packet identity. All 189 selected draws use
+viewport depth range 0–0.5, which the private raster pass now matches.
 
 To reproduce locally, copy `config/render-tests/fh1-race-sustained.fh1test`
 to `.local/native-renderer/snr04/renderdoc-extended.fh1test`, change only
@@ -434,6 +436,33 @@ python tools/check-snr04-capture-slice.py `
 This post-VS result still does not test compatibility depth or visible
 coverage. The diagnostic uses unmasked identity pixels, and no native live
 callback or unload/reload path has been qualified. Gate A stays open.
+
+### Bounded compatibility depth readback
+
+At matched item 27, RenderDoc event 11206 writes a `D32S8_TYPELESS`, 4×MSAA
+depth target. Its backing texture is 1280×512 while the viewport is 1280×720
+with depth range 0–0.5. Sample 0 changes 27,072 texels between event 11205
+and 11206. The private diagnostic previously used depth range 0–1, making
+overlapping values roughly twice the capture's depth. After changing its
+range to 0–0.5, 18,123 changed sample-0 texels overlap the diagnostic's
+final item-27 identity. Their median absolute depth difference is
+`0.00000400096`; 11,439 are within `0.0001`, while the maximum difference
+is `0.01682`. This is **partial** evidence of depth mapping, not a pass:
+the private raster still lacks foliage alpha, preceding scene depth and 4×
+sample coverage. It cannot prove visible coverage or depth parity for this
+item, let alone the full selected slice.
+
+`tools/probe-snr04-renderdoc-depth.py` reproduces the before/after readback
+with `SNR04_CAPTURE` set to the frame-6000 RDC, `SNR04_EVENT=11206`, and
+`SNR04_OUTPUT` set to a local JSON path. It writes two local raw depth files
+beside the JSON. Recheck the bounded overlap with:
+
+```powershell
+python tools/check-snr04-depth-overlap.py `
+  .local/native-renderer/snr04/item27-tracked-depth.json `
+  .local/native-renderer/snr04/offline-same-run/identity.ppm `
+  .local/native-renderer/snr04/offline-same-run/depth.f32 --item 27
+```
 
 ## Title camera to selected draw-state join
 

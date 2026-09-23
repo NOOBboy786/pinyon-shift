@@ -14,6 +14,7 @@ def check(fixture_path, positions_path, probe_path):
     positions = positions_path.read_bytes()
     probe = json.loads(probe_path.read_text(encoding="utf-8"))
     assert fixture[:8] == b"SNR03F1\0" and probe["stage"] == "done"
+    assert probe["depth_ranges"] == {"0/0.5": len(probe["matches"])}
     item_count = struct.unpack_from("<I", fixture, 24)[0]
     assert 0 < item_count <= 512
     offset = 156
