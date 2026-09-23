@@ -127,11 +127,8 @@ function ConvertTo-PinyonCommandPath {
     param([AllowEmptyString()] [string]$PathValue)
 
     $entries = @($PathValue -split ';' | ForEach-Object {
-        $entry = $_.Trim()
-        if ($entry.Length -ge 2 -and $entry.StartsWith('"') -and $entry.EndsWith('"')) {
-            $entry = $entry.Substring(1, $entry.Length - 2).Trim()
-        }
-        if (-not [string]::IsNullOrWhiteSpace($entry)) { $entry }
+        $entry = $_.Trim().Trim('"').Trim()
+        if (-not [string]::IsNullOrWhiteSpace($entry) -and $entry -notmatch '&') { $entry }
     })
     $entries -join ';'
 }

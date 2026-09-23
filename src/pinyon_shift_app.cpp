@@ -1,7 +1,9 @@
 #include "pinyon_shift_app.h"
 #include "pinyon_shift_init.h"
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <Windows.h>
 #include <dxgi.h>
 
