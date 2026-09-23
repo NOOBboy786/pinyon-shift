@@ -172,11 +172,12 @@ and [Gate A preflight](SCENE_NATIVE_GATE_A_PREFLIGHT_2026-09-22.md#exact-view-8-
    hypothesis. Candidate attachments also carry proven
    `CParticleSystemNew`/`CStandardParticleRenderer` draws; retain that path
    across the cut (see SNR-00/01 evidence) rather than counting it as native
-   opaque-scene coverage. The latest disjoint partition isolates 15
-   animated-scene scalar draws without per-item ownership and 36 car-
-   presentation scalar draws whose scene role remains undecided; six other
-   scalar draws have a retained skid-presentation path. Resolve the scene
-   membership gaps before freezing the slice.
+   opaque-scene coverage. The latest disjoint partition joins 15
+   animated-scene scalar draws to selected bucket objects and child contexts,
+   but their geometry/material/generation fields remain unknown. Another 36
+   car-presentation scalar draws still have an undecided scene role; six
+   scalar draws have a retained skid-presentation path. Resolve scene
+   membership and resource ownership before freezing the slice.
 2. **Diagnostic vertical slice (SNR-02–04):** recover the minimum authoritative
    geometry, transform and lifetime fields for one bounded view contribution;
    publish and render same-frame identity/depth beside untouched compatibility

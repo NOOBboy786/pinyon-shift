@@ -19,6 +19,8 @@ class FrameWideCensusTest(unittest.TestCase):
         events = (
             ("view begin", {"frame": 10, "call": 8, "view": 123}),
             ("direct packet", {"frame": 10, "header_physical": 4}),
+            ("second draw call", {"frame": 10, "first_direct": 1,
+                                  "last_direct": 1}),
             ("view end", {"frame": 10, "call": 8, "view": 123}),
             ("direct packet", {"frame": 10, "header_physical": 8}),
         )
@@ -27,8 +29,10 @@ class FrameWideCensusTest(unittest.TestCase):
             path.write_text("".join(
                 f"[t7] FH1 SNR01 {kind} {json.dumps(row)}\n"
                 for kind, row in events), encoding="utf-8")
-            rows = READ_RECORDS(path, {10, 11}, 11)["direct"]
+            records = READ_RECORDS(path, {10, 11}, 11)
+            rows = records["direct"]
         self.assertEqual([row["title_view_call"] for row in rows], [8, 0])
+        self.assertEqual(records["second_draw"][0]["title_thread"], 7)
 
     def test_scene_owner_direct_root_and_unmatched_child(self):
         records = {key: [] for key in SCRIPT["PREFIXES"]}

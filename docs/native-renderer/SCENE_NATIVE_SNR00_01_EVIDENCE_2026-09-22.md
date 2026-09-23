@@ -3510,3 +3510,50 @@ counts = collections.Counter(r['title_scalar_caller_lr'] for r in rows
 assert (counts[0x82415A28], counts[0x823FDDFC], counts[0x823FDE2C]) == (15, 3, 3)
 '@ | python -
 ```
+
+### Animated scalar packets join selected bucket objects and child contexts
+
+The existing title trace already brackets `sub_82414A00`'s direct packets
+inside `CProceduralAnimatedScene` slot-41 `second draw call` scopes. The
+frame-wide verifier now keys those scopes by source frame, title thread and
+direct-packet ordinal, then joins their bucket entry to the selected
+`second track dispatch`. It requires both targets to be `0x823FDE50`
+and both device arguments to equal the scalar-wrapper input. The verified
+title image names slot 41 of vtable `0x820029FC` as
+`proceduralGeometry::CProceduralAnimatedScene` with that target.
+
+In the final replay, all 15 candidate-target animated scalar callbacks join
+11 exact title packets, six selected dispatch objects and 11 child contexts
+across six bucket entries. Repeated backend callbacks keep the same packet,
+bucket, dispatch object and child context. The independent 4,605-draw
+clear-complete replay joins all 43 candidate animated callbacks through 39
+title packets and four bucket entries. Neither replay needs an approximate
+spatial or shader match. This establishes the selected animated item/packet
+ownership edge, but the child context's mesh, material, transform and
+generation fields are not yet decoded; those still block scene admission.
+
+The final ledger is
+`.local/native-renderer/snr01/state-resource-final-run-a-animated-joined-ledger.json`
+(SHA-256 `15B465656A52D0CEEE0B13E0D7B8C83A06DE116DA4875111BA86D5F479A491D1`).
+Rebuild it with the same strict command above, adding
+`--require-animated-scalar` and changing `--output`, then check the exact
+contribution:
+
+```powershell
+@'
+import json
+from pathlib import Path
+rows = json.loads(Path(
+    '.local/native-renderer/snr01/state-resource-final-run-a-animated-joined-ledger.json'
+).read_text(encoding='utf8'))['draws']
+animated = [r for r in rows if r['target'].startswith('14020500/')
+            and r['title_scalar_caller_lr'] == 0x82415A28]
+assert len(animated) == 15
+assert len({r['title_packet_ordinal'] for r in animated}) == 11
+assert len({r['title_scalar_bucket_entry'] for r in animated}) == 6
+assert len({r['title_scalar_dispatch_object'] for r in animated}) == 6
+assert len({r['title_scalar_child_context'] for r in animated}) == 11
+assert all(r['title_scalar_dispatch_object'] and
+           r['title_scalar_child_context'] for r in animated)
+'@ | python -
+```

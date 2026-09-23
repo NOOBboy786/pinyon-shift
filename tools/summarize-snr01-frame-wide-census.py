@@ -23,6 +23,7 @@ PREFIXES = {
     "item": "FH1 SNR01 procedural item ",
     "second_path": "FH1 SNR01 second path ",
     "second_draw": "FH1 SNR01 second draw call ",
+    "second_dispatch": "FH1 SNR01 second track dispatch ",
     "scalar": "FH1 SNR01 scalar draw ",
     "dynamic_quad": "FH1 SNR01 dynamic quad draw ",
     "dynamic_quad_entry": "FH1 SNR01 dynamic quad entry ",
@@ -55,11 +56,13 @@ def read_records(path, frames, backend_frame):
                     if row["frame"] in (frames if key not in ("execution", "draw")
                                         else {backend_frame}):
                         if key in ("view_begin", "view_end", "direct", "semantic", "scalar",
+                                   "second_draw",
                                    "dynamic_quad", "dynamic_quad_entry",
                                    "dynamic_quad_parent"):
                             thread = int(re.search(r"\[t(\d+)\]", line)[1])
-                            if key in ("direct", "semantic", "scalar", "dynamic_quad",
-                                       "dynamic_quad_entry", "dynamic_quad_parent"):
+                            if key in ("direct", "semantic", "scalar", "second_draw",
+                                       "dynamic_quad", "dynamic_quad_entry",
+                                       "dynamic_quad_parent"):
                                 row["title_thread"] = thread
                             scope = view_scopes[thread]
                             if key == "view_begin":
@@ -115,11 +118,19 @@ def summarize(records, frames, backend_frame):
             assert key not in second_paths, f"overlapping second paths: {key}"
             second_paths[key] = scope
     second_draws = {}
+    second_direct_draws = {}
     for scope in records["second_draw"]:
         for ordinal in range(scope["first_semantic"], scope["last_semantic"] + 1):
             key = (scope["frame"], ordinal)
             assert key not in second_draws, f"overlapping second draws: {key}"
             second_draws[key] = scope
+        for ordinal in range(scope["first_direct"], scope["last_direct"] + 1):
+            key = (scope["frame"], scope["title_thread"], ordinal)
+            assert key not in second_direct_draws, f"overlapping second direct draws: {key}"
+            second_direct_draws[key] = scope
+    second_dispatches = {(r["frame"], r["bucket_entry"]): r
+                         for r in records["second_dispatch"]}
+    assert len(second_dispatches) == len(records["second_dispatch"])
     scalar_draws = {}
     for scope in records["scalar"]:
         for ordinal in range(scope["first_direct"], scope["last_direct"] + 1):
@@ -228,6 +239,8 @@ def summarize(records, frames, backend_frame):
         second_path = None
         second_draw = None
         scalar_draw = None
+        scalar_second_draw = None
+        scalar_dispatch = None
         dynamic_quad = None
         dynamic_quad_parent = None
         if title_packet and title_packet[0] == "semantic":
@@ -295,6 +308,18 @@ def summarize(records, frames, backend_frame):
                 assert scalar_draw, f"missing scalar draw: {draw['ordinal']}"
             if scalar_draw:
                 assert scalar_draw["view_call"] == title_row["title_view_call"]
+                if (scalar_draw["caller_lr"] == 0x82415A28 and
+                        title_row["title_view_call"] == 8 and second_dispatches):
+                    scalar_second_draw = second_direct_draws.get(
+                        (title_row["frame"], title_row["title_thread"],
+                         title_row["ordinal"]))
+                    assert scalar_second_draw, f"missing animated draw scope: {draw['ordinal']}"
+                    scalar_dispatch = second_dispatches.get(
+                        (title_row["frame"], scalar_second_draw["bucket_entry"]))
+                    assert scalar_dispatch, f"missing animated dispatch: {draw['ordinal']}"
+                    assert (scalar_second_draw["target"] == scalar_dispatch["target"]
+                            == 0x823FDE50)
+                    assert scalar_second_draw["arg4"] == scalar_dispatch["arg4"] == scalar_draw["object"]
             matches = [row for row in families[title_row["frame"]]
                        if row["first_direct"] <= title_row["ordinal"]
                        <= row["last_direct"]]
@@ -381,6 +406,10 @@ def summarize(records, frames, backend_frame):
             "title_scalar_outer_first_word": scalar_draw["outer_first_word"] if scalar_draw else None,
             "title_scalar_selector": scalar_draw["selector"] if scalar_draw else None,
             "title_scalar_input_count": scalar_draw["input_count"] if scalar_draw else None,
+            "title_scalar_bucket_entry": scalar_second_draw["bucket_entry"] if scalar_second_draw else None,
+            "title_scalar_dispatch_object": scalar_dispatch["object"] if scalar_dispatch else None,
+            "title_scalar_child_context": scalar_second_draw["context"] if scalar_second_draw else None,
+            "title_scalar_child_arg5": scalar_second_draw["arg5"] if scalar_second_draw else None,
             "title_dynamic_quad_object": dynamic_quad["object"] if dynamic_quad else None,
             "title_dynamic_quad_records": dynamic_quad["records"] if dynamic_quad else None,
             "title_dynamic_quad_output": dynamic_quad["output"] if dynamic_quad else None,
@@ -454,6 +483,7 @@ def main():
     parser.add_argument("--require-semantic-item-node", action="store_true")
     parser.add_argument("--require-second-path", action="store_true")
     parser.add_argument("--require-scalar-draw", action="store_true")
+    parser.add_argument("--require-animated-scalar", action="store_true")
     parser.add_argument("--require-dynamic-quad", action="store_true")
     parser.add_argument("--title-image", type=Path)
     parser.add_argument("--require-candidate-boundary", action="store_true")
@@ -471,6 +501,9 @@ def main():
         assert records["second_path"], "no second-path records"
     if args.require_scalar_draw:
         assert records["scalar"], "no bounded scalar-draw scopes"
+    if args.require_animated_scalar:
+        assert records["scalar"] and records["second_draw"] and records["second_dispatch"], (
+            "no animated scalar dispatch scopes")
     if args.require_dynamic_quad:
         assert (records["dynamic_quad"] and records["dynamic_quad_entry"]
                 and records["dynamic_quad_parent"]), (
@@ -483,6 +516,14 @@ def main():
         assert renderer_name == ".?AVCStandardParticleRenderer@@"
         assert word(0x82236214 + 3 * 4) == 0x82D06C28
     result = summarize(records, frames, args.source_frame + 1)
+    if args.require_animated_scalar:
+        animated = [r for r in result["draws"]
+                    if r["target"].startswith("14020500/")
+                    and r["title_scalar_caller_lr"] == 0x82415A28]
+        assert animated and all(r["title_scalar_bucket_entry"] is not None
+                                and r["title_scalar_dispatch_object"]
+                                and r["title_scalar_child_context"]
+                                for r in animated), "animated scalar draw lacks selected item"
     if args.require_dynamic_quad:
         scoped = {(row["frame"], row["title_thread"], ordinal)
                   for row in records["dynamic_quad"]
