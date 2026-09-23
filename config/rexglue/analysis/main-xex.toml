@@ -216,6 +216,13 @@ address = 0x8243BEB4
 name = "PinyonShiftObserveSecondTrackDispatch"
 registers = ["r31", "r11", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 
+# The CProceduralModels method has resolved its selected resource and called
+# slot 8. Observe its identity before the later shared scene-list flush.
+[[midasm_hook]]
+address = 0x82417F88
+name = "PinyonShiftObserveSnr01ProceduralModelResource"
+registers = ["r3", "r14", "r20", "r30"]
+
 [[midasm_hook]]
 address = 0x82413A80
 name = "PinyonShiftObserveSecondDrawBegin"

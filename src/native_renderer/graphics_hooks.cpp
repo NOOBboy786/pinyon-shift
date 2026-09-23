@@ -2299,6 +2299,24 @@ void PinyonShiftObserveSecondTrackDispatch(
   }
 }
 
+void PinyonShiftObserveSnr01ProceduralModelResource(
+    PPCRegister& r3, PPCRegister& r14, PPCRegister& r20, PPCRegister& r30) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      !Snr01TraceCurrentFrame() || !r30.u32) {
+    return;
+  }
+  const uint32_t vtable = SnrM02ReadU32(r30.u32);
+  REXGPU_INFO(
+      "FH1 SNR01 procedural model resource {{\"frame\":{},"
+      "\"manager\":{},\"state_base\":{},\"resource\":{},"
+      "\"vtable\":{},\"slot8\":{},\"ready\":{},"
+      "\"field4\":{},\"field16\":{}}}",
+      rex::perf::GetTotalCounter(rex::perf::CounterId::kSourceFrameCount),
+      r14.u32, r20.u32, r30.u32, vtable,
+      vtable ? SnrM02ReadU32(vtable + 32) : 0, r3.u32,
+      SnrM02ReadU32(r30.u32 + 4), SnrM02ReadU32(r30.u32 + 16));
+}
+
 void PinyonShiftObserveScalarDrawBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r7,
     PPCRegister& r29) {

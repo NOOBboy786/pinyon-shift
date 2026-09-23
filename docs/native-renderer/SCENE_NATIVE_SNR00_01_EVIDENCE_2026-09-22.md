@@ -3179,3 +3179,64 @@ assert {row['target_physical'] for row in packets} == {
     row['execution_command_buffer'] for row in draws}
 '@ | python -
 ```
+
+### Selected track-model instances reach three bounded scene lists
+
+A default-off read-only hook after the `CProceduralModels` method's
+slot-8 resource call captures the selected object and its return state.
+The captured vtable `0x820019CC` resolves in the verified title image to
+`Presentation_Unified::CTrackRenderModelInstance_Unified`; its slot 8 is
+`sub_8243BC80`. The hook remains inactive without the SNR-01 frame probe.
+
+The saved sustained-race replay with the GPU corpus exited normally and
+produced seven compatibility captures. Executable SHA-256 was
+`18659B4328BF52CAD426971990DC483C3E73E7B3FDDB9A6F9952021317A1A781`.
+The process session was `20260923T055609Z-p35848.jsonl` and its extracted
+log is `.local/native-renderer/snr01/procedural-resource-corpus-run-a-filtered.log`
+(SHA-256 `0B0F8B1C7D83AFB31CB717DB8D3174D17A52757C34CE0021A3CD14EF1CF66C8D`).
+The strict frame-wide ledger is
+`.local/native-renderer/snr01/procedural-resource-corpus-run-a-ledger.json`
+(SHA-256 `EEAC4219B6F989CAC51BBAF607A0CF6F336589C5DAC293A08A44ED4175AECCE2`).
+It accounts for 3,778 prepared draws, 127 roots and both candidate color
+groups without an unattributed attachment writer.
+
+In source frame 6000, 76 `CProceduralModels` dispatches reached five
+ready resource calls on three distinct track-model-instance objects.
+Within the exact title-thread dispatch scopes, each selected resource
+preceded its own scene-list packets. Three view-8 lists received 49 title
+packets; their child-buffer identities joined **147 candidate prepared
+draws**, all on color word `00030000`:
+
+| Resource pointer | List object | Prepared draws |
+| --- | --- | ---: |
+| `AB1C06F8` | `AC04FA3C` | 36 |
+| `AB1C070C` | `AC04FE74` | 99 |
+| `AB1C0BE4` | `AC0653BC` | 12 |
+
+The shared procedural state produced 652 candidate prepared draws in this
+replay, leaving **505 without this per-resource join**. These counts are
+from a different replay than the earlier 893-draw state sample; visibility
+and traffic vary. The resource-to-list ordering does not yet establish
+each resource's mesh, material, transform or allocation generation.
+The other state users and producer/consumer bridges remain open.
+
+Reproduce the same-run joins and strict boundary check with:
+
+```powershell
+$stateRoot = Join-Path $env:LOCALAPPDATA 'PinyonShift\source\0.1.0\.local\preview'
+$session = Join-Path $stateRoot 'logs\20260923T055609Z-p35848.jsonl'
+python tools/extract-snr01-run-log.py $session `
+  .local/native-renderer/snr01/procedural-resource-corpus-run-a-filtered.log
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/procedural-resource-corpus-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw --require-dynamic-quad `
+  --title-image .local/ui-verify/default-image.bin `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr01/procedural-resource-corpus-run-a-ledger.json
+python tools/verify-snr01-model-resource-join.py `
+  .local/native-renderer/snr01/procedural-resource-corpus-run-a-filtered.log `
+  .local/native-renderer/snr01/procedural-resource-corpus-run-a-ledger.json `
+  --source-frame 6000
+```

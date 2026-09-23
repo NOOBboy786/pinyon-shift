@@ -133,6 +133,10 @@ return site `0x824170BC`. Its address equals the argument to the
 frame. The 95 distinct list objects under that state still need exact
 model, geometry and material joins; see the
 [state provenance](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#shared-procedural-state-behind-the-largest-view-8-scene-list-family).
+In a later strict replay, three `CTrackRenderModelInstance_Unified`
+resources join three lists and 147 of 652 candidate prepared draws under
+that state. The other 505 draws still need per-resource ownership;
+see the [bounded resource join](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#selected-track-model-instances-reach-three-bounded-scene-lists).
 Recompute it from
 `.local/native-renderer/snr01/clear-complete-run-a-ledger.json` using
 `classification`, `owner_first_word`, `title_packet_caller_lr`, `target`
