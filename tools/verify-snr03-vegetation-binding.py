@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 
-def verify(path, frame, require_camera_match=False):
+def verify(path, frame, require_camera_match=False, require_final_state=False):
     lines = path.read_text(encoding="utf-8").splitlines()
     items = [json.loads(line.split("FH1 SNR03 item ", 1)[1])
              for line in lines if "FH1 SNR03 item {" in line]
@@ -18,6 +18,19 @@ def verify(path, frame, require_camera_match=False):
                 for line in lines if "FH1 scene binding {" in line]
     selected = [row for row in bindings if row["packet_physical"] in by_packet]
     assert selected and {row["packet_physical"] for row in selected} == set(by_packet)
+    final_by_key = {}
+    if require_final_state:
+        final = [json.loads(line.split("FH1 SNR03 final draw state ", 1)[1])
+                 for line in lines if "FH1 SNR03 final draw state {" in line]
+        final_by_key = {(row["packet"], row["dynamic"]): row for row in final}
+        assert len(final_by_key) == len(final)
+        assert {packet for packet, _ in final_by_key} == set(by_packet)
+        assert set(final_by_key) == {
+            (row["packet_physical"], row["dynamic"]) for row in selected}
+        assert all(row["frame"] == frame + 1 for row in final)
+        assert all(all(len(row[name]) == 4 for name in (
+            "system0", "system1", "system8", "system9", "fetch47"))
+                   for row in final)
     camera = None
     if require_camera_match:
         camera_rows = [json.loads(line.split("FH1 SNR03 camera row ", 1)[1])
@@ -45,6 +58,9 @@ def verify(path, frame, require_camera_match=False):
         assert len(fetch) == 3 and fetch[:2] == ["95", "4"]
         assert int(fetch[2][:8], 16) & 0x1FFFFFFC == item["vertex_address"] & 0x1FFFFFFC
         assert int(fetch[2][8:], 16) & 0x03FFFFFC == item["vertex_size"] & 0x03FFFFFC
+        if final_by_key:
+            assert final_by_key[(row["packet_physical"], row["dynamic"])]["fetch47"][2:] == [
+                int(fetch[2][:8], 16), int(fetch[2][8:], 16)]
         assert row["index_count"] * 4 == (item["vertex_size"] & 0x03FFFFFC)
         constants = {int(key): value for part in row["constants"].split(";")
                      if ":" in part and part[0].isdigit()
@@ -78,6 +94,9 @@ def verify(path, frame, require_camera_match=False):
     assert f"output_frame={frame + 1} source_frame={frame}" in consumed[0]
     assert f"items={len(items)}" in consumed[0]
     assert "draw_constants=24" in consumed[0]
+    if require_final_state:
+        assert "system_words=40 fetch_words=4" in consumed[0]
+        assert f"final_variants={len(final_by_key)}" in consumed[0]
     return {
         "source_frame": frame,
         "selected_packets": len(items),
@@ -87,6 +106,7 @@ def verify(path, frame, require_camera_match=False):
         "repeat_distribution": dict(sorted(collections.Counter(repeats.values()).items())),
         "unselected_probe_bindings": len(bindings) - len(selected),
         "camera144_matches_selected_bindings": len(selected) if camera else None,
+        "final_draw_states": len(final_by_key) if require_final_state else None,
     }
 
 
@@ -95,9 +115,11 @@ def main():
     parser.add_argument("log", type=Path)
     parser.add_argument("--source-frame", type=int, default=6000)
     parser.add_argument("--require-camera-match", action="store_true")
+    parser.add_argument("--require-final-state", action="store_true")
     args = parser.parse_args()
     print(json.dumps(verify(args.log, args.source_frame,
-                            args.require_camera_match), sort_keys=True))
+                            args.require_camera_match,
+                            args.require_final_state), sort_keys=True))
 
 
 if __name__ == "__main__":

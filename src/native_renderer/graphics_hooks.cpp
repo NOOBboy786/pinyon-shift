@@ -274,11 +274,17 @@ struct Snr03SceneSnapshot {
   std::array<uint32_t, 16> camera144;
   std::vector<Snr03VegetationItem> items;
 };
+struct Snr03FinalState {
+  std::array<uint32_t, 40> system_constants;
+  std::array<uint32_t, 4> fetch_47;
+  bool operator==(const Snr03FinalState&) const = default;
+};
 struct Snr03PayloadState {
   struct Draw {
     std::vector<uint8_t> vertex_bytes;
     std::array<std::array<uint32_t, 4>, 24> vertex_constants;
     uint32_t guest_vertex_count;
+    std::map<uint64_t, Snr03FinalState> final_states;
   };
   std::map<uint32_t, Draw> by_packet;
   size_t bytes = 0;
@@ -289,6 +295,7 @@ struct Snr03OwnedItem {
   std::vector<uint8_t> vertex_bytes;
   std::array<std::array<uint32_t, 4>, 24> vertex_constants;
   uint32_t guest_vertex_count;
+  std::map<uint64_t, Snr03FinalState> final_states;
 };
 struct Snr03OwnedScene {
   std::shared_ptr<const Snr03SceneSnapshot> title;
@@ -756,7 +763,8 @@ void ObserveSnr03VertexPayload(
   }
   const uint32_t packet = item_it->packet_physical;
   const auto* begin = fetch[0].cpu_snapshot_bytes;
-  Snr03PayloadState::Draw draw{{}, {}, observation.index_count};
+  Snr03PayloadState::Draw draw{};
+  draw.guest_vertex_count = observation.index_count;
   for (size_t i = 0; i < kVertexConstants.size(); ++i) {
     const auto* words = observation.vertex_float_constant_words +
                         kVertexConstants[i] * 4;
@@ -781,6 +789,66 @@ void ObserveSnr03VertexPayload(
   payload.bytes += fetch[0].length;
   draw.vertex_bytes.assign(begin, begin + fetch[0].length);
   payload.by_packet.emplace(packet, std::move(draw));
+}
+
+void ObserveSnr03FinalDrawState(
+    const rex::system::GraphicsFinalDrawStateObservation& observation) {
+  const int32_t target = Snr03TargetFrame();
+  if (target <= 0 || observation.frame_sequence != uint64_t(target) + 1) {
+    return;
+  }
+  std::lock_guard lock(snr03_scene_mutex);
+  const auto scene = snr03_scenes.find(uint64_t(target));
+  if (scene == snr03_scenes.end()) {
+    return;
+  }
+  const auto item = std::find_if(scene->second->items.begin(),
+                                 scene->second->items.end(), [&](const auto& value) {
+    return value.packet_physical == observation.draw_packet_physical_address;
+  });
+  if (item == scene->second->items.end()) {
+    return;
+  }
+  auto& payload = snr03_payloads[uint64_t(target)];
+  const auto draw = payload.by_packet.find(item->packet_physical);
+  if (draw == payload.by_packet.end() || !observation.system_constant_words ||
+      observation.system_constant_word_count < 40 ||
+      !observation.fetch_47_words) {
+    payload.rejected = true;
+    return;
+  }
+  Snr03FinalState state{};
+  auto& system = state.system_constants;
+  auto& fetch = state.fetch_47;
+  std::copy_n(observation.system_constant_words, system.size(), system.begin());
+  std::copy_n(observation.fetch_47_words, fetch.size(), fetch.begin());
+  auto& variants = draw->second.final_states;
+  const auto existing = variants.find(observation.dynamic_state);
+  if (existing != variants.end()) {
+    if (existing->second != state) {
+      payload.rejected = true;
+      REXGPU_INFO("FH1 SNR03 final state mismatch packet={} dynamic={:016X}",
+                  item->packet_physical, observation.dynamic_state);
+    }
+    return;
+  }
+  if (variants.size() >= 4) {
+    payload.rejected = true;
+    return;
+  }
+  variants.emplace(observation.dynamic_state, state);
+  REXGPU_INFO("FH1 SNR03 final draw state {{\"frame\":{},\"packet\":{},"
+              "\"dynamic\":\"{:016X}\","
+              "\"system0\":[{},{},{},{}],\"system1\":[{},{},{},{}],"
+              "\"system8\":[{},{},{},{}],\"system9\":[{},{},{},{}],"
+              "\"fetch47\":[{},{},{},{}]}}",
+              observation.frame_sequence, item->packet_physical,
+              observation.dynamic_state,
+              system[0], system[1], system[2], system[3],
+              system[4], system[5], system[6], system[7],
+              system[32], system[33], system[34], system[35],
+              system[36], system[37], system[38], system[39],
+              fetch[0], fetch[1], fetch[2], fetch[3]);
 }
 
 void ObservePreparedDraw(
@@ -1002,6 +1070,8 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
               Snr03ProbeEnabled()
           ? &ObservePreparedDraw
           : nullptr);
+  graphics_system->SetFinalDrawStateObserver(
+      Snr03ProbeEnabled() ? &ObserveSnr03FinalDrawState : nullptr);
   graphics_system->SetIndirectBufferObserver(
       REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0
           ? &ObserveIndirectBuffer
@@ -1015,6 +1085,7 @@ void InstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system,
 void UninstallGraphicsCensus(rex::system::IGraphicsSystem* graphics_system) {
   if (graphics_system) {
     graphics_system->SetPreparedDrawObserver(nullptr);
+    graphics_system->SetFinalDrawStateObserver(nullptr);
     graphics_system->SetIndirectBufferObserver(nullptr);
     graphics_system->SetCopyObserver(nullptr);
   }
@@ -1076,11 +1147,17 @@ void ObserveSnr03OutputFrame(uint64_t output_frame) {
   Snr03OwnedScene owned_builder{scene, {}};
   owned_builder.items.reserve(scene->items.size());
   uint64_t fingerprint = Snr03Fingerprint(*scene);
+  size_t final_variants = 0;
   for (const auto& item : scene->items) {
     auto it = payload.by_packet.find(item.packet_physical);
     if (it == payload.by_packet.end()) {
       REXGPU_INFO("FH1 SNR03 geometry rejected output_frame={} "
                   "missing_packet={}", output_frame, item.packet_physical);
+      return;
+    }
+    if (it->second.final_states.empty()) {
+      REXGPU_INFO("FH1 SNR03 geometry rejected output_frame={} "
+                  "missing_final_state={}", output_frame, item.packet_physical);
       return;
     }
     const uint64_t hash = Snr03HashBytes(it->second.vertex_bytes);
@@ -1091,16 +1168,28 @@ void ObserveSnr03OutputFrame(uint64_t output_frame) {
       }
     }
     fingerprint = (fingerprint ^ it->second.guest_vertex_count) * 1099511628211ull;
+    final_variants += it->second.final_states.size();
+    for (const auto& [dynamic, state] : it->second.final_states) {
+      fingerprint = (fingerprint ^ dynamic) * 1099511628211ull;
+      for (const uint32_t word : state.system_constants) {
+        fingerprint = (fingerprint ^ word) * 1099511628211ull;
+      }
+      for (const uint32_t word : state.fetch_47) {
+        fingerprint = (fingerprint ^ word) * 1099511628211ull;
+      }
+    }
     owned_builder.items.push_back({item, std::move(it->second.vertex_bytes),
                                    it->second.vertex_constants,
-                                   it->second.guest_vertex_count});
+                                   it->second.guest_vertex_count,
+                                   std::move(it->second.final_states)});
   }
   std::shared_ptr<const Snr03OwnedScene> owned =
       std::make_shared<Snr03OwnedScene>(std::move(owned_builder));
   REXGPU_INFO("FH1 SNR03 geometry consumed output_frame={} source_frame={} "
-              "items={} bytes={} draw_constants=24 fingerprint={}", output_frame,
+              "items={} bytes={} draw_constants=24 system_words=40 "
+              "fetch_words=4 final_variants={} fingerprint={}", output_frame,
               owned->title->source_frame, owned->items.size(), payload.bytes,
-              fingerprint);
+              final_variants, fingerprint);
 }
 
 }  // namespace pinyon_shift::native_renderer

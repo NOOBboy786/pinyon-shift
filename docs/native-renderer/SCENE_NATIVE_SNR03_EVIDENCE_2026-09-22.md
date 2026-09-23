@@ -1,6 +1,6 @@
 # Scene-native SNR-03 bounded publication evidence
 
-Status: **metadata and guarded vertex bytes published for one view-8
+Status: **metadata, guarded vertex bytes and final draw-state variants published for one view-8
 vegetation contribution; SNR-03 and Gate A remain open.** This is not a final
 transform/material scene, native rendering or a performance result.
 Compatibility output remains the default.
@@ -182,6 +182,60 @@ check, not an image-equivalence or performance result.
 This extends one bounded immutable contribution; it does not close SNR-03 or
 SNR-04. Semantic transforms, the rest of the selected main-view scene,
 native identity/depth output and full-resolution comparisons remain open.
+
+## Final system state belongs to a dynamic draw variant
+
+The prepared-draw callback precedes `UpdateSystemConstantValues`, so its
+vertex constant copy cannot own the SDK's final clip/viewport state. A second
+read-only callback now runs immediately after that update. For the selected
+vegetation packets it copies the first 40 system words and the four fetch-47
+words into the bounded output-frame scene. The words are borrowed only during
+the callback; the scene holds its own copies and includes them in its
+fingerprint.
+
+The first replay rejected the scene: repeated executions of the same packet
+changed system word 33 (`ndc_scale.y`) from `1.0` to about `1.552`. A follow-up
+replay showed 60 selected packets with two distinct prepared-draw dynamic
+states and 12 with one. The change is a real viewport variant, not evidence
+that the packet's vertex bytes changed. Treating a packet as one final draw
+state would discard authoritative execution state.
+
+The scene therefore owns up to four final states per packet, keyed by the
+prepared draw's dynamic-state hash. Repeated executions under the same key
+must have identical system and fetch words; an extra variant, changed bytes,
+missing state or missing packet rejects the scene. The saved sustained-race
+replay exited normally with seven compatibility captures. Source frame 6000
+published 67 selected packet identities; backend frame 6001 produced 142
+distinct `(packet, dynamic state)` snapshots and consumed an immutable scene
+with 376,272 unique vertex bytes. The final replay's packet repeat
+distribution was 22 once, 15 twice and 30 three times. The verifier joined
+**all 142** variants to the 142 distinct prepared bindings, checked fetch
+words against the binding dump and exact title camera words against every
+selected execution. No
+geometry rejection or final-state mismatch was logged.
+
+With the probe off, this same build completed the saved route at frame 6920,
+exited normally and produced seven compatibility captures. This is a smoke
+check, not image equivalence or a performance result.
+
+Executable SHA-256: `B90539CFD9569485587733D341A3E0E9EC1D98C64A59A826F7F969C91B5BAB99`.
+D3D12 DLL SHA-256: `4DC57BB9505AFF3B3056BDE75891F1068155B80936021783D4EA8E341E3E5037`.
+The filtered ordered log is
+`.local/native-renderer/snr03/final-system-run-d-signal.log` (SHA-256
+`10A8105465AB113D78BCF927225826FB696D4A05D72D7FCBF3ED6EADE24C4DBB`).
+Recheck it with:
+
+```powershell
+python tools/verify-snr03-vegetation-binding.py `
+  .local/native-renderer/snr03/final-system-run-d-signal.log `
+  --source-frame 6000 --require-camera-match --require-final-state
+```
+
+These are raw final system words, not a proved native clip transform. The
+diagnostic still needs to select the correct dynamic variant for each native
+submission, validate packed-quad decode and depth, and expand beyond this
+vegetation contribution to the complete frozen main-view slice. SNR-03 and
+SNR-04 remain open.
 
 ## Title camera to selected draw-state join
 
