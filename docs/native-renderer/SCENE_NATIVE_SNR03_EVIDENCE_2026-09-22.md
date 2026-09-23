@@ -308,6 +308,30 @@ not a GPU draw or a Gate A result. The fixture is one frame of one vegetation
 contribution; it does not establish winding, transformed positions, depth
 parity, material/resource lifetimes or complete selected-slice coverage.
 
+## Captured quad decomposition for the vegetation shader
+
+The local RenderDoc race-start capture at
+`.local/cpu-profile/traffic-attribution/race-start-capture_frame4709.rdc`
+(SHA-256 `2CCCD83B0ADEBB6E9E96CD0C846986FB6036D415340B93267260F4CA92F59CB7`)
+contains draw event 27072 with 160 vertices and the **exact** vegetation VS
+bytecode SHA-256 `2ADFE080228C468CE9AEC7E21D19798FC8AAA32CDBA5D7325C4FAC4070F21FAA`.
+RenderDoc identifies its input topology as `LineList_Adj`; the captured GS
+expands 160 VS vertices to 240 triangle-list vertices. Of 40 quads, 39 have
+identical positions at all four vertices. The one nondegenerate quad (index
+32) maps to triangle indices `(0,1,3)` and `(1,2,3)` by exact post-VS/post-GS
+position bytes. The local output is
+`.local/native-renderer/snr04/quad-evidence.json` (SHA-256
+`080059C3196D8F60FB97BB57D979994467F6AAA0579C9DDE3AB07D5203C3DF79`).
+
+`tools/check-snr04-renderdoc-quad.py` reproduces the check when run through
+the bundled qrenderdoc Python host with `SNR04_CAPTURE` set to that capture,
+`SNR04_EVENT=27072`, and `SNR04_OUTPUT` set to a local JSON path. It checks
+the bytecode hash, topology, counts and every nondegenerate quad; event 495
+is rejected as a wrong shader. This establishes the compatibility renderer's
+quad decomposition for that shader. The old capture is at a different frame
+from source frame 6000, so it does not yet establish same-frame post-VS,
+coverage or depth parity for the owned fixture.
+
 ## Title camera to selected draw-state join
 
 The title scene publication now logs the two already-owned 4x4 camera word
