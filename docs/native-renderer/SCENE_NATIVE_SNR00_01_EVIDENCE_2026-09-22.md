@@ -3428,7 +3428,14 @@ uncertain slice roles. Thirty-six join four `CCarPresentation + 2016`
 subobjects; the other 21 have no nonzero outer-object join in this replay
 (15 at caller `0x82415A28`, three each at `0x823FDDFC` and `0x823FDE2C`).
 The outer join proves presentation ownership for 36, not that their
-color/depth work is replaceable by the proposed opaque scene.
+color/depth work is replaceable by the proposed opaque scene. Static title
+code narrows the other 21: `sub_82414A00` emits the 15 at `0x82415A28`
+and is called by the `CProceduralAnimatedScene` path documented above;
+their specific animated item/record is still unjoined. `sub_823EB600`
+calls the scalar wrapper at `0x823FDDFC` and `0x823FDE2C`. The verified
+title image places that function at vtable slot `+32` of
+`TRefCountedObjectThreadSafe<CPresentationSkid>`, so the other six are
+retained skid-presentation work, not an anonymous world-scene family.
 
 The last **61** must remain outside native scene admission here: 18
 `CRealtimeSky` draws (nine second-path semantic and nine graphics-device
@@ -3441,9 +3448,10 @@ vegetation bound record have caller sites `0x823FA8DC`, `0x82447C08` and
 names those exact sites; their missing vegetation record is intentional.
 This partition resolves an apparent SNR-01 ownership gap but does not prove
 the retained sky/particle composition bridge or freeze the slice. The next
-owner work is the 21 scalar draws and complete resource/material/lifetime
-joins for all proposed scene members, including the 36 car-presentation
-scalar draws if their role places them in the slice.
+owner work is the 15 animated-scene scalar draws and complete resource/
+material/lifetime joins for all proposed scene members. The 36 car-
+presentation scalar draws still need a slice-role decision; the six skid
+draws belong to the retained presentation dependency check.
 
 Recheck the disjoint accounting from the corrected ledger:
 
@@ -3471,5 +3479,34 @@ assert sum(r['title_second_path_caller_lr'] in (
     0x823FA8DC, 0x82447C08, 0x823FB7D4) for r in retained) == 9
 assert sum(r['title_dynamic_quad_parent_first_word'] == 0x82235F94
            for r in retained) == 12
+'@ | python -
+```
+
+The skid identity is a static title-image check, not an instance-lifetime
+claim. Its vtable RTTI is
+`.?AV?$TRefCountedObjectThreadSafe@VCPresentationSkid@@@@`; the generated
+`sub_823EB600` calls `sub_823FD9F0`, which makes the two observed wrapper
+calls. Both caller sites expand to three prepared draws in this replay.
+Recheck the image identity and replay counts with:
+
+```powershell
+@'
+import collections, json, struct
+from pathlib import Path
+image = Path('.local/ui-verify/default-image.bin').read_bytes()
+word = lambda address: struct.unpack_from('>I', image, address - 0x82000000)[0]
+vtable = 0x820018F4
+assert word(vtable + 32) == 0x823EB600
+descriptor = word(word(vtable - 4) + 12)
+start = descriptor + 8 - 0x82000000
+assert image[start:image.index(0, start)] == (
+    b'.?AV?$TRefCountedObjectThreadSafe@VCPresentationSkid@@@@')
+rows = json.loads(Path(
+    '.local/native-renderer/snr01/state-resource-final-run-a-clear-joined-ledger.json'
+).read_text(encoding='utf8'))['draws']
+counts = collections.Counter(r['title_scalar_caller_lr'] for r in rows
+    if r['target'].startswith('14020500/') and
+    r['title_packet_caller_lr'] == 0x824131F4)
+assert (counts[0x82415A28], counts[0x823FDDFC], counts[0x823FDE2C]) == (15, 3, 3)
 '@ | python -
 ```
