@@ -69,8 +69,8 @@ class LiveGraphicsHotReloadTests(unittest.TestCase):
         self.assertIn("diff --git a/src/graphics/d3d12/command_processor.cpp", patch)
         self.assertIn("0x1002 /* AMD */", patch)
         self.assertIn("0x8086 /* Intel */", patch)
-        self.assertIn("D3D12_RESOURCE_BARRIER_TYPE_UAV", patch)
-        self.assertIn("GetSharedMemoryResource()", patch)
+        self.assertIn("PushUAVBarrier", patch)
+        self.assertIn("SubmitBarriers", patch)
 
     def test_runtime_app_registers_live_hotreload_and_gpu_qualification(self):
         app = (ROOT / "src/pinyon_shift_app.cpp").read_text(encoding="utf-8")
