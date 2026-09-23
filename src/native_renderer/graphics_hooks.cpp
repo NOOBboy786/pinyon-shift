@@ -244,13 +244,20 @@ struct Snr03SceneSnapshot {
   std::vector<Snr03VegetationItem> items;
 };
 struct Snr03PayloadState {
-  std::map<uint32_t, std::vector<uint8_t>> by_packet;
+  struct Draw {
+    std::vector<uint8_t> vertex_bytes;
+    std::array<std::array<uint32_t, 4>, 24> vertex_constants;
+    uint32_t guest_vertex_count;
+  };
+  std::map<uint32_t, Draw> by_packet;
   size_t bytes = 0;
   bool rejected = false;
 };
 struct Snr03OwnedItem {
   Snr03VegetationItem metadata;
   std::vector<uint8_t> vertex_bytes;
+  std::array<std::array<uint32_t, 4>, 24> vertex_constants;
+  uint32_t guest_vertex_count;
 };
 struct Snr03OwnedScene {
   std::shared_ptr<const Snr03SceneSnapshot> title;
@@ -693,7 +700,16 @@ void ObserveSnr03VertexPayload(
   }
   auto& payload = snr03_payloads[uint64_t(target)];
   const auto* fetch = observation.vertex_fetches;
+  static constexpr std::array<uint32_t, 24> kVertexConstants = {
+      128, 129, 130, 131, 157, 158, 159, 160, 161, 163, 214, 215,
+      221, 241, 242, 243, 244, 245, 250, 251, 253, 254, 255, 256};
   if (observation.vertex_fetch_count != 1 || !fetch ||
+      observation.vertex_shader_hash != 0x5834939992FFC765ull ||
+      observation.pixel_shader_hash != 0xC2F1242C2535A57Eull ||
+      observation.guest_primitive_type != 13 || observation.index_buffer_type != 0 ||
+      observation.index_count == 0 || observation.index_count % 4 != 0 ||
+      observation.index_count * 4 != (item_it->vertex_size & 0x03FFFFFC) ||
+      !observation.vertex_float_constant_words ||
       fetch[0].fetch_constant != 95 || fetch[0].stride_words != 4 ||
       fetch[0].guest_base != (item_it->vertex_address & 0x1FFFFFFC) ||
       fetch[0].length != (item_it->vertex_size & 0x03FFFFFC) ||
@@ -703,10 +719,19 @@ void ObserveSnr03VertexPayload(
   }
   const uint32_t packet = item_it->packet_physical;
   const auto* begin = fetch[0].cpu_snapshot_bytes;
+  Snr03PayloadState::Draw draw{{}, {}, observation.index_count};
+  for (size_t i = 0; i < kVertexConstants.size(); ++i) {
+    const auto* words = observation.vertex_float_constant_words +
+                        kVertexConstants[i] * 4;
+    std::copy_n(words, 4, draw.vertex_constants[i].begin());
+  }
   auto existing = payload.by_packet.find(packet);
   if (existing != payload.by_packet.end()) {
-    if (existing->second.size() != fetch[0].length ||
-        !std::equal(existing->second.begin(), existing->second.end(), begin)) {
+    if (existing->second.vertex_bytes.size() != fetch[0].length ||
+        !std::equal(existing->second.vertex_bytes.begin(),
+                    existing->second.vertex_bytes.end(), begin) ||
+        existing->second.vertex_constants != draw.vertex_constants ||
+        existing->second.guest_vertex_count != draw.guest_vertex_count) {
       payload.rejected = true;
     }
     return;
@@ -717,7 +742,8 @@ void ObserveSnr03VertexPayload(
     return;
   }
   payload.bytes += fetch[0].length;
-  payload.by_packet.emplace(packet, std::vector<uint8_t>(begin, begin + fetch[0].length));
+  draw.vertex_bytes.assign(begin, begin + fetch[0].length);
+  payload.by_packet.emplace(packet, std::move(draw));
 }
 
 void ObservePreparedDraw(
@@ -1020,14 +1046,22 @@ void ObserveSnr03OutputFrame(uint64_t output_frame) {
                   "missing_packet={}", output_frame, item.packet_physical);
       return;
     }
-    const uint64_t hash = Snr03HashBytes(it->second);
+    const uint64_t hash = Snr03HashBytes(it->second.vertex_bytes);
     fingerprint = (fingerprint ^ hash) * 1099511628211ull;
-    owned_builder.items.push_back({item, std::move(it->second)});
+    for (const auto& constant : it->second.vertex_constants) {
+      for (const uint32_t word : constant) {
+        fingerprint = (fingerprint ^ word) * 1099511628211ull;
+      }
+    }
+    fingerprint = (fingerprint ^ it->second.guest_vertex_count) * 1099511628211ull;
+    owned_builder.items.push_back({item, std::move(it->second.vertex_bytes),
+                                   it->second.vertex_constants,
+                                   it->second.guest_vertex_count});
   }
   std::shared_ptr<const Snr03OwnedScene> owned =
       std::make_shared<Snr03OwnedScene>(std::move(owned_builder));
   REXGPU_INFO("FH1 SNR03 geometry consumed output_frame={} source_frame={} "
-              "items={} bytes={} fingerprint={}", output_frame,
+              "items={} bytes={} draw_constants=24 fingerprint={}", output_frame,
               owned->title->source_frame, owned->items.size(), payload.bytes,
               fingerprint);
 }

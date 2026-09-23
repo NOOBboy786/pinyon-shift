@@ -13,8 +13,8 @@ title-to-GPU join gaps.
 The [SNR-02 evidence log](SCENE_NATIVE_SNR02_EVIDENCE_2026-09-22.md) records
 the local-car resource census and seven selected title submodels.
 The [SNR-03 evidence log](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md) records
-the bounded same-frame vegetation metadata publication; resource ownership
-and native identity/depth rendering remain open.
+bounded same-frame vegetation metadata, guarded vertex bytes and final raw
+draw-state ownership; full-slice coverage and native identity/depth remain open.
 The [Gate A preflight](SCENE_NATIVE_GATE_A_PREFLIGHT_2026-09-22.md) bounds
 candidate-attachment GPU work and lists the retained resource dependencies;
 it does not qualify a suppression cut.

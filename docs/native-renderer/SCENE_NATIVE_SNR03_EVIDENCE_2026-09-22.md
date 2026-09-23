@@ -130,3 +130,55 @@ check, not an image-equivalence or FPS comparison. The owned contribution is
 now suitable as a vertex-byte input to a future diagnostic, but it still
 lacks final per-item transforms, semantic materials, index/topology proof for
 native drawing, and the rest of the main-view slice. SNR-03/SNR-04 remain open.
+
+## Vegetation draw-state and packed-quad evidence
+
+The translated color vertex shader `5834939992FFC765` computes
+`floor(vertex_id * 0.25)` before loading a 16-byte source record. The guest
+emits non-indexed quad lists (`primitive_type=13`), and all 67 selected
+view-8 packets have `index_count * 4 == fetch_95_length`. Together these
+establish one captured 16-byte record per guest quad. The SDK's current
+quad-list expansion is a plausible triangle source, but its winding and the
+native decode of the packed values are not independently verified.
+
+The command-thread binding dump now includes the physical draw-packet key
+and covers the vegetation shaders on probe frame 6001. Joining that key to
+the title publication found 142 prepared executions for the 67 selected
+packets. Each has the same color vertex/pixel shader pair, attachment state,
+quad count, fetch base and length, and 24 observed vertex float-constant
+registers across its repeated executions. Two of those constant vectors
+(registers 17020 and 17024) are stable within each of the seven title owners
+and distinct between owners. These are **raw final draw-state words**, not
+yet identified as model transforms or camera matrices.
+
+The owned scene now copies those 24 register vectors and the guest vertex
+count on the command thread, along with the guarded vertex bytes. Repeated
+executions of a selected packet must agree; the output callback hashes only
+the owned copy. An initial replay correctly rejected the scene because the
+new probe indexed the register bank from `0x4200`; the bank begins at
+`0x4000`. With the offset corrected, the saved-race replay exited normally,
+produced seven compatibility captures, and consumed 67 packets, 376,272
+unique vertex bytes and 24 constant vectors per item on output frame 6001.
+The executable SHA-256 was
+`BA75D45B732F093824B201CE6BD22E927FA084BE20B600E097C5BC1F0D46807A`;
+the SDK revision is `54bdb02cbb0b391135d92e2d41c32cdd4cc573d1`;
+the D3D12 DLL SHA-256 was
+`E24F81E16DE98CEE64F9944F601F5D8496868D65C3932E22044BFC7CA5C119E1`.
+The ordered filtered evidence is
+`.local/native-renderer/snr03/owned-state-run-b-signal.log` (SHA-256
+`6994862BB59EFD19D1A5C2D8B4EFE9958510A07704FC22CB96ADE18EBA599595`).
+Check it with:
+
+```powershell
+python tools/verify-snr03-vegetation-binding.py `
+  .local/native-renderer/snr03/owned-state-run-b-signal.log `
+  --source-frame 6000
+```
+
+The same final build with the probe off completed the saved route normally
+and produced seven compatibility captures. This is a compatibility smoke
+check, not an image-equivalence or performance result.
+
+This extends one bounded immutable contribution; it does not close SNR-03 or
+SNR-04. Semantic transforms, the rest of the selected main-view scene,
+native identity/depth output and full-resolution comparisons remain open.
