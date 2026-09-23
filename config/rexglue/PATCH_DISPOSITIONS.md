@@ -83,6 +83,13 @@ diagnostics, and synthetic coverage exercises one through four packets across
 guest-buffer boundaries. Removing `0037` restores the prior two-payload
 decoder without removing `0036`.
 
+`0038-m4-adaptive-vendor-uav-barriers` qualifies AMD and Intel GPUs by inserting
+explicit UAV resource barriers on shared memory prior to fast-path memexport readbacks.
+This eliminates pipeline hazard races and avoids costly synchronous CPU fallbacks on
+AMD RDNA and Intel Arc hardware. Removing `0038` returns to unconditional fast-path
+dispatch.
+
+
 Validation performed on the rebased SDK:
 
 - `unit_tests` and `ppc_tests` build with the pinned Clang 20.1.8 toolchain.

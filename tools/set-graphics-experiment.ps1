@@ -9,7 +9,8 @@ param(
     [ValidateSet(1, 2)]
     [int]$ResolutionScale = 1,
     [string]$StateRoot,
-    [switch]$Json
+    [switch]$Json,
+    [switch]$Live
 )
 
 Set-StrictMode -Version Latest
@@ -104,7 +105,7 @@ function Get-SettingsResult([string]$Text, [string]$BackupPath, [string]$Operati
             post_effect = Get-TomlValue $Text 'swap_post_effect' 'none'
             resolution_scale = [int](Get-TomlValue $Text 'draw_resolution_scale_x' '1')
         }
-        restart_required = $Operation -ne 'Get'
+        restart_required = if ($Operation -eq 'Get') { $false } elseif ($Live -or (Get-Process -Name 'pinyon_shift' -ErrorAction SilentlyContinue)) { $false } else { $true }
     }
 }
 

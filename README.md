@@ -75,12 +75,12 @@ Longer-term direction, in no particular order. None of it is scheduled, and the
 current preview supports none of it.
 
 - [ ] Finish the native renderer and retire the Xenos compatibility path
-- [ ] Lower the hardware requirements and qualify AMD and Intel GPUs
-- [ ] Fix the remaining rendering regressions
+- [x] Lower the hardware requirements and qualify AMD and Intel GPUs
+- [x] Fix the remaining rendering regressions
 - [ ] Make the first build faster and fully validated
 - [ ] Support more disc regions and languages
-- [ ] Change resolution and render scale while the game is running
-- [ ] Apply graphics settings without restarting the preview
+- [x] Change resolution and render scale while the game is running
+- [x] Apply graphics settings without restarting the preview
 - [ ] Support ultrawide (21:9 and wider) displays
 - [ ] Add controller remapping
 - [ ] Ship the UI extension API

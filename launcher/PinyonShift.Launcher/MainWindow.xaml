@@ -216,7 +216,7 @@
                     </DockPanel>
                     <TextBlock Grid.Row="1" Margin="0,10,0,16" Foreground="{StaticResource MutedBrush}"
                                TextWrapping="Wrap" LineHeight="19"
-                               Text="Changes are validated and backed up before they are saved. Restart the preview to apply them."/>
+                               Text="Changes are validated and backed up before saving. Changes apply live while the preview is running, or on next launch."/>
                     <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

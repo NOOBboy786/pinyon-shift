@@ -542,12 +542,20 @@ public partial class MainWindow : Window
         try
         {
             ApplyGraphicsResult(await RunGraphicsSettingsToolAsync("Get"));
-            GraphicsStatusText.Text = "Current settings loaded. Saving a change requires a preview restart.";
+            GraphicsStatusText.Text = IsPreviewRunning()
+                ? "Current settings loaded. Changes apply live to the running preview."
+                : "Current settings loaded. Saving a change requires a preview restart.";
         }
         catch (Exception ex)
         {
             GraphicsStatusText.Text = $"Settings could not be loaded: {ex.Message}";
         }
+    }
+
+    private static bool IsPreviewRunning()
+    {
+        try { return Process.GetProcessesByName("pinyon_shift").Length > 0; }
+        catch { return false; }
     }
 
     private void CloseGraphicsButton_Click(object sender, RoutedEventArgs e)
@@ -580,7 +588,9 @@ public partial class MainWindow : Window
         {
             var result = await RunGraphicsSettingsToolAsync(action);
             ApplyGraphicsResult(result);
-            GraphicsStatusText.Text = success;
+            GraphicsStatusText.Text = result.RestartRequired
+                ? success
+                : "Settings applied immediately to the running preview.";
             if (revealBackup && !string.IsNullOrWhiteSpace(result.BackupPath) && File.Exists(result.BackupPath))
             {
                 Process.Start(new ProcessStartInfo
@@ -615,13 +625,15 @@ public partial class MainWindow : Window
             RedirectStandardError = true,
             CreateNoWindow = true
         };
-        foreach (var argument in new[]
+        var arguments = new List<string>
         {
             "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
             "-Action", action, "-StateRoot", Path.Combine(_repositoryRoot, ".local", "preview"),
             "-Anisotropy", SelectedTag(AnisotropyComboBox), "-PostEffect", SelectedTag(PostEffectComboBox),
             "-ResolutionScale", SelectedTag(ResolutionComboBox), "-Json"
-        }) startInfo.ArgumentList.Add(argument);
+        };
+        if (IsPreviewRunning()) arguments.Add("-Live");
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo) ??
             throw new InvalidOperationException("Windows could not start the graphics settings tool.");
         var outputTask = process.StandardOutput.ReadToEndAsync();
