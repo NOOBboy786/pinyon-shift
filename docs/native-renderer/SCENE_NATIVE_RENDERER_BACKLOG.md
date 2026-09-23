@@ -286,6 +286,23 @@ scene copies, unbounded queues or waits that cycle between title and GPU threads
 - Record extraction/build/diagnostic costs and failures. Readbacks/overlays stay
   outside production performance runs; double rendering is not an FPS result.
 
+First bounded implementation cut (not Gate A completion):
+
+1. On the exact output-frame callback, allocate private reference-resolution
+   identity/color and depth targets. Keep them and any readback alive through
+   their submission fence; never write the guest output.
+2. For the SNR-03 vegetation packets, validate the exact VS bytecode source and
+   specialization, bind the owned vertex bytes with fetch 95 rebased to the
+   private buffer, and upload the first 23 captured float vectors in SDK bitmap
+   order. Use the captured final system words with the measured full-view viewport
+   remap. Expand each four-vertex guest quad to two indexed triangles. Reject a
+   missing shader, state variant, resource or ambiguous winding before drawing.
+3. Compare one packet's post-VS positions, coverage and depth against a
+   same-frame compatibility capture, then the complete bounded contribution.
+   Record item/variant counts, unsupported reasons and extraction/upload/draw/
+   readback timings. Only then expand SNR-03/SNR-04 to all selected main-view
+   owners and dynamic geometry.
+
 **Done when / Gate A:** the selected main-view scene is complete and stable at
 reference resolution with no missing, duplicated, stale or misattributed objects.
 Unknown authoritative relationships stop this gate; adding more guessed offsets
