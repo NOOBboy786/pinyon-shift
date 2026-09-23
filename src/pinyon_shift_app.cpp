@@ -191,6 +191,54 @@ void PinyonShiftApp::OnConfigurePaths(rex::PathConfig& paths) {
   if (auto game_root = diagnostics::EnvironmentPath("PINYON_SHIFT_GAME_ROOT")) {
     paths.game_data_root = *game_root;
   }
+
+  if (paths.game_data_root.empty()) {
+    const auto exe_dir = diagnostics::ExecutableDirectory();
+    std::vector<std::filesystem::path> candidates = {
+        exe_dir / ".." / ".." / ".local" / "game" / "base",
+        exe_dir / ".." / ".." / ".." / ".local" / "game" / "base",
+        exe_dir / ".local" / "game" / "base",
+        exe_dir / "game" / "base",
+        exe_dir / "game",
+        state_root.parent_path() / "game" / "base",
+    };
+
+    if (auto local_app_data = diagnostics::EnvironmentPath("LOCALAPPDATA")) {
+      candidates.push_back(*local_app_data / "PinyonShift" / "source" / "0.1.1" / ".local" / "game" / "base");
+      candidates.push_back(*local_app_data / "PinyonShift" / "game" / "base");
+      candidates.push_back(*local_app_data / "PinyonShift" / ".local" / "game" / "base");
+      std::error_code ec;
+      auto source_dir = *local_app_data / "PinyonShift" / "source";
+      if (std::filesystem::is_directory(source_dir, ec)) {
+        for (const auto& entry : std::filesystem::directory_iterator(source_dir, ec)) {
+          if (entry.is_directory(ec)) {
+            candidates.push_back(entry.path() / ".local" / "game" / "base");
+          }
+        }
+      }
+    }
+
+    for (const auto& candidate : candidates) {
+      std::error_code ec;
+      if (std::filesystem::exists(candidate / "default.xex", ec)) {
+        paths.game_data_root = std::filesystem::absolute(candidate, ec).lexically_normal();
+        diagnostics::RecordEvent("paths.game_root_discovered",
+                                 {{"path", paths.game_data_root.string()}});
+        break;
+      }
+    }
+  }
+
+  if (paths.game_data_root.empty()) {
+    diagnostics::RecordEvent("paths.game_root_missing", {});
+    MessageBoxW(
+        nullptr,
+        L"Pinyon Shift could not find your extracted game files (default.xex).\n\n"
+        L"Please launch Pinyon Shift through PinyonShiftLauncher.exe, "
+        L"or run tools\\launch-preview.ps1, "
+        L"or set the PINYON_SHIFT_GAME_ROOT environment variable to your game folder.",
+        L"Game Data Not Found - Pinyon Shift", MB_OK | MB_ICONERROR);
+  }
   paths.user_data_root = state_root / "user";
   paths.update_data_root = state_root / "update";
   paths.cache_root = state_root / "cache";

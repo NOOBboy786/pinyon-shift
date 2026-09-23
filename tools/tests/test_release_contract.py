@@ -27,9 +27,13 @@ class ReleaseContractTests(unittest.TestCase):
         data = json.loads((ROOT / "config/supported-dumps.json").read_text())
         self.assertEqual(data["policy"]["match"], "exact_sha256_and_size")
         self.assertEqual(data["policy"]["unknown_dump_action"], "reject")
+        regions = {dump["region"] for dump in data["dumps"]}
+        self.assertTrue({"USA", "Europe", "Japan"}.issubset(regions))
         for dump in data["dumps"]:
             self.assertGreater(dump["iso"]["size_bytes"], 0)
             self.assertRegex(dump["iso"]["sha256"], r"^[0-9A-F]{64}$")
+            self.assertGreater(len(dump["languages"]), 0)
+            self.assertGreater(len(dump["executables"]), 0)
 
     def test_downloads_are_https_and_sha256_pinned(self):
         data = json.loads((ROOT / "config/release-toolchain.json").read_text())

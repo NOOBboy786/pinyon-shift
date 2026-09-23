@@ -22,6 +22,7 @@ void RefreshCrashReporter();
 const std::filesystem::path& StateRoot();
 const std::string& SessionId();
 std::optional<std::filesystem::path> EnvironmentPath(const char* name);
+std::filesystem::path ExecutableDirectory();
 
 // Writes one schema-versioned JSON object to the session JSONL file and to the
 // ReXGlue logger. Values are JSON-escaped and intentionally represented as

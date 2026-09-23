@@ -64,6 +64,97 @@
           "sha256": "ED285BEEFEAFCDC90CF64D6085D19C874E3F1E15072C12CDF9BA2237C88E2CE5"
         }
       ]
+    },
+    {
+      "id": "forza-horizon-europe-ms-2506-retail-base",
+      "status": "redump_verified",
+      "platform": "Xbox 360",
+      "region": "Europe",
+      "serial": "MS-2506",
+      "title_id": "4D5309C9",
+      "languages": [
+        "English",
+        "French",
+        "German",
+        "Spanish",
+        "Italian",
+        "Dutch",
+        "Portuguese",
+        "Russian",
+        "Polish"
+      ],
+      "iso": {
+        "size_bytes": 8738846720,
+        "sha256": "9A1F6E29699A314144415843C42EDC5FEFD6304ED256B8640C39E1FA34EF5C6F"
+      },
+      "extraction": {
+        "tool": "extract-xiso",
+        "skip_system_update": true,
+        "file_count": 2400,
+        "size_bytes": 7221319555
+      },
+      "executables": [
+        {
+          "guest_path": "default.xex",
+          "role": "entrypoint",
+          "size_bytes": 20856832,
+          "sha256": "DB40DF605ADE49A612B35A7A24C38F6004BCB17A88ED6B48288DE16DF9E3987C"
+        },
+        {
+          "guest_path": "SpeechFacade_default.xex",
+          "role": "candidate_module",
+          "size_bytes": 2138112,
+          "sha256": "D54F6AAE6AE2FD6DA9B8C37D48F0A6BB295CAA18AD82D0D9DF66026141A41594"
+        },
+        {
+          "guest_path": "XMediaFacade_default.xex",
+          "role": "candidate_module",
+          "size_bytes": 2662400,
+          "sha256": "ED285BEEFEAFCDC90CF64D6085D19C874E3F1E15072C12CDF9BA2237C88E2CE5"
+        }
+      ]
+    },
+    {
+      "id": "forza-horizon-japan-ms-2507-retail-base",
+      "status": "redump_verified",
+      "platform": "Xbox 360",
+      "region": "Japan",
+      "serial": "MS-2507",
+      "title_id": "4D5309C9",
+      "languages": [
+        "Japanese",
+        "English"
+      ],
+      "iso": {
+        "size_bytes": 8738846720,
+        "sha256": "D0F93B8263DC370DEBE5A5741671987F79965B2089DA1DC38E5A74DF6F41CAEE"
+      },
+      "extraction": {
+        "tool": "extract-xiso",
+        "skip_system_update": true,
+        "file_count": 2400,
+        "size_bytes": 7221319555
+      },
+      "executables": [
+        {
+          "guest_path": "default.xex",
+          "role": "entrypoint",
+          "size_bytes": 20856832,
+          "sha256": "DB40DF605ADE49A612B35A7A24C38F6004BCB17A88ED6B48288DE16DF9E3987C"
+        },
+        {
+          "guest_path": "SpeechFacade_default.xex",
+          "role": "candidate_module",
+          "size_bytes": 2138112,
+          "sha256": "D54F6AAE6AE2FD6DA9B8C37D48F0A6BB295CAA18AD82D0D9DF66026141A41594"
+        },
+        {
+          "guest_path": "XMediaFacade_default.xex",
+          "role": "candidate_module",
+          "size_bytes": 2662400,
+          "sha256": "ED285BEEFEAFCDC90CF64D6085D19C874E3F1E15072C12CDF9BA2237C88E2CE5"
+        }
+      ]
     }
   ]
 }

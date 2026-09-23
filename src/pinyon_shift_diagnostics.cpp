@@ -4,7 +4,9 @@
 #error Pinyon Shift M2 diagnostics currently support Windows only.
 #endif
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <Windows.h>
 #include <DbgHelp.h>
 #include <intrin.h>
@@ -91,17 +93,6 @@ std::string JsonEscape(std::string_view value) {
     }
   }
   return escaped;
-}
-
-std::filesystem::path ExecutableDirectory() {
-  std::wstring buffer(32768, L'\0');
-  const DWORD length =
-      GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-  if (length == 0 || length >= buffer.size()) {
-    return std::filesystem::current_path();
-  }
-  buffer.resize(length);
-  return std::filesystem::path(buffer).parent_path();
 }
 
 struct BuildProvenance {
@@ -395,6 +386,17 @@ LONG CALLBACK AccessViolationReporter(EXCEPTION_POINTERS* exception) {
 
 }  // namespace
 
+std::filesystem::path ExecutableDirectory() {
+  std::wstring buffer(32768, L'\0');
+  const DWORD length =
+      GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+  if (length == 0 || length >= buffer.size()) {
+    return std::filesystem::current_path();
+  }
+  buffer.resize(length);
+  return std::filesystem::path(buffer).parent_path();
+}
+
 std::optional<std::filesystem::path> EnvironmentPath(const char* name) {
   char* value = nullptr;
   size_t length = 0;
@@ -412,9 +414,37 @@ bool InitializeEarly() {
     return CpuHasSse41();
   }
 
-  g_state_root = EnvironmentPath("PINYON_SHIFT_STATE_ROOT")
-                     .value_or(ExecutableDirectory() / "pinyon_shift_state");
+  if (auto state_env = EnvironmentPath("PINYON_SHIFT_STATE_ROOT")) {
+    g_state_root = *state_env;
+  } else {
+    const auto exe_dir = ExecutableDirectory();
+    std::vector<std::filesystem::path> state_candidates = {
+        exe_dir / ".." / ".." / ".local" / "preview",
+        exe_dir / ".." / ".." / ".." / ".local" / "preview",
+        exe_dir / ".local" / "preview",
+    };
+    if (auto local_app_data = EnvironmentPath("LOCALAPPDATA")) {
+      state_candidates.push_back(*local_app_data / "PinyonShift" / "source" / "0.1.1" / ".local" / "preview");
+    }
+    bool found = false;
+    for (const auto& candidate : state_candidates) {
+      std::error_code ec;
+      if (std::filesystem::is_directory(candidate, ec)) {
+        g_state_root = candidate;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      g_state_root = exe_dir / "pinyon_shift_state";
+    }
+  }
   g_state_root = std::filesystem::absolute(g_state_root).lexically_normal();
+
+  if (!GetEnvironmentVariableW(L"REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING", nullptr, 0)) {
+    SetEnvironmentVariableW(L"REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING", L"false");
+  }
+
   g_session_id = UtcTimestamp(true) + "-p" + std::to_string(GetCurrentProcessId());
   g_crash_root = g_state_root / "crashes";
   g_event_path = g_state_root / "logs" / (g_session_id + ".jsonl");
