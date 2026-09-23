@@ -2317,6 +2317,73 @@ void PinyonShiftObserveSnr01ProceduralModelResource(
       SnrM02ReadU32(r30.u32 + 4), SnrM02ReadU32(r30.u32 + 16));
 }
 
+void Snr01LogStateFlush(const char* phase, PPCRegister& r1,
+                       PPCRegister& r31) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      !Snr01TraceCurrentFrame()) {
+    return;
+  }
+  REXGPU_INFO("FH1 SNR01 state flush {} {{\"frame\":{},"
+              "\"caller_lr\":{},\"state\":{},\"scene_packets\":{}}}",
+              phase,
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              SnrM02ReadU32(r1.u32 + 88), r31.u32,
+              snr01_scene_indirect_count);
+}
+
+void PinyonShiftObserveSnr01StateFlushBegin(PPCRegister& r1,
+                                            PPCRegister& r31) {
+  Snr01LogStateFlush("begin", r1, r31);
+}
+
+void PinyonShiftObserveSnr01StateFlushEnd(PPCRegister& r1,
+                                          PPCRegister& r31) {
+  Snr01LogStateFlush("end", r1, r31);
+}
+
+void PinyonShiftObserveSnr01TrackModelBegin(PPCRegister& r3,
+                                             PPCRegister& r7) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      !Snr01TraceCurrentFrame()) {
+    return;
+  }
+  REXGPU_INFO("FH1 SNR01 track model begin {{\"frame\":{},"
+              "\"state_base\":{},\"resource\":{},"
+              "\"scene_packets\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              r3.u32, r7.u32, snr01_scene_indirect_count);
+}
+
+void PinyonShiftObserveSnr01TrackModelReady(PPCRegister& r3,
+                                             PPCRegister& r29,
+                                             PPCRegister& r30) {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) <= 0 ||
+      !Snr01TraceCurrentFrame()) {
+    return;
+  }
+  const uint32_t vtable = SnrM02ReadU32(r30.u32);
+  REXGPU_INFO("FH1 SNR01 track model ready {{\"frame\":{},"
+              "\"state_base\":{},\"resource\":{},\"vtable\":{},"
+              "\"slot8\":{},\"ready\":{}}}",
+              rex::perf::GetTotalCounter(
+                  rex::perf::CounterId::kSourceFrameCount),
+              r29.u32, r30.u32, vtable,
+              vtable ? SnrM02ReadU32(vtable + 32) : 0, r3.u32);
+}
+
+void PinyonShiftObserveSnr01TrackModelEnd() {
+  if (REXCVAR_GET(pinyon_shift_snr01_trace_source_frame) > 0 &&
+      Snr01TraceCurrentFrame()) {
+    REXGPU_INFO("FH1 SNR01 track model end {{\"frame\":{},"
+                "\"scene_packets\":{}}}",
+                rex::perf::GetTotalCounter(
+                    rex::perf::CounterId::kSourceFrameCount),
+                snr01_scene_indirect_count);
+  }
+}
+
 void PinyonShiftObserveScalarDrawBegin(
     PPCRegister& r12, PPCRegister& r3, PPCRegister& r4, PPCRegister& r7,
     PPCRegister& r29) {

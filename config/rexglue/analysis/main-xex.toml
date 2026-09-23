@@ -223,6 +223,32 @@ address = 0x82417F88
 name = "PinyonShiftObserveSnr01ProceduralModelResource"
 registers = ["r3", "r14", "r20", "r30"]
 
+# Bracket the shared state-list flush; the helper saved its enclosing LR at
+# current r1 + 88 before issuing the original sub_824167F8 call.
+[[midasm_hook]]
+address = 0x824170B8
+name = "PinyonShiftObserveSnr01StateFlushBegin"
+registers = ["r1", "r31"]
+
+[[midasm_hook]]
+address = 0x824170BC
+name = "PinyonShiftObserveSnr01StateFlushEnd"
+registers = ["r1", "r31"]
+
+[[midasm_hook]]
+address = 0x824365B8
+name = "PinyonShiftObserveSnr01TrackModelBegin"
+registers = ["r3", "r7"]
+
+[[midasm_hook]]
+address = 0x8243660C
+name = "PinyonShiftObserveSnr01TrackModelReady"
+registers = ["r3", "r29", "r30"]
+
+[[midasm_hook]]
+address = 0x82437048
+name = "PinyonShiftObserveSnr01TrackModelEnd"
+
 [[midasm_hook]]
 address = 0x82413A80
 name = "PinyonShiftObserveSecondDrawBegin"

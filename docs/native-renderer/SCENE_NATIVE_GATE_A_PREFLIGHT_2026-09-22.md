@@ -135,8 +135,15 @@ model, geometry and material joins; see the
 [state provenance](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#shared-procedural-state-behind-the-largest-view-8-scene-list-family).
 In a later strict replay, three `CTrackRenderModelInstance_Unified`
 resources join three lists and 147 of 652 candidate prepared draws under
-that state. The other 505 draws still need per-resource ownership;
+that state. The other 505 were not joined in that replay;
 see the [bounded resource join](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#selected-track-model-instances-reach-three-bounded-scene-lists).
+The subsequent [two-caller probe](SCENE_NATIVE_SNR00_01_EVIDENCE_2026-09-22.md#both-shared-state-callers-reach-selected-track-model-resources)
+resolves that family in a different sampled frame: all 856 state draws
+join selected track-model-instance objects through 207 exact title
+packets. The final-build repeat joins all 596 state draws through 154
+packets in another frame. This narrows resource-object provenance; it
+does not establish geometry, material, lifetime or a safe suppression
+bridge.
 Recompute it from
 `.local/native-renderer/snr01/clear-complete-run-a-ledger.json` using
 `classification`, `owner_first_word`, `title_packet_caller_lr`, `target`

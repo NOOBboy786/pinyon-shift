@@ -3219,6 +3219,8 @@ from a different replay than the earlier 893-draw state sample; visibility
 and traffic vary. The resource-to-list ordering does not yet establish
 each resource's mesh, material, transform or allocation generation.
 The other state users and producer/consumer bridges remain open.
+The later caller-and-resource probe below resolves this shared-state family
+in a separate sampled frame.
 
 Reproduce the same-run joins and strict boundary check with:
 
@@ -3240,3 +3242,93 @@ python tools/verify-snr01-model-resource-join.py `
   .local/native-renderer/snr01/procedural-resource-corpus-run-a-ledger.json `
   --source-frame 6000
 ```
+
+### Both shared-state callers reach selected track-model resources
+
+Read-only probes bracket the existing `sub_82417060` scene-list flush and
+its other enclosing path, `sub_824365B0`. The flush brackets capture the
+saved title caller LR and exact scene-packet ordinal range. In a normal-exit
+saved-race replay with seven compatibility captures, every candidate
+draw under the shared procedural state matched a bracketed title packet:
+147 draws came through `sub_82417BC0` / return `0x82418ECC`, and 512
+through `sub_824365B0` / return `0x82437048`. No state packet had a
+mismatched owner or an ambiguous caller in that replay.
+
+The subsequent resource probe on `sub_824365B0` found the selected
+`CTrackRenderModelInstance_Unified` at its original slot-8 call. Both
+title paths then associate each resource with its scene packet by the
+source frame, title thread and enclosing call. The strict backend ledger
+joins each packet's **header and child-buffer physical addresses** to its
+prepared draws. Matching only the child-buffer/list address would be
+wrong: some lists recur under different resource scopes in the same frame.
+
+In this second normal-exit replay, the strict ledger accounts for all
+5,160 prepared draws and 127 roots. Its 207 view-8 shared-state packets
+join **all 856 candidate prepared draws** under that state, with no
+unattributed attachment writer:
+
+| Title resource path | Distinct selected instances | Packets | Prepared draws | Color words |
+| --- | ---: | ---: | ---: | --- |
+| `CProceduralModels` | 3 | 86 | 258 | `00030000` |
+| `sub_824365B0` | 116 | 121 | 598 | 570 `00030000`, 28 `000C0000` |
+
+The captured vtable for every selected resource was `0x820019CC`, whose
+verified RTTI names `CTrackRenderModelInstance_Unified`; slot 8 was
+`sub_8243BC80` and every observed readiness return was 1. This proves
+selected resource **object identity** for the shared-state family in the
+sampled frame. It does not prove allocation generations, geometry bytes,
+materials, transforms, texture readiness, unload/reload behavior, or the
+other candidate draw families. The proposed opaque/alpha-tested slice
+therefore remains provisional and Gate A remains open.
+
+The executable SHA-256 was
+`064BC41856304E4793811F6A22B4C04FBA737EEF66C09C8DE509DF275E61D63A`.
+The process session was `20260923T061319Z-p42596.jsonl`; the extracted
+`.local/native-renderer/snr01/track-model-run-a-filtered.log` has SHA-256
+`5FEB907DC649ED7B6B08FCA701E36BCE421892CAEB1251E0E027F0A71881B45E`,
+and `.local/native-renderer/snr01/track-model-run-a-ledger.json` has
+SHA-256 `1ACBEE288C6D41AC42FFF558BFFFEB38E3C354562F837A02EE21BA906C0A1FD4`.
+The separate caller-partition replay used executable SHA-256
+`985294994B28290C1F237DF8B545F6B564596FF2D973A3E835ED3E1D939511CC`
+and process session `20260923T060700Z-p41516.jsonl`.
+
+Reproduce the strict second-run check with the saved-race procedure,
+`--pinyon_shift_fh1_gpu_corpus=true`,
+`--pinyon_shift_fh1_clear_producer_trace=true`, and the source-frame-6000
+SNR-01 trace flags, then run:
+
+```powershell
+$stateRoot = Join-Path $env:LOCALAPPDATA 'PinyonShift\source\0.1.0\.local\preview'
+$session = Join-Path $stateRoot 'logs\20260923T061319Z-p42596.jsonl'
+python tools/extract-snr01-run-log.py $session `
+  .local/native-renderer/snr01/track-model-run-a-filtered.log
+python tools/summarize-snr01-frame-wide-census.py `
+  .local/native-renderer/snr01/track-model-run-a-filtered.log `
+  --source-frame 6000 --require-direct-family `
+  --require-direct-family-record --require-semantic-item-node `
+  --require-second-path --require-scalar-draw --require-dynamic-quad `
+  --title-image .local/ui-verify/default-image.bin `
+  --require-candidate-boundary `
+  --output .local/native-renderer/snr01/track-model-run-a-ledger.json
+python tools/verify-snr01-state-resource-join.py `
+  .local/native-renderer/snr01/track-model-run-a-filtered.log `
+  .local/native-renderer/snr01/track-model-run-a-ledger.json `
+  --source-frame 6000
+```
+
+The final cleanup removed a misleading exit-register field from the
+second path. Its rebuilt executable SHA-256 was
+`818F21B3CE113AC322AD8FD2C8EACD83EFC6463E81504FCB90A90A32F3D9240D`.
+A second normal-exit saved-race replay produced seven captures. Its session
+`20260923T062246Z-p19792.jsonl` yields
+`.local/native-renderer/snr01/state-resource-final-run-a-filtered.log`
+(SHA-256 `758D83E144646F06EB7CA01139455BB827595963CD2A603487C6C5E8BC43EBEF`)
+and `.local/native-renderer/snr01/state-resource-final-run-a-ledger.json`
+(SHA-256 `B038180F5853EC67FAD3E75EBA588837068FFDF0B6C4D784C46E54E835A05DC5`).
+The strict ledger passes for all 3,639 prepared draws and 138 roots.
+The state-resource verifier again joins **every** candidate state draw:
+154 packets and 596 prepared draws, split into 72 from two selected
+`CProceduralModels` resources and 524 from 125 selected track-path
+resources. This repeat confirms the join across different visibility and
+resource counts; it does not establish resource generations or a complete
+native scene.
