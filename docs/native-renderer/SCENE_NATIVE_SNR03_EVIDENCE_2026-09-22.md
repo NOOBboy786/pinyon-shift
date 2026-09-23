@@ -823,3 +823,54 @@ owned copy on the guest command stream, preserve the source's lifetime until
 the copy is submitted, and order private sampling after the guest fence
 without blocking the callback. Neither this descriptor census nor the
 identity shader proves alpha-coverage or depth parity.
+
+## Live guest-submission BC3 copy
+
+The bounded SDK probe can now copy each distinct unsigned fetch-0 BC3 texture
+bound by the selected shader pair to a 65,536-byte readback buffer on the
+guest's deferred D3D12 command list. It restores the source texture's shader
+state before the draw, retains each readback through submission, and maps the
+bytes only after the guest queue has signaled that submission. Set
+`PINYON_SHIFT_SNR04_BC3_DIR` to a local output directory to enable this copy;
+without it, the compatibility renderer takes its previous path.
+
+The AppData-backed sustained-race replay exited normally and produced seven
+compatibility captures. Output frame 6001 produced a 67-item, 135-variant
+`SNR03F2` fixture (SHA-256
+`DE296771C4FA225894FE62754F64F3BD6587ECD602F29180E47D9358F4F4145F`)
+and five 65,536-byte BC3 readbacks in guest submission 6001. The process-
+bounded log is `.local/native-renderer/snr04/live-bc3-run-a-signal.log`
+(SHA-256 `8722D3A593DB93FFA1060524227146570CEC355935623F07F19B69CED1049557`).
+The strict verifier joins all 67 selected packets and their five title fetch
+descriptors to the five live SRVs and readback files. Those files have exactly
+the five SHA-256 values from the independent RenderDoc BC3 export above,
+despite being captured in a later replay. This verifies the live copy path
+for the bounded slice; descriptor indices differ between the two runs and are
+not durable identities.
+
+After the final build, a second saved-route replay also exited normally with
+seven compatibility captures. Its 67-item, 132-variant fixture passed the
+scene verifier (SHA-256
+`5D0F5ACFF64A870528ECC7D3E63C26B718708B2AED3B95CAD00E5913592A9100`).
+The five live BC3 files again matched the independent RenderDoc hashes, and
+`verify-snr04-live-bc3.py` joined all 67 packets. The second process-bounded
+log is `.local/native-renderer/snr04/live-bc3-run-b-signal.log` (SHA-256
+`D1A8B1663C82D74CCBF30066B5A75B4DE5C8DB9C0390205754A7476A463F9029`).
+A final replay with `PINYON_SHIFT_SNR04_BC3_DIR` unset exited normally with
+seven compatibility captures, one scene fixture and no `.bc3` files.
+
+Recheck the live fixture and texture join with:
+
+```powershell
+python tools/verify-snr03-scene-fixture.py `
+  .local/native-renderer/snr04/live-bc3-run-b/snr03-scene-6000.bin `
+  .local/native-renderer/snr04/live-bc3-run-b-signal.log
+python tools/verify-snr04-live-bc3.py `
+  .local/native-renderer/snr04/live-bc3-run-b-signal.log `
+  .local/native-renderer/snr04/live-bc3-run-b
+```
+
+This debug readback waits after submission and is excluded from performance
+measurement. The private diagnostic still uses an identity pixel shader;
+alpha-coverage/depth parity and an asynchronous private-queue texture handoff
+remain open.

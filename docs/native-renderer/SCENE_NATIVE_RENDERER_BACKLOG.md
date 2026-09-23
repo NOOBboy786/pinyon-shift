@@ -341,6 +341,9 @@ and one shared full-view SRV position in the same output frame. The guest
 submission is signaled after the output callback, so the texture copy and
 private-queue wait must be ordered without blocking that callback; see the
 [SNR-03/04 evidence](SCENE_NATIVE_SNR03_EVIDENCE_2026-09-22.md#same-frame-final-pixel-descriptor-join).
+An opt-in guest-command-list readback now verifies the five live BC3 payloads
+and all 67 packet joins in a later frame; the debug CPU wait is not a native
+sampling bridge or a performance result.
 Full compatibility
 coverage/depth parity, unload/reload and complete main-view ownership remain
 open.
