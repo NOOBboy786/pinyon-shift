@@ -149,8 +149,10 @@ try {
         'd3d12_allow_variable_refresh_rate_and_tearing',
         'pinyon_shift_capture_performance',
         'pinyon_shift_stabilize_vehicle_presentation', 'pinyon_shift_skip_opening_movies',
-        'resolution', 'vsync', 'anisotropic_override', 'swap_post_effect',
-        'draw_resolution_scale_x', 'draw_resolution_scale_y'
+        'resolution', 'video_mode_width', 'video_mode_height', 'vsync',
+        'anisotropic_override', 'swap_post_effect',
+        'draw_resolution_scale_x', 'draw_resolution_scale_y',
+        'd3d12_submit_on_primary_buffer_end', 'clear_memory_page_state'
     )
     $configPath = Join-Path $resolvedStateRoot 'config/pinyon_shift.toml'
     $settings = [ordered]@{}

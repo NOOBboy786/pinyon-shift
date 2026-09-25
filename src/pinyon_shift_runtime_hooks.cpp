@@ -17,6 +17,7 @@
 #include <rex/system/xmemory.h>
 
 #include "pinyon_shift_diagnostics.h"
+#include "pinyon_shift_hitch_logger.h"
 
 REXCVAR_DEFINE_BOOL(pinyon_shift_skip_opening_movies, false, "Pinyon Shift",
                     "Complete XMedia-backed movies immediately");
@@ -350,6 +351,8 @@ void PinyonShiftTraceFrameTelemetry(PPCRegister& r28, PPCRegister& r31) {
   if (r28.u32 == 0) {
     return;
   }
+
+  pinyon_shift::profiling::HitchLogger::RecordGuestFrameTick();
 
   if (!FrameTelemetryEnabled()) {
     return;

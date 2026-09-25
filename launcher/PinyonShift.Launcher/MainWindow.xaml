@@ -218,39 +218,73 @@
                                TextWrapping="Wrap" LineHeight="19"
                                Text="Changes are validated and backed up before saving. Changes apply live while the preview is running, or on next launch."/>
                     <Grid Grid.Row="2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock Text="TEXTURE FILTERING" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
-                            <ComboBox x:Name="AnisotropyComboBox" Margin="0,8,0,0" SelectedIndex="0"
-                                      AutomationProperties.Name="Texture filtering">
-                                <ComboBoxItem Tag="4"><TextBlock Text="4× anisotropic" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                                <ComboBoxItem Tag="8"><TextBlock Text="8× anisotropic" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                                <ComboBoxItem Tag="16"><TextBlock Text="16× anisotropic" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                            </ComboBox>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="EDGE SMOOTHING" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
-                            <ComboBox x:Name="PostEffectComboBox" Margin="0,8,0,0" SelectedIndex="0"
-                                      AutomationProperties.Name="Edge smoothing">
-                                <ComboBoxItem Tag="none"><TextBlock Text="Off" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                                <ComboBoxItem Tag="fxaa"><TextBlock Text="FXAA" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                                <ComboBoxItem Tag="fxaa_extreme"><TextBlock Text="FXAA Extreme" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                            </ComboBox>
-                        </StackPanel>
-                        <StackPanel Grid.Column="4">
-                            <TextBlock Text="INTERNAL RESOLUTION" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
-                            <ComboBox x:Name="ResolutionComboBox" Margin="0,8,0,0" SelectedIndex="0"
-                                      AutomationProperties.Name="Internal resolution">
-                                <ComboBoxItem Tag="1"><TextBlock Text="Native · 1×" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                                <ComboBoxItem Tag="2"><TextBlock Text="Experimental · 2×" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
-                            </ComboBox>
-                        </StackPanel>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="TARGET PRESET" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
+                                <ComboBox x:Name="PresetComboBox" Margin="0,8,0,0" SelectedIndex="0"
+                                          SelectionChanged="PresetComboBox_SelectionChanged"
+                                          AutomationProperties.Name="Graphics preset">
+                                    <ComboBoxItem Tag="performance_30fps"><TextBlock Text="Performance · 720p @ 30 FPS" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="balanced"><TextBlock Text="Balanced · 720p" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="quality"><TextBlock Text="Quality · 720p" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="custom"><TextBlock Text="Custom" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="DISPLAY RESOLUTION" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
+                                <ComboBox x:Name="DisplayResolutionComboBox" Margin="0,8,0,0" SelectedIndex="0"
+                                          AutomationProperties.Name="Display resolution">
+                                    <ComboBoxItem Tag="720p"><TextBlock Text="720p (1280×720)" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="1080p"><TextBlock Text="1080p (1920×1080)" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="TEXTURE FILTERING" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
+                                <ComboBox x:Name="AnisotropyComboBox" Margin="0,8,0,0" SelectedIndex="0"
+                                          AutomationProperties.Name="Texture filtering">
+                                    <ComboBoxItem Tag="1"><TextBlock Text="1× (Off)" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="2"><TextBlock Text="2× anisotropic" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="4"><TextBlock Text="4× anisotropic" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="8"><TextBlock Text="8× anisotropic" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="16"><TextBlock Text="16× anisotropic" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="EDGE SMOOTHING" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
+                                <ComboBox x:Name="PostEffectComboBox" Margin="0,8,0,0" SelectedIndex="0"
+                                          AutomationProperties.Name="Edge smoothing">
+                                    <ComboBoxItem Tag="none"><TextBlock Text="Off" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="fxaa"><TextBlock Text="FXAA" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="fxaa_extreme"><TextBlock Text="FXAA Extreme" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="INTERNAL RESOLUTION" FontSize="10" Foreground="{StaticResource MutedBrush}"/>
+                                <ComboBox x:Name="ResolutionComboBox" Margin="0,8,0,0" SelectedIndex="0"
+                                          AutomationProperties.Name="Internal resolution">
+                                    <ComboBoxItem Tag="1"><TextBlock Text="Native · 1×" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                    <ComboBoxItem Tag="2"><TextBlock Text="Experimental · 2×" Foreground="{StaticResource InkBrush}"/></ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
                     <Border Grid.Row="3" Background="#171B17" BorderBrush="{StaticResource LineBrush}"
                             BorderThickness="1" CornerRadius="4" Padding="14,11" Margin="0,17,0,0">

@@ -21,14 +21,18 @@ if(WIN32)
         src/main.cpp
         src/pinyon_shift_app.cpp
         src/pinyon_shift_diagnostics.cpp
+        src/pinyon_shift_hitch_logger.cpp
         src/pinyon_shift_runtime_hooks.cpp
+        src/pinyon_shift_thread_scheduler.cpp
     )
 else()
     add_executable(pinyon_shift
         src/main.cpp
         src/pinyon_shift_app.cpp
         src/pinyon_shift_diagnostics.cpp
+        src/pinyon_shift_hitch_logger.cpp
         src/pinyon_shift_runtime_hooks.cpp
+        src/pinyon_shift_thread_scheduler.cpp
     )
 endif()
 

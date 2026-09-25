@@ -2,12 +2,16 @@
 param(
     [ValidateSet('Get', 'Apply', 'Reset', 'Restore')]
     [string]$Action = 'Get',
-    [ValidateSet(4, 8, 16)]
+    [ValidateSet(1, 2, 4, 8, 16)]
     [int]$Anisotropy = 4,
     [ValidateSet('none', 'fxaa', 'fxaa_extreme')]
     [string]$PostEffect = 'none',
     [ValidateSet(1, 2)]
     [int]$ResolutionScale = 1,
+    [ValidateSet('performance_30fps', 'balanced', 'quality', 'custom')]
+    [string]$Preset,
+    [ValidateSet('720p', '1080p')]
+    [string]$Resolution = '720p',
     [string]$StateRoot,
     [switch]$Json,
     [switch]$Live
@@ -36,13 +40,18 @@ hid_mappings_file = "gamecontrollerdb.txt"
 mnk_mode = true
 keybind_a = "LMB,Space"
 keybind_start = "Return"
-d3d12_allow_variable_refresh_rate_and_tearing = false
+d3d12_allow_variable_refresh_rate_and_tearing = true
 pinyon_shift_stabilize_vehicle_presentation = false
-pinyon_shift_skip_opening_movies = false
-anisotropic_override = 3
+pinyon_shift_skip_opening_movies = true
+resolution = "720p"
+video_mode_width = 1280
+video_mode_height = 720
+anisotropic_override = 2
 swap_post_effect = "none"
 draw_resolution_scale_x = 1
 draw_resolution_scale_y = 1
+d3d12_submit_on_primary_buffer_end = false
+clear_memory_page_state = false
 '@
 }
 
@@ -94,16 +103,30 @@ function Write-Config([string]$Text) {
 
 function Get-SettingsResult([string]$Text, [string]$BackupPath, [string]$Operation) {
     $override = [int](Get-TomlValue $Text 'anisotropic_override' '3')
-    $anisotropyValue = switch ($override) { 3 { 4 } 4 { 8 } 5 { 16 } default { 4 } }
+    $anisotropyValue = switch ($override) { 1 { 1 } 2 { 2 } 3 { 4 } 4 { 8 } 5 { 16 } default { 4 } }
+    $resScale = [int](Get-TomlValue $Text 'draw_resolution_scale_x' '1')
+    $postFx = Get-TomlValue $Text 'swap_post_effect' 'none'
+    $res = Get-TomlValue $Text 'resolution' '720p'
+    $detectedPreset = if ($anisotropyValue -le 2 -and $postFx -eq 'none' -and $resScale -eq 1 -and $res -eq '720p') {
+        'performance_30fps'
+    } elseif ($anisotropyValue -eq 4 -and $postFx -eq 'fxaa' -and $resScale -eq 1) {
+        'balanced'
+    } elseif ($anisotropyValue -ge 8 -and $resScale -eq 1) {
+        'quality'
+    } else {
+        'custom'
+    }
     [ordered]@{
         schema = 'pinyon-shift.graphics-settings.v1'
         operation = $Operation.ToLowerInvariant()
         config_path = $configPath
         backup_path = $BackupPath
         settings = [ordered]@{
+            preset = $detectedPreset
+            resolution = $res
             anisotropy = $anisotropyValue
-            post_effect = Get-TomlValue $Text 'swap_post_effect' 'none'
-            resolution_scale = [int](Get-TomlValue $Text 'draw_resolution_scale_x' '1')
+            post_effect = $postFx
+            resolution_scale = $resScale
         }
         restart_required = if ($Operation -eq 'Get') { $false } elseif ($Live -or (Get-Process -Name 'pinyon_shift' -ErrorAction SilentlyContinue)) { $false } else { $true }
     }
@@ -145,11 +168,41 @@ switch ($Action) {
         if ($schema -notin @(1, 2, 3, 4)) { throw "Unsupported host configuration schema: $schema" }
         $backup = New-ConfigBackup
         $text = Set-TomlValue $text 'pinyon_shift_config_schema' '4'
-        $override = switch ($Anisotropy) { 4 { 3 } 8 { 4 } 16 { 5 } }
+        if ($Preset) {
+            switch ($Preset) {
+                'performance_30fps' {
+                    if (-not $PSBoundParameters.ContainsKey('Anisotropy')) { $Anisotropy = 2 }
+                    if (-not $PSBoundParameters.ContainsKey('PostEffect')) { $PostEffect = 'none' }
+                    if (-not $PSBoundParameters.ContainsKey('ResolutionScale')) { $ResolutionScale = 1 }
+                    if (-not $PSBoundParameters.ContainsKey('Resolution')) { $Resolution = '720p' }
+                }
+                'balanced' {
+                    if (-not $PSBoundParameters.ContainsKey('Anisotropy')) { $Anisotropy = 4 }
+                    if (-not $PSBoundParameters.ContainsKey('PostEffect')) { $PostEffect = 'fxaa' }
+                    if (-not $PSBoundParameters.ContainsKey('ResolutionScale')) { $ResolutionScale = 1 }
+                    if (-not $PSBoundParameters.ContainsKey('Resolution')) { $Resolution = '720p' }
+                }
+                'quality' {
+                    if (-not $PSBoundParameters.ContainsKey('Anisotropy')) { $Anisotropy = 8 }
+                    if (-not $PSBoundParameters.ContainsKey('PostEffect')) { $PostEffect = 'fxaa' }
+                    if (-not $PSBoundParameters.ContainsKey('ResolutionScale')) { $ResolutionScale = 1 }
+                    if (-not $PSBoundParameters.ContainsKey('Resolution')) { $Resolution = '720p' }
+                }
+            }
+        }
+        $override = switch ($Anisotropy) { 1 { 1 } 2 { 2 } 4 { 3 } 8 { 4 } 16 { 5 } default { 3 } }
         $text = Set-TomlValue $text 'anisotropic_override' ([string]$override)
         $text = Set-TomlValue $text 'swap_post_effect' ('"' + $PostEffect + '"')
         $text = Set-TomlValue $text 'draw_resolution_scale_x' ([string]$ResolutionScale)
         $text = Set-TomlValue $text 'draw_resolution_scale_y' ([string]$ResolutionScale)
+        $text = Set-TomlValue $text 'resolution' ('"' + $Resolution + '"')
+        $widthVal = if ($Resolution -eq '1080p') { '1920' } else { '1280' }
+        $heightVal = if ($Resolution -eq '1080p') { '1080' } else { '720' }
+        $text = Set-TomlValue $text 'video_mode_width' $widthVal
+        $text = Set-TomlValue $text 'video_mode_height' $heightVal
+        $text = Set-TomlValue $text 'd3d12_allow_variable_refresh_rate_and_tearing' 'true'
+        $text = Set-TomlValue $text 'd3d12_submit_on_primary_buffer_end' 'false'
+        $text = Set-TomlValue $text 'clear_memory_page_state' 'false'
         Write-Config $text
     }
 }

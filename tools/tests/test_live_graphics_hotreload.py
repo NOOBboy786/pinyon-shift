@@ -83,6 +83,36 @@ class LiveGraphicsHotReloadTests(unittest.TestCase):
         self.assertIn("amd_coherent", app)
         self.assertIn("intel_coherent", app)
         self.assertIn("live_hotreload_supported", app)
+        self.assertIn("timeBeginPeriod", app)
+        self.assertIn("timeEndPeriod", app)
+        self.assertIn("d3d12_submit_on_primary_buffer_end", app)
+        self.assertIn("clear_memory_page_state", app)
+        # Guest-CPU-stall scheduling policy: foreground tick/render vs
+        # background decompression/audio workers, enforced from the host.
+        self.assertIn("StartSchedulerEnforcement()", app)
+        self.assertIn("StopSchedulerEnforcement()", app)
+        self.assertIn("ApplyMainGuestThreadPolicy", app)
+        self.assertIn("THREAD_PRIORITY_HIGHEST", app)
+        self.assertIn("THREAD_PRIORITY_BELOW_NORMAL", app)
+        self.assertIn("scheduler.main_guest_pinned", app)
+        self.assertIn("scheduler.ready", app)
+        self.assertIn("audio_priority", app)
+        self.assertIn("classified.find(tid) != classified.end()", app)
+        scheduler = (ROOT / "src/pinyon_shift_thread_scheduler.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("SetThreadAffinityMask", scheduler)
+        self.assertIn("Main XThread", scheduler)
+        self.assertIn("GPU Commands", scheduler)
+        self.assertIn("XMA Decoder", scheduler)
+        self.assertIn("Audio Worker", scheduler)
+        self.assertIn("0xFC", scheduler)
+        self.assertIn("THREAD_PRIORITY_NORMAL", scheduler)
+        self.assertIn("timeBeginPeriod", scheduler)
+        self.assertIn("timeEndPeriod", scheduler)
+        self.assertIn("NameStartsWith(name, L\"Main XThread\")", scheduler)
+        self.assertIn("NameStartsWith(name, L\"Audio Worker\")", scheduler)
+        self.assertIn("NameStartsWith(name, L\"XMA Decoder\")", scheduler)
 
 
 if __name__ == "__main__":

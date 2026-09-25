@@ -629,6 +629,8 @@ public partial class MainWindow : Window
         {
             "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
             "-Action", action, "-StateRoot", Path.Combine(_repositoryRoot, ".local", "preview"),
+            "-Preset", SelectedTag(PresetComboBox),
+            "-Resolution", SelectedTag(DisplayResolutionComboBox),
             "-Anisotropy", SelectedTag(AnisotropyComboBox), "-PostEffect", SelectedTag(PostEffectComboBox),
             "-ResolutionScale", SelectedTag(ResolutionComboBox), "-Json"
         };
@@ -653,11 +655,42 @@ public partial class MainWindow : Window
     private static string SelectedTag(ComboBox comboBox) =>
         (comboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? throw new InvalidOperationException("Choose a setting first.");
 
+    private void PresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PresetComboBox.SelectedItem is not ComboBoxItem item || item.Tag is null) return;
+        var preset = item.Tag.ToString();
+        switch (preset)
+        {
+            case "performance_30fps":
+                SelectTag(AnisotropyComboBox, "2");
+                SelectTag(PostEffectComboBox, "none");
+                SelectTag(ResolutionComboBox, "1");
+                SelectTag(DisplayResolutionComboBox, "720p");
+                break;
+            case "balanced":
+                SelectTag(AnisotropyComboBox, "4");
+                SelectTag(PostEffectComboBox, "fxaa");
+                SelectTag(ResolutionComboBox, "1");
+                SelectTag(DisplayResolutionComboBox, "720p");
+                break;
+            case "quality":
+                SelectTag(AnisotropyComboBox, "8");
+                SelectTag(PostEffectComboBox, "fxaa");
+                SelectTag(ResolutionComboBox, "1");
+                SelectTag(DisplayResolutionComboBox, "720p");
+                break;
+        }
+    }
+
     private void ApplyGraphicsResult(GraphicsResult result)
     {
         SelectTag(AnisotropyComboBox, result.Settings.Anisotropy.ToString());
         SelectTag(PostEffectComboBox, result.Settings.PostEffect);
         SelectTag(ResolutionComboBox, result.Settings.ResolutionScale.ToString());
+        if (!string.IsNullOrWhiteSpace(result.Settings.Resolution))
+            SelectTag(DisplayResolutionComboBox, result.Settings.Resolution);
+        if (!string.IsNullOrWhiteSpace(result.Settings.Preset))
+            SelectTag(PresetComboBox, result.Settings.Preset);
     }
 
     private static void SelectTag(ComboBox comboBox, string value)
@@ -668,6 +701,8 @@ public partial class MainWindow : Window
 
     private void SetGraphicsControlsEnabled(bool enabled)
     {
+        PresetComboBox.IsEnabled = enabled;
+        DisplayResolutionComboBox.IsEnabled = enabled;
         AnisotropyComboBox.IsEnabled = enabled;
         PostEffectComboBox.IsEnabled = enabled;
         ResolutionComboBox.IsEnabled = enabled;
@@ -695,5 +730,7 @@ public partial class MainWindow : Window
     private sealed record GraphicsSettings(
         [property: JsonPropertyName("anisotropy")] int Anisotropy,
         [property: JsonPropertyName("post_effect")] string PostEffect,
-        [property: JsonPropertyName("resolution_scale")] int ResolutionScale);
+        [property: JsonPropertyName("resolution_scale")] int ResolutionScale,
+        [property: JsonPropertyName("preset")] string? Preset = null,
+        [property: JsonPropertyName("resolution")] string? Resolution = null);
 }

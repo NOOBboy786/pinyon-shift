@@ -52,7 +52,33 @@ class GraphicsSettingsTests(unittest.TestCase):
             text = config.read_text(encoding="utf-8")
             self.assertIn("swap_post_effect = \"none\"", text)
             self.assertIn("draw_resolution_scale_x = 1", text)
+            self.assertIn("resolution = \"720p\"", text)
+            self.assertIn("d3d12_submit_on_primary_buffer_end = false", text)
+            self.assertIn("clear_memory_page_state = false", text)
             self.assertTrue(pathlib.Path(result["backup_path"]).is_file())
+
+    def test_apply_performance_preset_and_anisotropy_levels(self):
+        with tempfile.TemporaryDirectory(prefix="pinyon-settings-") as temporary:
+            state = pathlib.Path(temporary)
+            config = state / "config/pinyon_shift.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text("pinyon_shift_config_schema = 4\n", encoding="utf-8")
+            result = self.run_tool(state, "-Action", "Apply", "-Preset", "performance_30fps")
+            text = config.read_text(encoding="utf-8")
+            self.assertEqual(result["settings"]["preset"], "performance_30fps")
+            self.assertEqual(result["settings"]["resolution"], "720p")
+            self.assertEqual(result["settings"]["anisotropy"], 2)
+            self.assertEqual(result["settings"]["post_effect"], "none")
+            self.assertEqual(result["settings"]["resolution_scale"], 1)
+            self.assertIn("anisotropic_override = 2", text)
+            self.assertIn("resolution = \"720p\"", text)
+            self.assertIn("d3d12_submit_on_primary_buffer_end = false", text)
+            self.assertIn("clear_memory_page_state = false", text)
+
+            # Test 1x anisotropy
+            aniso1 = self.run_tool(state, "-Action", "Apply", "-Anisotropy", "1")
+            self.assertEqual(aniso1["settings"]["anisotropy"], 1)
+            self.assertIn("anisotropic_override = 1", config.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -52,7 +52,9 @@ $process = $null
 try {
     $env:PINYON_SHIFT_STATE_ROOT = $resolvedStateRoot
     $env:PINYON_SHIFT_GAME_ROOT = $resolvedGameRoot
-    $env:REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING = 'false'
+    if (-not $env:REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING) {
+        $env:REX_D3D12_ALLOW_VARIABLE_REFRESH_RATE_AND_TEARING = 'true'
+    }
     $env:PINYON_SHIFT_CRASH_SELF_TEST = if ($CrashSelfTest) { '1' } else { $null }
     $process = Start-Process -FilePath $executable `
         -WorkingDirectory (Split-Path $executable -Parent) -PassThru

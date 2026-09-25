@@ -6,8 +6,10 @@
 #endif
 #include <Windows.h>
 #include <dxgi.h>
+#include <tlhelp32.h>
 
 #include <chrono>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -15,6 +17,7 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <unordered_set>
 
 #include <fmt/format.h>
 #include <rex/cvar.h>
@@ -23,8 +26,11 @@
 #include <rex/runtime.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xthread.h>
+#include <rex/thread.h>
 
 #include "pinyon_shift_diagnostics.h"
+#include "pinyon_shift_hitch_logger.h"
+#include "pinyon_shift_thread_scheduler.h"
 
 #include <cstdio>
 
@@ -56,14 +62,19 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
               "mnk_mode = true\n"
               "keybind_a = \"LMB,Space\"\n"
               "keybind_start = \"Return\"\n"
-              "d3d12_allow_variable_refresh_rate_and_tearing = false\n"
+              "d3d12_allow_variable_refresh_rate_and_tearing = true\n"
               "pinyon_shift_capture_performance = true\n"
               "pinyon_shift_stabilize_vehicle_presentation = false\n"
-              "pinyon_shift_skip_opening_movies = false\n"
-              "anisotropic_override = 3\n"
+              "pinyon_shift_skip_opening_movies = true\n"
+              "resolution = \"720p\"\n"
+              "video_mode_width = 1280\n"
+              "video_mode_height = 720\n"
+              "anisotropic_override = 2\n"
               "swap_post_effect = \"none\"\n"
               "draw_resolution_scale_x = 1\n"
-              "draw_resolution_scale_y = 1\n";
+              "draw_resolution_scale_y = 1\n"
+              "d3d12_submit_on_primary_buffer_end = true\n"
+              "clear_memory_page_state = false\n";
     created = true;
     return output.good();
   }
@@ -133,10 +144,16 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
     }
 
     const std::pair<const char*, const char*> graphics_settings[] = {
-        {"anisotropic_override", "anisotropic_override = 3\n"},
+        {"anisotropic_override", "anisotropic_override = 2\n"},
         {"swap_post_effect", "swap_post_effect = \"none\"\n"},
         {"draw_resolution_scale_x", "draw_resolution_scale_x = 1\n"},
         {"draw_resolution_scale_y", "draw_resolution_scale_y = 1\n"},
+        {"resolution", "resolution = \"720p\"\n"},
+        {"video_mode_width", "video_mode_width = 1280\n"},
+        {"video_mode_height", "video_mode_height = 720\n"},
+        {"d3d12_submit_on_primary_buffer_end", "d3d12_submit_on_primary_buffer_end = true\n"},
+        {"clear_memory_page_state", "clear_memory_page_state = false\n"},
+        {"d3d12_allow_variable_refresh_rate_and_tearing", "d3d12_allow_variable_refresh_rate_and_tearing = true\n"},
     };
     for (const auto& [name, line] : graphics_settings) {
       const std::regex setting_pattern("(?:^|\\n)\\s*" + std::string(name) +
@@ -175,6 +192,19 @@ bool EnsureSupportedConfig(const std::filesystem::path& path, bool& created,
 }
 
 }  // namespace
+
+PinyonShiftApp::PinyonShiftApp(rex::ui::WindowedAppContext& context,
+                               std::string_view name,
+                               rex::PPCImageInfo config)
+    : rex::ReXApp(context, name, config) {
+  // Ensure Windows scheduler timer resolution is set to 1ms via timeBeginPeriod(1)
+  pinyon_shift::scheduler::InitializeScheduler();
+  // The constructing host thread owns the window and the present path.
+  // Keep it on the foreground cores at highest priority so background
+  // decompression workers can never preempt presentation.
+  pinyon_shift::scheduler::PinCurrentThread(
+      pinyon_shift::scheduler::ThreadClass::Foreground);
+}
 
 std::unique_ptr<rex::ui::WindowedApp> PinyonShiftApp::Create(
     rex::ui::WindowedAppContext& context) {
@@ -289,6 +319,9 @@ void PinyonShiftApp::OnPostInitLogging() {
   if (!perf_csv.empty()) {
     rex::perf::SetCsvLogPath(perf_csv);
   }
+  pinyon_shift::profiling::HitchLogger::Initialize(
+      pinyon_shift::diagnostics::StateRoot(),
+      pinyon_shift::diagnostics::SessionId());
   pinyon_shift::diagnostics::RecordEvent(
       "logging.ready", {{"config_schema", std::to_string(REXCVAR_GET(pinyon_shift_config_schema))},
                         {"d3d12_tearing_allowed",
@@ -307,8 +340,14 @@ void PinyonShiftApp::OnPostInitLogging() {
                         {"anisotropic_override",
                          rex::cvar::GetFlagByName("anisotropic_override")},
                         {"swap_post_effect", rex::cvar::GetFlagByName("swap_post_effect")},
+                        {"d3d12_submit_on_primary_buffer_end",
+                         rex::cvar::GetFlagByName("d3d12_submit_on_primary_buffer_end")},
+                        {"clear_memory_page_state",
+                         rex::cvar::GetFlagByName("clear_memory_page_state")},
                         {"perf_csv_enabled", perf_csv.empty() ? "0" : "1"},
-                        {"perf_csv", perf_csv}});
+                        {"perf_csv", perf_csv},
+                        {"hitch_logger_enabled",
+                         pinyon_shift::profiling::HitchLogger::IsEnabled() ? "1" : "0"}});
 }
 
 void PinyonShiftApp::OnPreSetup(rex::RuntimeConfig& config) {
@@ -334,12 +373,15 @@ void PinyonShiftApp::OnPostLoadXexImage() {
 
 PinyonShiftApp::~PinyonShiftApp() {
   StopConfigMonitorThread();
+  // Restore Windows scheduler timer resolution via timeEndPeriod(1)
+  pinyon_shift::scheduler::ShutdownScheduler();
 }
 
 void PinyonShiftApp::OnPostSetup() {
   pinyon_shift::diagnostics::RefreshCrashReporter();
   QualifyGpuHardware();
   StartConfigMonitorThread();
+  StartSchedulerEnforcement();
   pinyon_shift::diagnostics::RecordEvent(
       "runtime.setup.complete",
       {{"memory", runtime() && runtime()->memory() ? "1" : "0"},
@@ -357,6 +399,7 @@ void PinyonShiftApp::OnPreLaunchModule() {
 
 void PinyonShiftApp::OnPostLaunchModule(rex::system::XThread* thread) {
   const std::string thread_id = thread ? std::to_string(thread->thread_id()) : "none";
+  ApplyMainGuestThreadPolicy(thread);
   pinyon_shift::diagnostics::RecordEvent("guest.thread.prepared", {{"thread_id", thread_id}});
 }
 
@@ -381,6 +424,7 @@ void PinyonShiftApp::OnShutdown() {
 
 void PinyonShiftApp::RecordShutdownOnce() {
   if (!shutdown_recorded_.exchange(true, std::memory_order_acq_rel)) {
+    pinyon_shift::profiling::HitchLogger::Shutdown();
     pinyon_shift::diagnostics::RecordEvent("process.shutdown");
   }
 }
@@ -426,6 +470,15 @@ void PinyonShiftApp::QualifyGpuHardware() {
   if (vendor_id == 0x1002) {
     vendor_str = "AMD";
     uav_barrier_policy = "amd_coherent";
+    if (rex::cvar::GetFlagByName("d3d12_submit_on_primary_buffer_end").empty()) {
+      rex::cvar::SetFlagByName("d3d12_submit_on_primary_buffer_end", "true");
+    }
+    if (rex::cvar::GetFlagByName("clear_memory_page_state").empty()) {
+      rex::cvar::SetFlagByName("clear_memory_page_state", "false");
+    }
+    if (rex::cvar::GetFlagByName("d3d12_tiled_shared_memory").empty()) {
+      rex::cvar::SetFlagByName("d3d12_tiled_shared_memory", "false");
+    }
   } else if (vendor_id == 0x8086) {
     vendor_str = "Intel";
     uav_barrier_policy = "intel_coherent";
@@ -453,6 +506,8 @@ void PinyonShiftApp::StartConfigMonitorThread() {
     return;
   }
   monitor_thread_ = std::make_unique<std::thread>([this]() {
+    pinyon_shift::scheduler::PinCurrentThread(
+        pinyon_shift::scheduler::ThreadClass::Background);
     while (monitor_running_.load(std::memory_order_relaxed)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
       if (!monitor_running_.load(std::memory_order_relaxed)) {
@@ -464,11 +519,178 @@ void PinyonShiftApp::StartConfigMonitorThread() {
 }
 
 void PinyonShiftApp::StopConfigMonitorThread() {
+  StopSchedulerEnforcement();
   if (monitor_running_.exchange(false)) {
     if (monitor_thread_ && monitor_thread_->joinable()) {
       monitor_thread_->join();
     }
     monitor_thread_.reset();
+  }
+}
+
+void PinyonShiftApp::ApplyMainGuestThreadPolicy(
+    rex::system::XThread* thread) {
+  if (!thread || !thread->thread()) {
+    return;
+  }
+  namespace scheduler = pinyon_shift::scheduler;
+  uint64_t foreground = 0;
+  uint64_t background = 0;
+  const bool affinity_available =
+      scheduler::ResolveAffinityMasks(&foreground, &background);
+  foreground_affinity_mask_ = affinity_available ? foreground : 0;
+  background_affinity_mask_ = affinity_available ? background : 0;
+  thread->thread()->set_priority(rex::thread::ThreadPriority::kHighest);
+  if (affinity_available) {
+    thread->thread()->set_affinity_mask(foreground);
+  }
+  main_guest_system_id_.store(thread->thread()->system_id(),
+                              std::memory_order_release);
+  pinyon_shift::diagnostics::RecordEvent(
+      "scheduler.main_guest_pinned",
+      {{"guest_thread_id", std::to_string(thread->thread_id())},
+       {"system_id", std::to_string(thread->thread()->system_id())},
+       {"affinity_mask", fmt::format("0x{:X}", foreground)},
+       {"priority", "THREAD_PRIORITY_HIGHEST"}});
+}
+
+void PinyonShiftApp::StartSchedulerEnforcement() {
+  namespace scheduler = pinyon_shift::scheduler;
+  uint64_t foreground = 0;
+  uint64_t background = 0;
+  const bool affinity_available =
+      scheduler::ResolveAffinityMasks(&foreground, &background);
+  foreground_affinity_mask_ = affinity_available ? foreground : 0;
+  background_affinity_mask_ = affinity_available ? background : 0;
+  if (scheduler_running_.exchange(true)) {
+    return;
+  }
+  SYSTEM_INFO system_info{};
+  GetSystemInfo(&system_info);
+  pinyon_shift::diagnostics::RecordEvent(
+      "scheduler.ready",
+      {{"foreground_mask", fmt::format("0x{:X}", foreground_affinity_mask_)},
+       {"background_mask", fmt::format("0x{:X}", background_affinity_mask_)},
+       {"affinity_managed", affinity_available ? "1" : "0"},
+       {"foreground_priority", "THREAD_PRIORITY_HIGHEST"},
+       {"background_priority", "THREAD_PRIORITY_BELOW_NORMAL"},
+       {"audio_priority", "THREAD_PRIORITY_NORMAL"},
+       {"logical_processors",
+        std::to_string(system_info.dwNumberOfProcessors)}});
+  scheduler_thread_ = std::make_unique<std::thread>([this]() {
+    SchedulerEnforcementLoop();
+  });
+}
+
+void PinyonShiftApp::StopSchedulerEnforcement() {
+  if (scheduler_running_.exchange(false)) {
+    if (scheduler_thread_ && scheduler_thread_->joinable()) {
+      scheduler_thread_->join();
+    }
+    scheduler_thread_.reset();
+  }
+}
+
+void PinyonShiftApp::SchedulerEnforcementLoop() {
+  namespace scheduler = pinyon_shift::scheduler;
+  // The enforcement pass itself must never disturb the foreground cores.
+  scheduler::PinCurrentThread(scheduler::ThreadClass::Background);
+
+  using GetThreadDescriptionFn = HRESULT(WINAPI*)(HANDLE, PWSTR*);
+  using CoTaskMemFreeFn = void(WINAPI*)(void*);
+  HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+  auto get_description = kernel32 ? reinterpret_cast<GetThreadDescriptionFn>(
+                                        GetProcAddress(kernel32, "GetThreadDescription"))
+                                  : nullptr;
+  HMODULE ole32 = LoadLibraryA("ole32.dll");
+  auto co_free = ole32 ? reinterpret_cast<CoTaskMemFreeFn>(
+                             GetProcAddress(ole32, "CoTaskMemFree"))
+                       : nullptr;
+
+  const DWORD process_id = GetCurrentProcessId();
+  std::unordered_set<DWORD> classified;
+  while (scheduler_running_.load(std::memory_order_relaxed)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    if (!scheduler_running_.load(std::memory_order_relaxed)) {
+      break;
+    }
+    const uint32_t main_guest_id =
+        main_guest_system_id_.load(std::memory_order_acquire);
+    HANDLE snapshot =
+        CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+      continue;
+    }
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    if (Thread32First(snapshot, &entry)) {
+      do {
+        if (entry.th32OwnerProcessID != process_id ||
+            entry.th32ThreadID == GetCurrentThreadId()) {
+          continue;
+        }
+        const DWORD tid = entry.th32ThreadID;
+        if (classified.find(tid) != classified.end()) {
+          continue;
+        }
+
+        scheduler::ThreadClass thread_class =
+            scheduler::ThreadClass::Background;
+        bool managed = false;
+        if (main_guest_id != 0 && tid == main_guest_id) {
+          // The main guest tick keeps foreground even though its
+          // SetThreadDescription name also matches the worker prefix.
+          thread_class = scheduler::ThreadClass::Foreground;
+          managed = true;
+          HANDLE thread = OpenThread(THREAD_SET_INFORMATION, FALSE, tid);
+          if (thread) {
+            if (scheduler::PinThreadHandle(
+                    thread, scheduler::ThreadClass::Foreground,
+                    foreground_affinity_mask_)) {
+              classified.insert(tid);
+            }
+            CloseHandle(thread);
+          }
+          continue;
+        }
+
+        if (get_description) {
+          HANDLE thread = OpenThread(THREAD_SET_INFORMATION |
+                                         THREAD_QUERY_INFORMATION,
+                                     FALSE, tid);
+          if (thread) {
+            PWSTR description = nullptr;
+            if (SUCCEEDED(get_description(thread, &description))) {
+              if (description && *description) {
+                managed = scheduler::ClassifyThreadName(description,
+                                                        &thread_class);
+              }
+              if (description && co_free) {
+                co_free(description);
+              }
+            }
+            if (managed) {
+              const uint64_t mask =
+                  thread_class == scheduler::ThreadClass::Foreground
+                      ? foreground_affinity_mask_
+                      : background_affinity_mask_;
+              if (scheduler::PinThreadHandle(thread, thread_class, mask)) {
+                classified.insert(tid);
+              }
+            }
+            CloseHandle(thread);
+            continue;
+          }
+        }
+      } while (Thread32Next(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    if (classified.size() > 1024) {
+      classified.clear();
+    }
+  }
+  if (ole32) {
+    FreeLibrary(ole32);
   }
 }
 
@@ -507,8 +729,10 @@ void PinyonShiftApp::CheckConfigHotReload() {
 
   const std::string res_x = get_val("draw_resolution_scale_x", "1");
   const std::string res_y = get_val("draw_resolution_scale_y", "1");
-  const std::string aniso = get_val("anisotropic_override", "3");
+  const std::string aniso = get_val("anisotropic_override", "2");
   const std::string post_fx = get_val("swap_post_effect", "none");
+  const std::string submit_primary = get_val("d3d12_submit_on_primary_buffer_end", "true");
+  const std::string clear_page = get_val("clear_memory_page_state", "false");
 
   bool changed = false;
   auto update_flag = [&](const char* name, const std::string& new_val) {
@@ -523,6 +747,8 @@ void PinyonShiftApp::CheckConfigHotReload() {
   update_flag("draw_resolution_scale_y", res_y);
   update_flag("anisotropic_override", aniso);
   update_flag("swap_post_effect", post_fx);
+  update_flag("d3d12_submit_on_primary_buffer_end", submit_primary);
+  update_flag("clear_memory_page_state", clear_page);
 
   if (changed) {
     pinyon_shift::diagnostics::RecordEvent(
