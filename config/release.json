@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.1.1",
-  "channel": "stable",
-  "repository": "https://github.com/arcanite24/pinyon-shift"
+  "version": "0.2.0-preview.4",
+  "channel": "preview",
+  "repository": "https://github.com/NOOBboy786/pinyon-shift"
 }
